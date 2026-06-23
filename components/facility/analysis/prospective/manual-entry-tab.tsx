@@ -19,9 +19,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
-import { Calculator, Loader2 } from "lucide-react"
+import { Calculator, Loader2, Download } from "lucide-react"
 import { toast } from "sonner"
-import type { AnalyzeProposalInput } from "@/lib/actions/prospective-analysis"
+import { formatCurrency } from "@/lib/formatting"
+import {
+  getVendorLookbackComparison,
+  type AnalyzeProposalInput,
+} from "@/lib/actions/prospective-analysis"
 import type { AnalysisPhase, ScoredProposal } from "./types"
 import { useAnalyzeProspectiveProposal } from "./hooks"
 import { ScoredProposalCard } from "./scored-proposal-card"
@@ -89,6 +93,7 @@ export function ManualEntryTab({
   onPhaseChange,
 }: ManualEntryTabProps) {
   const [form, setForm] = useState<ManualEntryState>(INITIAL)
+  const [loadingActuals, setLoadingActuals] = useState(false)
   const mutation = useAnalyzeProspectiveProposal()
 
   const set = <K extends keyof ManualEntryState>(
@@ -96,6 +101,46 @@ export function ManualEntryTab({
     value: ManualEntryState[K],
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }))
+  }
+
+  // Seed the baseline from REAL trailing-12mo COG spend for the typed vendor
+  // (audit P0: manual entry had no way to compare against actuals). Resolves
+  // the vendor by name via the lookback (suffix-tolerant); leaves the field for
+  // manual override when there's no match.
+  const loadActuals = async () => {
+    if (!form.vendorName.trim()) {
+      toast.error("Enter a vendor name first, then load actuals")
+      return
+    }
+    setLoadingActuals(true)
+    try {
+      const lb = await getVendorLookbackComparison({
+        vendorName: form.vendorName.trim(),
+        extractedTiers: [],
+      })
+      if (lb.trailing12moSpend > 0) {
+        const baseline = Math.round(lb.trailing12moSpend)
+        setForm((prev) => ({
+          ...prev,
+          currentSpend: baseline,
+          proposedAnnualSpend:
+            prev.proposedAnnualSpend > 0 ? prev.proposedAnnualSpend : baseline,
+        }))
+        toast.success(
+          `Loaded ${formatCurrency(baseline)} trailing-12mo actuals for ${lb.vendorName ?? form.vendorName}`,
+        )
+      } else {
+        toast.warning(
+          `No trailing-12mo spend found for "${form.vendorName}" — enter the baseline manually`,
+        )
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't load actuals",
+      )
+    } finally {
+      setLoadingActuals(false)
+    }
   }
 
   const handleSubmit = async () => {
@@ -134,12 +179,32 @@ export function ManualEntryTab({
         <CardContent className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="vendorName">Vendor name</Label>
-            <Input
-              id="vendorName"
-              value={form.vendorName}
-              onChange={(e) => set("vendorName", e.target.value)}
-              placeholder="e.g., Arthrex"
-            />
+            <div className="flex gap-2">
+              <Input
+                id="vendorName"
+                value={form.vendorName}
+                onChange={(e) => set("vendorName", e.target.value)}
+                placeholder="e.g., Arthrex"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={loadActuals}
+                disabled={loadingActuals || !form.vendorName.trim()}
+                title="Seed the baseline from this vendor's trailing-12mo actual spend"
+              >
+                {loadingActuals ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                <span className="ml-1.5 hidden sm:inline">Load actuals</span>
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Start from real trailing-12mo spend, then adjust the assumptions
+              below.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

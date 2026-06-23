@@ -113,8 +113,11 @@ export function DealScorerBenchmarkCompare({ vendorId, scenarios }: Props) {
       <div className="space-y-2">
         <Label>Compare against benchmarks</Label>
         <p className="text-xs text-muted-foreground">
-          Pick one or more loaded benchmark products to measure your Floor /
-          Target / Ceiling unit prices against the market.
+          Pick one or more uploaded benchmark products to measure your Floor /
+          Target / Ceiling unit prices against the market.{" "}
+          <span className="font-medium">Informational only</span> — this
+          comparison does not change the deal score (the score uses your margin
+          targets and facility parameters).
         </p>
         <MultiSelectCombobox
           options={options}

@@ -113,10 +113,9 @@ export function BenchmarksSection({ vendorId }: Props) {
           Product Pricing Benchmarks
         </CardTitle>
         <CardDescription>
-          National and category benchmarks for this vendor&rsquo;s catalog. Rows
-          are pulled from <code>ProductBenchmark</code> entries tagged to this
-          vendor, plus national-benchmark rows that match item numbers seen in
-          your COG history.
+          Your uploaded pricing benchmarks. Rows come only from benchmark files
+          you import here (<code>ProductBenchmark</code> rows tagged to this
+          vendor) — seeded / national benchmarks are no longer mixed in.
         </CardDescription>
         <CardAction>
           <PricingFileDropzone
