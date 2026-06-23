@@ -42,7 +42,22 @@ export interface VendorOpportunityData {
   contractTypeCount: number
   /** Whether the vendor holds a capital/tie_in contract (equipment/tech presence). */
   hasCapitalContract: boolean
+  /**
+   * Per-category benchmark position for the Deal Scenario: the vendor's actual
+   * trailing-12mo ASP vs the UPLOADED benchmark average (Vick 2026-06-22 — see
+   * where actuals/assumptions sit vs benchmark). `benchmarkAvg` is null when the
+   * vendor has uploaded no benchmark for that category.
+   */
+  categoryBenchmarks: VendorCategoryBenchmark[]
   hasData: boolean
+}
+
+export interface VendorCategoryBenchmark {
+  category: string
+  /** Actual: trailing-12mo COG ASP (spend ÷ qty) for the category. */
+  currentAsp: number
+  /** Uploaded benchmark average unit price for the category, or null. */
+  benchmarkAvg: number | null
 }
 
 export async function getVendorOpportunityData(): Promise<VendorOpportunityData> {
@@ -82,12 +97,48 @@ export async function getVendorOpportunityData(): Promise<VendorOpportunityData>
   let vendorQty = 0
   const canonicalCats = new Set<string>()
   const facilityIds = new Set<string>()
+  // Per-category actuals (spend + qty → ASP) for the benchmark-position card.
+  const catAgg = new Map<string, { label: string; spend: number; qty: number }>()
   for (const r of vendorRows) {
-    currentRevenue += Number(r.extendedPrice ?? 0)
+    const spend = Number(r.extendedPrice ?? 0)
+    currentRevenue += spend
     vendorQty += r.quantity ?? 0
-    if (r.category) canonicalCats.add(canonicalizeCategoryName(r.category))
+    if (r.category) {
+      const key = canonicalizeCategoryName(r.category)
+      canonicalCats.add(key)
+      const cur = catAgg.get(key) ?? { label: r.category, spend: 0, qty: 0 }
+      cur.spend += spend
+      cur.qty += r.quantity ?? 0
+      catAgg.set(key, cur)
+    }
     facilityIds.add(r.facilityId)
   }
+
+  // Uploaded benchmarks only (vendorId = vendor.id) → per-category average unit
+  // price. Seeded/national rows (vendorId = null) are excluded by design.
+  const uploadedBenchmarks = await prisma.productBenchmark.findMany({
+    where: { vendorId: vendor.id },
+    select: { category: true, nationalAvgPrice: true },
+  })
+  const benchAgg = new Map<string, { sum: number; n: number }>()
+  for (const b of uploadedBenchmarks) {
+    if (!b.category || b.nationalAvgPrice == null) continue
+    const key = canonicalizeCategoryName(b.category)
+    const cur = benchAgg.get(key) ?? { sum: 0, n: 0 }
+    cur.sum += Number(b.nationalAvgPrice)
+    cur.n += 1
+    benchAgg.set(key, cur)
+  }
+  const categoryBenchmarks: VendorCategoryBenchmark[] = [...catAgg.entries()]
+    .map(([key, agg]) => {
+      const bench = benchAgg.get(key)
+      return {
+        category: agg.label,
+        currentAsp: agg.qty > 0 ? agg.spend / agg.qty : 0,
+        benchmarkAvg: bench && bench.n > 0 ? bench.sum / bench.n : null,
+      }
+    })
+    .sort((a, b) => b.currentAsp - a.currentAsp)
 
   // Total facility spend in those categories + facilities = addressable market.
   // Also aggregate spend by the OTHER vendors competing in those categories so
@@ -158,6 +209,7 @@ export async function getVendorOpportunityData(): Promise<VendorOpportunityData>
     rebateCostPct,
     contractTypeCount,
     hasCapitalContract,
+    categoryBenchmarks,
     hasData: vendorRows.length > 0,
   })
 }

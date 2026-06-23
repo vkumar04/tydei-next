@@ -61,6 +61,7 @@ import {
   FacilityCurrentStatePanel,
   type FacilityCurrentStateSnapshot,
 } from "@/components/vendor/prospective/facility-current-state"
+import { BenchmarkPositionCard } from "@/components/vendor/prospective/benchmark-position-card"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -364,6 +365,13 @@ export function OpportunityEngineSection({
           </div>
         </CardContent>
       </Card>
+
+      {/* Benchmark Position — where actuals + the proposed price sit vs the
+          vendor's UPLOADED benchmarks, per category. */}
+      <BenchmarkPositionCard
+        categoryBenchmarks={dbData?.categoryBenchmarks ?? []}
+        priceChangePct={priceChangePct}
+      />
 
       {/* Honesty banner: when the vendor has no COG/contract history, the
           seeds are default assumptions, not real data — say so plainly. */}

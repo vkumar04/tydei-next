@@ -272,10 +272,11 @@ async function runAnalysis(
       )
     : []
 
-  // Pull benchmarks (vendor-scoped + national) for the calling vendor.
-  // Audit M8: when a proposal supplies items/categories, filter to
-  // matching rows instead of grabbing an arbitrary first page; always
-  // order deterministically and cap the read.
+  // Pull UPLOADED benchmarks only (Vick 2026-06-22 "Benchmark should only come
+  // from uploaded files") — the vendor's own rows (vendorId = vendor.id), NOT
+  // the seeded/national rows (vendorId = null). Audit M8: when a proposal
+  // supplies items/categories, filter to matching rows instead of grabbing an
+  // arbitrary first page; always order deterministically and cap the read.
   const scopeFilter: Prisma.ProductBenchmarkWhereInput[] = []
   if (proposalItemNos.length > 0)
     scopeFilter.push({ vendorItemNo: { in: proposalItemNos } })
@@ -284,7 +285,7 @@ async function runAnalysis(
 
   const benchmarkRows = await prisma.productBenchmark.findMany({
     where: {
-      OR: [{ vendorId: vendor.id }, { vendorId: null }],
+      vendorId: vendor.id,
       ...(scopeFilter.length > 0 ? { AND: [{ OR: scopeFilter }] } : {}),
     },
     select: {
