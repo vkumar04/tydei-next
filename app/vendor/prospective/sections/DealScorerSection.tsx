@@ -28,6 +28,7 @@ import type {
   VendorProspectiveResult,
 } from "@/lib/prospective-analysis/vendor-prospective-analyzer"
 import type { VendorProposal } from "@/lib/actions/prospective"
+import { DealScorerBenchmarkCompare } from "./DealScorerBenchmarkCompare"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -41,6 +42,8 @@ interface DealScorerSectionProps {
   /** Existing draft proposals — selecting one attaches the computed
    *  score to it (persisted server-side, audit H2). */
   proposals: VendorProposal[]
+  /** Vendor scope for loading the benchmark-comparison picker. */
+  vendorId: string
 }
 
 const NO_PROPOSAL = "__none__"
@@ -60,7 +63,7 @@ const DEFAULT_SCENARIOS: ScenarioForm[] = [
 
 // ─── Section ───────────────────────────────────────────────────
 
-export function DealScorerSection({ facilities, proposals }: DealScorerSectionProps) {
+export function DealScorerSection({ facilities, proposals, vendorId }: DealScorerSectionProps) {
   const queryClient = useQueryClient()
   const [facilityId, setFacilityId] = useState<string>("")
   const [proposalRowId, setProposalRowId] = useState<string>(NO_PROPOSAL)
@@ -72,6 +75,7 @@ export function DealScorerSection({ facilities, proposals }: DealScorerSectionPr
   const [currentShare, setCurrentShare] = useState("")
   const [targetShare, setTargetShare] = useState("")
   const [estimatedSpend, setEstimatedSpend] = useState("")
+  const [internalUnitCost, setInternalUnitCost] = useState("")
   const [equipmentCost, setEquipmentCost] = useState("")
   const [maintenanceCost, setMaintenanceCost] = useState("")
   // Audit L10: previously hardcoded to 60 / 0.05 / 0.10 server-input.
@@ -130,6 +134,10 @@ export function DealScorerSection({ facilities, proposals }: DealScorerSectionPr
       facilityEstimatedAnnualSpend: estimatedSpend
         ? Number(estimatedSpend)
         : undefined,
+      internalUnitCost:
+        internalUnitCost && Number(internalUnitCost) > 0
+          ? Number(internalUnitCost)
+          : undefined,
       facilityCurrentVendorShare: currentShare
         ? Number(currentShare) / 100
         : undefined,
@@ -297,6 +305,14 @@ export function DealScorerSection({ facilities, proposals }: DealScorerSectionPr
             </div>
           </div>
 
+          <DealScorerBenchmarkCompare
+            vendorId={vendorId}
+            scenarios={scenarios.map((s) => ({
+              name: s.scenarioName,
+              unitPrice: s.unitPrice ? Number(s.unitPrice) : null,
+            }))}
+          />
+
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor="target-margin">Target margin %</Label>
@@ -354,6 +370,23 @@ export function DealScorerSection({ facilities, proposals }: DealScorerSectionPr
               Left blank, it&apos;s estimated from your own trailing-12mo
               sales to this facility — divided by Current share % when you
               provide one; otherwise penetration deltas are approximate.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="internal-unit-cost">Internal unit cost ($ / unit)</Label>
+            <Input
+              id="internal-unit-cost"
+              type="number"
+              inputMode="decimal"
+              placeholder="leave blank to assume a 55% gross margin"
+              value={internalUnitCost}
+              onChange={(e) => setInternalUnitCost(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Your true COGS per unit. Drives the gross-margin verdict for every
+              scenario. Left blank, the analysis falls back to a 55% gross-margin
+              (45% COGS) assumption.
             </p>
           </div>
 

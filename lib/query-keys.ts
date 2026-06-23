@@ -349,6 +349,9 @@ export const queryKeys = {
     all: ["prospective"] as const,
     vendorProposals: (vendorId: string) =>
       ["prospective", "vendorProposals", vendorId] as const,
+    vendorProposalDetailBase: ["prospective", "vendorProposalDetail"] as const,
+    vendorProposalDetail: (id: string) =>
+      ["prospective", "vendorProposalDetail", id] as const,
     vendorBenchmarksBase: ["prospective", "vendorBenchmarks"] as const,
     vendorBenchmarks: (vendorId: string) =>
       ["prospective", "vendorBenchmarks", vendorId] as const,

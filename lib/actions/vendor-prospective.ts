@@ -40,6 +40,9 @@ export interface VendorProspectiveAnalysisInput {
   /** Decimal targets, e.g. 0.40 = 40%. */
   targetGrossMarginPercent: number
   minimumAcceptableGrossMarginPercent: number
+  /** Vendor's true unit COGS ($/unit), entered on the form. When omitted
+   *  the analyzer falls back to the 55% gross-margin assumption + warns. */
+  internalUnitCost?: number
   facilityEstimatedAnnualSpend?: number
   facilityCurrentVendorShare?: number
   targetVendorShare?: number
@@ -357,6 +360,7 @@ async function runAnalysis(
     contractVariant: input.contractVariant,
     pricingScenarios: input.pricingScenarios,
     benchmarks,
+    internalUnitCost: input.internalUnitCost ?? null,
     facilityEstimatedAnnualSpend,
     facilityCurrentVendorRevenue,
     facilityCurrentVendorShare: input.facilityCurrentVendorShare,

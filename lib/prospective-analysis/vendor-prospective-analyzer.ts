@@ -98,6 +98,14 @@ export interface VendorProspectiveInput {
 
   benchmarks: BenchmarkDataPoint[]
 
+  /**
+   * Vendor's true unit COGS, entered directly on the Deal Scorer form.
+   * Takes precedence over any benchmark-derived `internalUnitCost`. When
+   * null/undefined AND no benchmark supplies one, the engine falls back to
+   * the 55% gross-margin assumption (and warns).
+   */
+  internalUnitCost?: number | null
+
   /** Estimated total annual spend from the facility on this category. */
   facilityEstimatedAnnualSpend: number
   /**
@@ -200,8 +208,12 @@ export function analyzeVendorProspective(
     warnings.push("No pricing scenarios provided — cannot analyze.")
   }
 
-  // Pull the best-quality internal cost basis we can find.
-  const internalUnitCost = pickInternalUnitCost(input.benchmarks)
+  // Pull the best-quality internal cost basis we can find. A value entered
+  // directly on the form wins over any benchmark-derived cost.
+  const internalUnitCost =
+    input.internalUnitCost != null && input.internalUnitCost > 0
+      ? input.internalUnitCost
+      : pickInternalUnitCost(input.benchmarks)
   const internalListPrice = pickInternalListPrice(input.benchmarks)
 
   if (internalUnitCost == null) {
