@@ -7,6 +7,7 @@ import {
   createProposal,
   deleteProposal,
   getVendorProposals,
+  getVendorProposalDetail,
   getVendorBenchmarks,
 } from "@/lib/actions/prospective"
 import {
@@ -40,6 +41,19 @@ export function useVendorProposals(vendorId: string) {
   return useQuery({
     queryKey: queryKeys.prospective.vendorProposals(vendorId),
     queryFn: () => getVendorProposals(vendorId),
+  })
+}
+
+/**
+ * Full proposal payload for the "Proposal Details" dialog — pricing rows,
+ * term extras, divisions, resolved facility names. Fetched on demand
+ * (enabled only when a proposal is open) so the lean list stays lean.
+ */
+export function useVendorProposalDetail(id: string | null) {
+  return useQuery({
+    queryKey: queryKeys.prospective.vendorProposalDetail(id ?? "none"),
+    queryFn: () => getVendorProposalDetail(id!),
+    enabled: !!id,
   })
 }
 

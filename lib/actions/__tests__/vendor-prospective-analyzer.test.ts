@@ -73,6 +73,38 @@ describe("analyzeVendorProspective", () => {
     expect(result.tierOptimization.recommendation).toContain("No tiered")
   })
 
+  it("top-level internalUnitCost wins over benchmarks and suppresses the fallback warning", () => {
+    // No benchmark cost at all → would normally warn + assume 55% margin.
+    const result = analyzeVendorProspective(
+      baseInput({
+        benchmarks: [{ vendorItemNo: "X", nationalAvgPrice: 130 }],
+        internalUnitCost: 60,
+      }),
+    )
+    expect(
+      result.warnings.some((w) =>
+        w.toLowerCase().includes("no internal unit cost"),
+      ),
+    ).toBe(false)
+    // $60 cost on the $100 Floor (× 1000 vol, 5% rebate) → COGS = $60k.
+    const floor = result.scenarioResults.find((s) => s.scenarioName === "Floor")
+    expect(floor?.estimatedCOGS).toBe(60_000)
+  })
+
+  it("warns and falls back to 55% gross margin when no internal unit cost is provided", () => {
+    const result = analyzeVendorProspective(
+      baseInput({ benchmarks: [{ vendorItemNo: "X", nationalAvgPrice: 130 }] }),
+    )
+    expect(
+      result.warnings.some((w) =>
+        w.toLowerCase().includes("no internal unit cost"),
+      ),
+    ).toBe(true)
+    // 45% COGS of the $100 Floor unit price × 1000 vol = $45k.
+    const floor = result.scenarioResults.find((s) => s.scenarioName === "Floor")
+    expect(floor?.estimatedCOGS).toBe(45_000)
+  })
+
   it("emits a warning when no scenario meets the floor", () => {
     const result = analyzeVendorProspective(
       baseInput({
