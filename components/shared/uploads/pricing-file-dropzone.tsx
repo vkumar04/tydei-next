@@ -475,7 +475,7 @@ export function PricingFileDropzone({
           if (!open && !importing) closeDiscarding()
         }}
       >
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Map columns — {pending?.fileName}</DialogTitle>
             <DialogDescription>
