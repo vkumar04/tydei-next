@@ -24,6 +24,13 @@ import {
   blendConstructsToScenarios,
   type DealConstruct,
 } from "@/lib/prospective-analysis/blend-constructs"
+import { usageProductsToConstructs } from "@/lib/prospective-analysis/usage-to-constructs"
+import { PricingFileDropzone } from "@/components/shared/uploads/pricing-file-dropzone"
+import {
+  BUILDER_USAGE_UPLOAD_SPECS,
+  mapUsageRows,
+} from "@/components/vendor/prospective/builder/file-handlers"
+import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
 import {
   getVendorProspectiveAnalysis,
   type VendorProspectiveAnalysisInput,
@@ -210,6 +217,41 @@ export function DealScorerSection({ facilities, proposals, vendorId }: DealScore
     setConstructs((prev) => [...prev, makeConstruct()])
   }
 
+  // Seed the construct rows from an uploaded 12-month usage file — the fix for
+  // "Analyze deal isn't using the usage" (Vick 2026-06-24). Each usage product
+  // becomes a row pre-filled with current price + annual volume (+ proposed
+  // price as the Ask when the file carries one); Floor/Target stay for entry.
+  function handleUsageImport(
+    rows: Record<string, string>[],
+    mapping: ResolvedMapping,
+    meta: { fileName: string; headers: string[] },
+  ) {
+    const result = mapUsageRows(meta.headers, rows, mapping)
+    if (!result.ok) {
+      toast.error("Usage file needs a product-name column")
+      return
+    }
+    const seeds = usageProductsToConstructs(result.products)
+    if (seeds.length === 0) {
+      toast.warning("No products found in the usage file")
+      return
+    }
+    setConstructs(
+      seeds.map((s) =>
+        makeConstruct({
+          benchmarkId: s.benchmarkId,
+          productName: s.productName,
+          current: s.current ? String(s.current) : "",
+          ask: s.ask ? String(s.ask) : "",
+          annualVolume: s.annualVolume ? String(s.annualVolume) : "",
+        }),
+      ),
+    )
+    toast.success(
+      `Loaded ${seeds.length} product${seeds.length === 1 ? "" : "s"} from ${meta.fileName}`,
+    )
+  }
+
   function removeConstruct(uid: string) {
     setConstructs((prev) =>
       prev.length <= 1 ? prev : prev.filter((c) => c._uid !== uid),
@@ -329,6 +371,23 @@ export function DealScorerSection({ facilities, proposals, vendorId }: DealScore
               The overall score is saved on the selected proposal and shown
               on its card in My Proposals.
             </p>
+          </div>
+
+          <div className="space-y-2 rounded-md border border-dashed p-3">
+            <Label className="text-sm">Load usage history (auto-fills constructs)</Label>
+            <p className="text-xs text-muted-foreground">
+              Drop a 12-month usage file — each product becomes a construct
+              pre-filled with its current price + annual volume, so the analysis
+              runs on real usage. Then add Floor / Target / Ask.
+            </p>
+            <PricingFileDropzone
+              specs={BUILDER_USAGE_UPLOAD_SPECS}
+              surface="vendor-deal-scorer-usage"
+              accept=".csv,.txt,.xlsx,.xls"
+              onImport={handleUsageImport}
+              triggerLabel="Upload usage history"
+              triggerHint="drop or click to browse (.csv, .txt, .xlsx, .xls)"
+            />
           </div>
 
           <div className="space-y-3">
