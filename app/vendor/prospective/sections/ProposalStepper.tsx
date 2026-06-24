@@ -45,6 +45,10 @@ export function ProposalStepper({
   initialDeal?: OppEngineHandoff | null
 }) {
   const [step, setStep] = useState(initialDeal ? 1 : 0)
+  // The deal analyzed in step 1 auto-seeds step 2 (falls back to an external
+  // handoff, e.g. from the My-Proposals "Opportunity Engine" button).
+  const [stepDeal, setStepDeal] = useState<OppEngineHandoff | null>(null)
+  const opportunityDeal = stepDeal ?? initialDeal ?? null
 
   return (
     <div className="space-y-5">
@@ -94,12 +98,13 @@ export function ProposalStepper({
           vendorId={vendorId}
           facilities={facilities}
           proposals={proposals}
+          onDealAnalyzed={setStepDeal}
         />
       ) : (
         <OpportunityEngineSection
           vendorId={vendorId}
           facilities={facilities}
-          initialDeal={initialDeal}
+          initialDeal={opportunityDeal}
         />
       )}
 
