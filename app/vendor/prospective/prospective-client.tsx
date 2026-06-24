@@ -2,20 +2,16 @@
 
 import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BarChart3, Gauge, Rocket, Scale } from "lucide-react"
+import { BarChart3, Gauge, Scale } from "lucide-react"
 
 import { ProposalBuilder } from "@/components/vendor/prospective/proposal-builder"
 import { ProspectiveHero } from "@/components/vendor/prospective/prospective-hero"
 import { useVendorProposals } from "@/hooks/use-prospective"
 
-import { OpportunitiesSection } from "./sections/OpportunitiesSection"
 import { ProposalCards } from "./sections/ProposalCards"
-import { DealScorerSection } from "./sections/DealScorerSection"
+import { ProposalStepper } from "./sections/ProposalStepper"
 import { BenchmarksSection } from "./sections/BenchmarksSection"
-import {
-  OpportunityEngineSection,
-  type OppEngineHandoff,
-} from "./sections/OpportunityEngineSection"
+import { type OppEngineHandoff } from "./sections/OpportunityEngineSection"
 import { AnalyticsSection } from "./sections/AnalyticsSection"
 
 // ─── Main Component ────────────────────────────────────────────
@@ -44,18 +40,13 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
-          <TabsTrigger value="proposals">My Proposals</TabsTrigger>
-          <TabsTrigger value="deal-scorer" className="gap-2">
+          <TabsTrigger value="proposals" className="gap-2">
             <Gauge className="h-4 w-4" />
-            Deal Scorer
+            Proposals
           </TabsTrigger>
           <TabsTrigger value="benchmarks" className="gap-2">
             <Scale className="h-4 w-4" />
             Benchmarks
-          </TabsTrigger>
-          <TabsTrigger value="opportunity-engine" className="gap-2">
-            <Rocket className="h-4 w-4" />
-            Opportunity Engine
           </TabsTrigger>
           <TabsTrigger value="analytics" className="gap-2">
             <BarChart3 className="h-4 w-4" />
@@ -63,42 +54,31 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
           </TabsTrigger>
         </TabsList>
 
+        {/* Opportunities = the list of past proposals (like My Contracts). */}
         <TabsContent value="opportunities" className="mt-4 space-y-4">
-          <OpportunitiesSection
-            proposals={proposals}
-            isLoading={isLoading}
-            totalProposals={totalProposals}
-            totalProjectedSpend={totalProjectedSpend}
-            onNewProposal={() => setActiveTab("new-proposal")}
-          />
-        </TabsContent>
-
-        <TabsContent value="proposals" className="mt-4 space-y-4">
           <ProposalCards
-            onAnalyzeInOpportunityEngine={(deal) => {
-              setOppHandoff(deal)
-              setActiveTab("opportunity-engine")
-            }}
             proposals={proposals ?? []}
             isLoading={isLoading}
             onNewProposal={() => setActiveTab("new-proposal")}
+            onAnalyzeInOpportunityEngine={(deal) => {
+              setOppHandoff(deal)
+              setActiveTab("proposals")
+            }}
           />
         </TabsContent>
 
-        <TabsContent value="deal-scorer" className="mt-4 space-y-4">
-          <DealScorerSection facilities={facilities} proposals={proposals ?? []} vendorId={vendorId} />
+        {/* Proposals = the guided stepper (Usage & Pricing → Opportunity). */}
+        <TabsContent value="proposals" className="mt-4 space-y-4">
+          <ProposalStepper
+            vendorId={vendorId}
+            facilities={facilities}
+            proposals={proposals ?? []}
+            initialDeal={oppHandoff}
+          />
         </TabsContent>
 
         <TabsContent value="benchmarks" className="mt-4 space-y-4">
           <BenchmarksSection vendorId={vendorId} />
-        </TabsContent>
-
-        <TabsContent value="opportunity-engine" className="mt-4 space-y-4">
-          <OpportunityEngineSection
-            vendorId={vendorId}
-            facilities={facilities}
-            initialDeal={oppHandoff}
-          />
         </TabsContent>
 
         <TabsContent value="analytics" className="mt-4 space-y-4">
