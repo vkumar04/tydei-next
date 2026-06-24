@@ -12,7 +12,10 @@ import { OpportunitiesSection } from "./sections/OpportunitiesSection"
 import { ProposalCards } from "./sections/ProposalCards"
 import { DealScorerSection } from "./sections/DealScorerSection"
 import { BenchmarksSection } from "./sections/BenchmarksSection"
-import { OpportunityEngineSection } from "./sections/OpportunityEngineSection"
+import {
+  OpportunityEngineSection,
+  type OppEngineHandoff,
+} from "./sections/OpportunityEngineSection"
 import { AnalyticsSection } from "./sections/AnalyticsSection"
 
 // ─── Main Component ────────────────────────────────────────────
@@ -25,6 +28,7 @@ interface VendorProspectiveClientProps {
 export function VendorProspectiveClient({ vendorId, facilities }: VendorProspectiveClientProps) {
   const { data: proposals, isLoading } = useVendorProposals(vendorId)
   const [activeTab, setActiveTab] = useState("opportunities")
+  const [oppHandoff, setOppHandoff] = useState<OppEngineHandoff | null>(null)
 
   const totalProposals = proposals?.length ?? 0
   const totalProjectedSpend = proposals?.reduce((s, p) => s + p.totalProposedCost, 0) ?? 0
@@ -71,6 +75,10 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
 
         <TabsContent value="proposals" className="mt-4 space-y-4">
           <ProposalCards
+            onAnalyzeInOpportunityEngine={(deal) => {
+              setOppHandoff(deal)
+              setActiveTab("opportunity-engine")
+            }}
             proposals={proposals ?? []}
             isLoading={isLoading}
             onNewProposal={() => setActiveTab("new-proposal")}
@@ -86,7 +94,11 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
         </TabsContent>
 
         <TabsContent value="opportunity-engine" className="mt-4 space-y-4">
-          <OpportunityEngineSection vendorId={vendorId} facilities={facilities} />
+          <OpportunityEngineSection
+            vendorId={vendorId}
+            facilities={facilities}
+            initialDeal={oppHandoff}
+          />
         </TabsContent>
 
         <TabsContent value="analytics" className="mt-4 space-y-4">

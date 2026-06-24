@@ -21,8 +21,34 @@ import {
   type VendorProspectiveInput,
   type VendorProspectiveResult,
 } from "@/lib/prospective-analysis/vendor-prospective-analyzer"
+import { z } from "zod"
 
 // ─── Input shape ───────────────────────────────────────────────
+
+/** A Deal-Scorer construct as persisted onto the proposal for the handoff. */
+export interface PersistedDealConstruct {
+  benchmarkId: string | null
+  productName: string
+  current: number
+  floor: number
+  target: number
+  ask: number
+  annualVolume: number
+  rebatePercent: number
+}
+
+// Validate the client-supplied constructs before writing them into the
+// `pricingData` JSON column (CLAUDE.md: validate JSON-column writes).
+const dealConstructSchema = z.object({
+  benchmarkId: z.string().nullable(),
+  productName: z.string().max(120),
+  current: z.number(),
+  floor: z.number(),
+  target: z.number(),
+  ask: z.number(),
+  annualVolume: z.number(),
+  rebatePercent: z.number(),
+})
 
 /**
  * Caller-supplied portion of a vendor prospective analysis request.
@@ -47,6 +73,15 @@ export interface VendorProspectiveAnalysisInput {
   facilityCurrentVendorShare?: number
   targetVendorShare?: number
   capitalDetails?: CapitalDealDetails
+  /**
+   * The per-construct deal as entered in the Deal Scorer (one row per product:
+   * Current/Floor/Target/Ask prices, volume, rebate). Not used by the analyzer
+   * (it scores the blended `pricingScenarios`); persisted onto the proposal's
+   * `pricingData` so a scored proposal can be pushed into the Opportunity Engine.
+   */
+  constructs?: PersistedDealConstruct[]
+  /** Σ(current × volume) across constructs — what the facility pays today. */
+  currentAnnualSpend?: number
   /**
    * Optional draft-proposal id from `createProposal` (a draft
    * `PendingContract` row — see lib/prospective/proposal-rows.ts).
@@ -382,6 +417,11 @@ async function runAnalysis(
         target: input.targetGrossMarginPercent,
         floor: input.minimumAcceptableGrossMarginPercent,
       })
+      // Validate constructs before persisting; drop silently to [] on a bad
+      // shape so a malformed payload never blocks the score write.
+      const safeConstructs = z
+        .array(dealConstructSchema)
+        .safeParse(input.constructs ?? [])
       // auth-scope-scanner-skip: row authorized via vendor-scoped findFirst above
       await prisma.pendingContract.update({
         where: { id: proposalRow.id },
@@ -390,6 +430,9 @@ async function runAnalysis(
             JSON.stringify({
               ...proposalMeta,
               dealScore: { score, scoredAt: new Date().toISOString() },
+              // Deal-Scorer handoff payload for the Opportunity Engine.
+              dealConstructs: safeConstructs.success ? safeConstructs.data : [],
+              dealCurrentAnnualSpend: input.currentAnnualSpend ?? 0,
             }),
           ) as Prisma.InputJsonValue,
         },

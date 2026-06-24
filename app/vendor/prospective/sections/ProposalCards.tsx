@@ -35,8 +35,10 @@ import {
   Package,
   Calendar,
   Building2,
+  Rocket,
 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
+import type { OppEngineHandoff } from "./OpportunityEngineSection"
 import { StatusBadge, RecommendationBadge } from "./shared"
 import { ProposalDetailDialog } from "./ProposalDetailDialog"
 import { useDeleteProposal } from "@/hooks/use-prospective"
@@ -46,9 +48,16 @@ interface Props {
   proposals: VendorProposal[]
   isLoading: boolean
   onNewProposal: () => void
+  /** Push a scored deal into the Opportunity Engine (proposal → score → opp). */
+  onAnalyzeInOpportunityEngine?: (deal: OppEngineHandoff) => void
 }
 
-export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
+export function ProposalCards({
+  proposals,
+  isLoading,
+  onNewProposal,
+  onAnalyzeInOpportunityEngine,
+}: Props) {
   const [deleteTarget, setDeleteTarget] = useState<VendorProposal | null>(null)
   const [viewTarget, setViewTarget] = useState<VendorProposal | null>(null)
   const deleteMut = useDeleteProposal()
@@ -165,6 +174,25 @@ export function ProposalCards({ proposals, isLoading, onNewProposal }: Props) {
                       <Eye className="mr-2 h-4 w-4" />
                       View
                     </Button>
+                    {p.dealHandoff && onAnalyzeInOpportunityEngine && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="w-full"
+                        onClick={() =>
+                          onAnalyzeInOpportunityEngine({
+                            proposalId: p.id,
+                            facilityId: p.dealHandoff!.facilityId,
+                            priceChangePct: p.dealHandoff!.priceChangePct,
+                            targetSharePct: p.dealHandoff!.targetSharePct,
+                          })
+                        }
+                        title="Pre-fill the Opportunity Engine with this scored deal"
+                      >
+                        <Rocket className="mr-2 h-4 w-4" />
+                        Opportunity Engine
+                      </Button>
+                    )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
