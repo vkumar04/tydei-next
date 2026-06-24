@@ -70,6 +70,7 @@ export function downloadOpportunityCsv(
   score: VendorOpportunityScore,
   scenario: OpportunityScenarioMeta,
   facility?: FacilityCurrentStateSnapshot | null,
+  constructs?: ExportDealConstruct[],
 ): void {
   const outputs = toCSV({
     columns: [
@@ -124,8 +125,29 @@ export function downloadOpportunityCsv(
       ]
     : []
 
+  const constructBlock =
+    constructs && constructs.length > 0
+      ? [
+          "Proposed Deal — by product",
+          toCSV({
+            columns: [
+              { key: "productName", label: "Product" },
+              { key: "current", label: "Current" },
+              { key: "floor", label: "Floor" },
+              { key: "target", label: "Target" },
+              { key: "ask", label: "Ask" },
+              { key: "annualVolume", label: "Volume" },
+              { key: "rebatePercent", label: "Rebate %" },
+            ],
+            rows: constructs.map((c) => ({ ...c })),
+          }),
+          "",
+        ]
+      : []
+
   const csv = [
     ...facilityBlock,
+    ...constructBlock,
     "Opportunity Engine — Deal Scenario",
     outputs,
     "",
@@ -142,11 +164,26 @@ export function downloadOpportunityCsv(
   )
 }
 
+/** Per-construct deal row for the export's by-product breakdown (structurally
+ *  matches OppDealConstructRow — defined here to avoid an import cycle). */
+export interface ExportDealConstruct {
+  productName: string
+  current: number
+  floor: number
+  target: number
+  ask: number
+  annualVolume: number
+  rebatePercent: number
+}
+
+const usd = (n: number) => `$${Math.round(n).toLocaleString()}`
+
 export async function downloadOpportunityPdf(
   engine: OpportunityEngineResult,
   score: VendorOpportunityScore,
   scenario: OpportunityScenarioMeta,
   facility?: FacilityCurrentStateSnapshot | null,
+  constructs?: ExportDealConstruct[],
 ): Promise<void> {
   const { jsPDF } = await import("jspdf")
   const autoTable = (await import("jspdf-autotable")).default
@@ -222,6 +259,30 @@ export async function downloadOpportunityPdf(
     styles: { fontSize: 9 },
   })
   y = after(y)
+
+  // Proposed Deal — by product (the per-construct breakdown of the deal built
+  // in step 1; present when the export was reached via the stepper).
+  if (constructs && constructs.length > 0) {
+    doc.setFontSize(12)
+    doc.text("Proposed Deal — by product", margin, y + 6)
+    autoTable(doc, {
+      startY: y + 12,
+      head: [["Product", "Current", "Floor", "Target", "Ask", "Volume", "Rebate %"]],
+      body: constructs.map((c) => [
+        c.productName,
+        usd(c.current),
+        usd(c.floor),
+        usd(c.target),
+        usd(c.ask),
+        c.annualVolume.toLocaleString(),
+        `${c.rebatePercent}%`,
+      ]),
+      theme: "striped",
+      headStyles: { fillColor: [30, 41, 59] },
+      styles: { fontSize: 8 },
+    })
+    y = after(y)
+  }
 
   doc.setFontSize(12)
   doc.text(

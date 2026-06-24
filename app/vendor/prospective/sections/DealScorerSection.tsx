@@ -193,6 +193,10 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
         facilityId,
         priceChangePct,
         targetSharePct: targetShare ? Number(targetShare) : null,
+        constructs: constructs.map((c) => ({
+          productName: c.productName.trim() || "(unnamed)",
+          ...constructToDeal(c),
+        })),
       })
     }
 

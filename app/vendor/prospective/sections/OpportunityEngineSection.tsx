@@ -74,6 +74,16 @@ interface FacilityOption {
  * Pre-fill payload pushed in from a scored proposal ("Analyze in Opportunity
  * Engine" on a My Proposals card) — the proposal → score → opportunity story.
  */
+export interface OppDealConstructRow {
+  productName: string
+  current: number
+  floor: number
+  target: number
+  ask: number
+  annualVolume: number
+  rebatePercent: number
+}
+
 export interface OppEngineHandoff {
   proposalId: string
   facilityId: string | null
@@ -81,6 +91,8 @@ export interface OppEngineHandoff {
   priceChangePct: number
   /** Deal's market-share commitment, 0–100, or null. */
   targetSharePct: number | null
+  /** Per-construct deal rows — feeds the export's by-product breakdown. */
+  constructs?: OppDealConstructRow[]
 }
 
 interface OpportunityEngineSectionProps {
@@ -139,6 +151,9 @@ export function OpportunityEngineSection({
   const [volumeGrowthPctInt, setVolumeGrowthPctInt] = useState(
     Math.round(DEFAULT_OPPORTUNITY_SCENARIO.expectedVolumeGrowthPct * 100),
   )
+  // Per-construct deal rows from the handoff — included in the export's
+  // by-product breakdown (the unified report).
+  const [dealConstructs, setDealConstructs] = useState<OppDealConstructRow[]>([])
 
   // Apply a scored-deal handoff ONCE per proposal (a one-shot external command,
   // not a derived mirror) — pre-fills the facility label + price/share sliders
@@ -148,6 +163,7 @@ export function OpportunityEngineSection({
   useEffect(() => {
     if (!initialDeal || appliedDealRef.current === initialDeal.proposalId) return
     appliedDealRef.current = initialDeal.proposalId
+    setDealConstructs(initialDeal.constructs ?? [])
     if (initialDeal.facilityId) {
       const f = facilities.find((x) => x.id === initialDeal.facilityId)
       if (f) setFacility(f.name)
@@ -282,6 +298,7 @@ export function OpportunityEngineSection({
                     expectedVolumeGrowthPct,
                   },
                   facilitySnapshot,
+                  dealConstructs,
                 )
               }
             >
@@ -300,6 +317,7 @@ export function OpportunityEngineSection({
                     expectedVolumeGrowthPct,
                   },
                   facilitySnapshot,
+                  dealConstructs,
                 )
               }
             >
