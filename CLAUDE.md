@@ -329,6 +329,24 @@ grouped/pricing_only).
   `priceChangePct`, share). My-Proposals scored cards get an **"Opportunity
   Engine"** button → `OpportunityEngineSection`'s `initialDeal` prop one-shot
   pre-fills facility + price/share sliders (proposal → score → opportunity story).
+- **Vendor Prospective is a guided STEPPER (2026-06-24).** Tabs are now
+  **Opportunities (list) · Proposals (stepper) · Benchmarks · Analytics** — the
+  standalone Deal Scorer + Opportunity Engine tabs collapsed into the stepper,
+  and the old benchmark-wedge `OpportunitiesSection` was deleted (Opportunities
+  now renders the `ProposalCards` list). `ProposalStepper`
+  (`app/vendor/prospective/sections/ProposalStepper.tsx`) has two steps:
+  **Step 1 Usage & Pricing** = `DealScorerSection` and **Step 2 Opportunity &
+  Report** = `OpportunityEngineSection`. Step 1 has a usage-file dropzone →
+  `mapUsageRows` → `usageProductsToConstructs` (`lib/prospective-analysis/usage-
+  to-constructs.ts`, tested) **seeds the construct rows from real usage** (the
+  fix for "Analyze isn't using the usage"). On Analyze, `DealScorerSection`
+  emits the blended deal via `onDealAnalyzed`; the stepper forwards it as the
+  Opportunity Engine's `initialDeal` so Step 2 auto-seeds WITHOUT the manual
+  handoff. The deal's per-construct rows ride `OppEngineHandoff.constructs` into
+  the Opportunity Engine **export** (`export-opportunity.ts` — a "Proposed Deal
+  — by product" table in both PDF + CSV), so the single export is the unified
+  report. Creating a NEW proposal still uses the `ProposalBuilder` (the hidden
+  `new-proposal` tab, reached from Opportunities' "New proposal").
 - **`priceVsMarket` in the proposal scorer is POSITIVE when CHEAPER** (a
   discount → higher competitiveness; `priceCompetitiveness = clamp(5 +
   priceVsMarket/4, 0, 10)`, sign locked by `scoring.test.ts`). The price file's
