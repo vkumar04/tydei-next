@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Card,
   CardContent,
@@ -70,10 +70,25 @@ interface FacilityOption {
   name: string
 }
 
+/**
+ * Pre-fill payload pushed in from a scored proposal ("Analyze in Opportunity
+ * Engine" on a My Proposals card) — the proposal → score → opportunity story.
+ */
+export interface OppEngineHandoff {
+  proposalId: string
+  facilityId: string | null
+  /** Blended Target vs Current unit price, fraction. */
+  priceChangePct: number
+  /** Deal's market-share commitment, 0–100, or null. */
+  targetSharePct: number | null
+}
+
 interface OpportunityEngineSectionProps {
   vendorId: string
   /** Optional — not required; the engine is assumption-driven. */
   facilities?: FacilityOption[]
+  /** When set, pre-fills facility + price/share sliders from a scored deal. */
+  initialDeal?: OppEngineHandoff | null
 }
 
 const BAND_SUBLABEL: Record<
@@ -99,6 +114,7 @@ function usd(n: number): string {
 export function OpportunityEngineSection({
   vendorId,
   facilities = [],
+  initialDeal = null,
 }: OpportunityEngineSectionProps) {
   // The pitching entity is the vendor's DIVISION; the target facility can be
   // chosen from related facilities OR written in (this only labels the
@@ -123,6 +139,24 @@ export function OpportunityEngineSection({
   const [volumeGrowthPctInt, setVolumeGrowthPctInt] = useState(
     Math.round(DEFAULT_OPPORTUNITY_SCENARIO.expectedVolumeGrowthPct * 100),
   )
+
+  // Apply a scored-deal handoff ONCE per proposal (a one-shot external command,
+  // not a derived mirror) — pre-fills the facility label + price/share sliders
+  // so the just-scored deal drives the Opportunity Engine. User tweaks after
+  // are preserved (the ref guards re-application).
+  const appliedDealRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!initialDeal || appliedDealRef.current === initialDeal.proposalId) return
+    appliedDealRef.current = initialDeal.proposalId
+    if (initialDeal.facilityId) {
+      const f = facilities.find((x) => x.id === initialDeal.facilityId)
+      if (f) setFacility(f.name)
+    }
+    setPriceChangePctInt(Math.round(initialDeal.priceChangePct * 100))
+    if (initialDeal.targetSharePct != null) {
+      setTargetSharePctInt(Math.round(initialDeal.targetSharePct))
+    }
+  }, [initialDeal, facilities])
 
   const priceChangePct = priceChangePctInt / 100
   const targetShare = targetSharePctInt / 100

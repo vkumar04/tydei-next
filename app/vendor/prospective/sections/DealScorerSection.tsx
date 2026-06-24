@@ -14,11 +14,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Gauge, AlertTriangle, TrendingUp, Sparkles, DollarSign } from "lucide-react"
+import { Gauge, AlertTriangle, TrendingUp, Sparkles, DollarSign, Trash2, Plus } from "lucide-react"
 import { toast } from "sonner"
 
 import { formatCurrency, formatPercent } from "@/lib/formatting"
 import { queryKeys } from "@/lib/query-keys"
+import { useVendorBenchmarks } from "@/hooks/use-prospective"
+import {
+  blendConstructsToScenarios,
+  type DealConstruct,
+} from "@/lib/prospective-analysis/blend-constructs"
 import {
   getVendorProspectiveAnalysis,
   type VendorProspectiveAnalysisInput,
@@ -28,7 +33,6 @@ import type {
   VendorProspectiveResult,
 } from "@/lib/prospective-analysis/vendor-prospective-analyzer"
 import type { VendorProposal } from "@/lib/actions/prospective"
-import { DealScorerBenchmarkCompare } from "./DealScorerBenchmarkCompare"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -48,18 +52,35 @@ interface DealScorerSectionProps {
 
 const NO_PROPOSAL = "__none__"
 
-interface ScenarioForm {
-  scenarioName: string
-  unitPrice: string
-  estimatedAnnualVolume: string
+// One "construct" per product line: pick a benchmark (or free-text), then enter
+// the Current / Floor / Target / Ask unit prices, annual volume and rebate %.
+// Keyed by a stable UI-only _uid (CLAUDE.md: editable lists key by id, not idx).
+interface ConstructForm {
+  _uid: string
+  benchmarkId: string | null
+  productName: string
+  current: string
+  floor: string
+  target: string
+  ask: string
+  annualVolume: string
   rebatePercent: string
 }
 
-const DEFAULT_SCENARIOS: ScenarioForm[] = [
-  { scenarioName: "Floor", unitPrice: "", estimatedAnnualVolume: "", rebatePercent: "0" },
-  { scenarioName: "Target", unitPrice: "", estimatedAnnualVolume: "", rebatePercent: "0" },
-  { scenarioName: "Ceiling", unitPrice: "", estimatedAnnualVolume: "", rebatePercent: "0" },
-]
+function makeConstruct(seed?: Partial<ConstructForm>): ConstructForm {
+  return {
+    _uid: crypto.randomUUID(),
+    benchmarkId: null,
+    productName: "",
+    current: "",
+    floor: "",
+    target: "",
+    ask: "",
+    annualVolume: "",
+    rebatePercent: "0",
+    ...seed,
+  }
+}
 
 // ─── Section ───────────────────────────────────────────────────
 
@@ -69,7 +90,15 @@ export function DealScorerSection({ facilities, proposals, vendorId }: DealScore
   const [proposalRowId, setProposalRowId] = useState<string>(NO_PROPOSAL)
   const [contractVariant, setContractVariant] =
     useState<VendorContractVariant>("USAGE_SPEND")
-  const [scenarios, setScenarios] = useState<ScenarioForm[]>(DEFAULT_SCENARIOS)
+  const [constructs, setConstructs] = useState<ConstructForm[]>(() => [
+    makeConstruct(),
+  ])
+  const { data: benchmarks } = useVendorBenchmarks(vendorId)
+  const benchmarkById = useMemo(
+    () => new Map((benchmarks ?? []).map((b) => [b.id, b])),
+    [benchmarks],
+  )
+  const [benchPick, setBenchPick] = useState("")
   const [targetMargin, setTargetMargin] = useState("40")
   const [floorMargin, setFloorMargin] = useState("25")
   const [currentShare, setCurrentShare] = useState("")
@@ -106,29 +135,42 @@ export function DealScorerSection({ facilities, proposals, vendorId }: DealScore
       toast.error(err.message || "Failed to analyze deal"),
   })
 
+  function constructToDeal(c: ConstructForm): DealConstruct {
+    return {
+      current: Number(c.current || "0"),
+      floor: Number(c.floor || "0"),
+      target: Number(c.target || "0"),
+      ask: Number(c.ask || "0"),
+      annualVolume: Number(c.annualVolume || "0"),
+      rebatePercent: Number(c.rebatePercent || "0"),
+    }
+  }
+
   function handleAnalyze() {
     if (!facilityId) {
       toast.error("Select a facility first")
       return
     }
-    const validScenarios = scenarios
-      .filter((s) => s.unitPrice && s.estimatedAnnualVolume)
-      .map((s) => ({
-        scenarioName: s.scenarioName,
-        unitPrice: Number(s.unitPrice),
-        estimatedAnnualVolume: Number(s.estimatedAnnualVolume),
-        rebatePercent: Number(s.rebatePercent || "0"),
-      }))
+    const { scenarios: blended, currentAnnualSpend } =
+      blendConstructsToScenarios(constructs.map(constructToDeal))
 
-    if (validScenarios.length === 0) {
-      toast.error("Enter at least one scenario with price + volume")
+    if (blended.length === 0) {
+      toast.error("Add at least one construct with a price and annual volume")
       return
     }
 
     mutation.mutate({
       facilityId,
       contractVariant,
-      pricingScenarios: validScenarios,
+      pricingScenarios: blended,
+      // Phase 2: persist the real per-construct deal so a scored proposal can be
+      // pushed into the Opportunity Engine (the handoff).
+      constructs: constructs.map((c) => ({
+        benchmarkId: c.benchmarkId,
+        productName: c.productName.trim(),
+        ...constructToDeal(c),
+      })),
+      currentAnnualSpend,
       targetGrossMarginPercent: Number(targetMargin) / 100,
       minimumAcceptableGrossMarginPercent: Number(floorMargin) / 100,
       facilityEstimatedAnnualSpend: estimatedSpend
@@ -158,10 +200,47 @@ export function DealScorerSection({ facilities, proposals, vendorId }: DealScore
     })
   }
 
-  function updateScenario(idx: number, patch: Partial<ScenarioForm>) {
-    setScenarios((prev) =>
-      prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)),
+  function updateConstruct(uid: string, patch: Partial<ConstructForm>) {
+    setConstructs((prev) =>
+      prev.map((c) => (c._uid === uid ? { ...c, ...patch } : c)),
     )
+  }
+
+  function addConstruct() {
+    setConstructs((prev) => [...prev, makeConstruct()])
+  }
+
+  function removeConstruct(uid: string) {
+    setConstructs((prev) =>
+      prev.length <= 1 ? prev : prev.filter((c) => c._uid !== uid),
+    )
+  }
+
+  // Add a construct seeded from an uploaded benchmark — fills the first blank
+  // row if there is one, otherwise appends.
+  function addBenchmarkConstruct(benchmarkId: string) {
+    const b = benchmarkById.get(benchmarkId)
+    if (!b) return
+    const productName = `${b.itemNumber} — ${b.productName}`.slice(0, 90)
+    setConstructs((prev) => {
+      const blankIdx = prev.findIndex(
+        (c) =>
+          !c.benchmarkId &&
+          !c.productName &&
+          !c.current &&
+          !c.floor &&
+          !c.target &&
+          !c.ask &&
+          !c.annualVolume,
+      )
+      const seed = makeConstruct({ benchmarkId: b.id, productName })
+      if (blankIdx >= 0) {
+        return prev.map((c, i) =>
+          i === blankIdx ? { ...seed, _uid: c._uid } : c,
+        )
+      }
+      return [...prev, seed]
+    })
   }
 
   return (
@@ -170,8 +249,10 @@ export function DealScorerSection({ facilities, proposals, vendorId }: DealScore
         <CardHeader>
           <CardTitle className="text-base">Deal Scorer</CardTitle>
           <CardDescription>
-            Model floor / target / ceiling pricing and see margin, payback,
-            and penetration upside before you submit.
+            Build the deal product-by-product — Current / Floor / Target / Ask
+            pricing per construct — and see margin, payback, and penetration
+            upside. Attach the score to a proposal to push it into the
+            Opportunity Engine.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -251,67 +332,146 @@ export function DealScorerSection({ facilities, proposals, vendorId }: DealScore
           </div>
 
           <div className="space-y-3">
-            <Label>Pricing scenarios</Label>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <Label>Constructs</Label>
+                <p className="text-xs text-muted-foreground">
+                  One row per product. Pick a benchmark (or add a custom line),
+                  enter Current / Floor / Target / Ask prices, volume and rebate
+                  %, then add another. The score blends every construct.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {(benchmarks?.length ?? 0) > 0 && (
+                  <Select
+                    value={benchPick}
+                    onValueChange={(v) => {
+                      addBenchmarkConstruct(v)
+                      setBenchPick("")
+                    }}
+                  >
+                    <SelectTrigger className="w-[200px]">
+                      <SelectValue placeholder="Add from benchmark…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(benchmarks ?? []).map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.itemNumber} — {b.productName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Button type="button" variant="outline" size="sm" onClick={addConstruct}>
+                  <Plus className="mr-1 h-4 w-4" /> Add custom
+                </Button>
+              </div>
+            </div>
+
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="p-2 text-left font-medium">Scenario</th>
-                    <th className="p-2 text-left font-medium">Unit price ($)</th>
-                    <th className="p-2 text-left font-medium">Annual volume</th>
-                    <th className="p-2 text-left font-medium">Rebate %</th>
+                    <th className="p-2 text-left font-medium">Product</th>
+                    <th className="p-2 text-right font-medium">Current</th>
+                    <th className="p-2 text-right font-medium">Floor</th>
+                    <th className="p-2 text-right font-medium">Target</th>
+                    <th className="p-2 text-right font-medium">Ask</th>
+                    <th className="p-2 text-right font-medium">Volume</th>
+                    <th className="p-2 text-right font-medium">Rebate %</th>
+                    <th className="p-2 text-right font-medium">Benchmark</th>
+                    <th className="p-2"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {scenarios.map((s, idx) => (
-                    <tr key={idx} className="border-t">
-                      <td className="p-2 font-medium">{s.scenarioName}</td>
-                      <td className="p-2">
+                  {constructs.map((c, idx) => {
+                    const b = c.benchmarkId
+                      ? benchmarkById.get(c.benchmarkId)
+                      : null
+                    const isLast = idx === constructs.length - 1
+                    const numCell = (
+                      field: keyof ConstructForm,
+                      mode: "decimal" | "numeric" = "decimal",
+                    ) => (
+                      <td className="p-1.5">
                         <Input
+                          className="h-8 w-[84px] text-right"
                           type="number"
-                          inputMode="decimal"
-                          value={s.unitPrice}
+                          inputMode={mode}
+                          value={c[field] as string}
                           onChange={(e) =>
-                            updateScenario(idx, { unitPrice: e.target.value })
+                            updateConstruct(c._uid, { [field]: e.target.value })
                           }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && isLast) addConstruct()
+                          }}
                         />
                       </td>
-                      <td className="p-2">
-                        <Input
-                          type="number"
-                          inputMode="numeric"
-                          value={s.estimatedAnnualVolume}
-                          onChange={(e) =>
-                            updateScenario(idx, {
-                              estimatedAnnualVolume: e.target.value,
-                            })
-                          }
-                        />
-                      </td>
-                      <td className="p-2">
-                        <Input
-                          type="number"
-                          inputMode="decimal"
-                          value={s.rebatePercent}
-                          onChange={(e) =>
-                            updateScenario(idx, { rebatePercent: e.target.value })
-                          }
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                    )
+                    return (
+                      <tr key={c._uid} className="border-t align-top">
+                        <td className="min-w-[180px] p-1.5">
+                          {b ? (
+                            <div className="min-w-0">
+                              <div className="truncate font-medium">
+                                {c.productName}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                benchmark · {b.category ?? "uncategorized"}
+                              </span>
+                            </div>
+                          ) : (
+                            <Input
+                              className="h-8"
+                              placeholder="Product name"
+                              value={c.productName}
+                              onChange={(e) =>
+                                updateConstruct(c._uid, {
+                                  productName: e.target.value,
+                                })
+                              }
+                            />
+                          )}
+                        </td>
+                        {numCell("current")}
+                        {numCell("floor")}
+                        {numCell("target")}
+                        {numCell("ask")}
+                        {numCell("annualVolume", "numeric")}
+                        {numCell("rebatePercent")}
+                        <td className="whitespace-nowrap p-1.5 text-right text-xs">
+                          {b ? (
+                            <>
+                              <div>avg {formatCurrency(b.nationalAvgPrice)}</div>
+                              <div className="text-muted-foreground">
+                                {formatCurrency(b.percentile25)}–
+                                {formatCurrency(b.percentile75)}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="p-1.5 text-right">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                            onClick={() => removeConstruct(c._uid)}
+                            disabled={constructs.length <= 1}
+                            aria-label="Remove construct"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
-
-          <DealScorerBenchmarkCompare
-            vendorId={vendorId}
-            scenarios={scenarios.map((s) => ({
-              name: s.scenarioName,
-              unitPrice: s.unitPrice ? Number(s.unitPrice) : null,
-            }))}
-          />
 
           <div className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">

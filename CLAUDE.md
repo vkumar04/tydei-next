@@ -312,6 +312,23 @@ grouped/pricing_only).
   Never "normalize the score's tier rate to match contracts" — that's the
   fraction engine, not the percent scorer (caught as an audit false positive
   2026-06-23).
+- **Deal Scorer is construct-based + connects to the Opportunity Engine
+  (2026-06-23).** The vendor Deal Scorer (`DealScorerSection`) is a table of
+  **constructs** — one row per product (benchmark-picked OR free-text), each with
+  **Current / Floor / Target / Ask** unit prices + annual volume + rebate %
+  (Ceiling removed). The tested `analyzeVendorProspective` still scores
+  `pricingScenarios`, so constructs are BLENDED into Floor/Target/Ask scenarios
+  (spend-weighted unit price + summed volume + spend-weighted rebate; Current →
+  baseline) by the pure `blendConstructsToScenarios`
+  (`lib/prospective-analysis/blend-constructs.ts`, tested) — never re-derive that
+  blend inline. The per-construct benchmark Avg/P25–P75 shows inline (informational;
+  this REPLACED the separate `DealScorerBenchmarkCompare` + `MultiSelectCombobox`,
+  both deleted). On attach, the constructs + `currentAnnualSpend` persist to the
+  proposal's `pricingData` (`dealConstructs`, zod-validated); `getVendorProposals`
+  derives a `dealHandoff` (facility, current spend, blended Target-vs-Current
+  `priceChangePct`, share). My-Proposals scored cards get an **"Opportunity
+  Engine"** button → `OpportunityEngineSection`'s `initialDeal` prop one-shot
+  pre-fills facility + price/share sliders (proposal → score → opportunity story).
 - **`priceVsMarket` in the proposal scorer is POSITIVE when CHEAPER** (a
   discount → higher competitiveness; `priceCompetitiveness = clamp(5 +
   priceVsMarket/4, 0, 10)`, sign locked by `scoring.test.ts`). The price file's

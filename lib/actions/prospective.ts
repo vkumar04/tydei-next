@@ -83,6 +83,23 @@ export interface VendorProposal {
   gpoFee?: number
   aiNotes?: string
   terms?: ProposalTermSummary[]
+  /**
+   * Present when the proposal was scored via the construct Deal Scorer — the
+   * payload that pre-fills the Opportunity Engine when you click "Analyze in
+   * Opportunity Engine" (the proposal → score → opportunity story).
+   */
+  dealHandoff?: ProposalDealHandoff | null
+}
+
+export interface ProposalDealHandoff {
+  facilityId: string | null
+  /** Σ(current × volume) across constructs — what the facility pays today. */
+  currentAnnualSpend: number
+  /** Blended Target vs Current unit price, fraction (−0.05 = 5% cheaper). */
+  priceChangePct: number
+  /** Deal's market-share commitment, 0–100, or null. */
+  targetSharePct: number | null
+  constructCount: number
 }
 
 /** A targeted facility resolved to its display name. */
@@ -525,6 +542,37 @@ function payloadToProposal(
             typeof rawScore.scoredAt === "string" ? rawScore.scoredAt : null,
         }
       : null
+  // Deal-Scorer handoff: when constructs were persisted, derive the blended
+  // price change + current spend so the Opportunity Engine can be pre-filled.
+  const rawConstructs = Array.isArray(meta.dealConstructs)
+    ? (meta.dealConstructs as Array<Record<string, unknown>>)
+    : []
+  let dealHandoff: ProposalDealHandoff | null = null
+  if (rawConstructs.length > 0) {
+    const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)
+    const totalVol = rawConstructs.reduce((s, c) => s + num(c.annualVolume), 0)
+    const curSpend = rawConstructs.reduce(
+      (s, c) => s + num(c.current) * num(c.annualVolume),
+      0,
+    )
+    const tgtSpend = rawConstructs.reduce(
+      (s, c) => s + num(c.target) * num(c.annualVolume),
+      0,
+    )
+    const blendedCur = totalVol > 0 ? curSpend / totalVol : 0
+    const blendedTgt = totalVol > 0 ? tgtSpend / totalVol : 0
+    dealHandoff = {
+      facilityId: ((meta.facilityIds as string[]) ?? [])[0] ?? null,
+      currentAnnualSpend: num(meta.dealCurrentAnnualSpend) || curSpend,
+      priceChangePct: blendedCur > 0 ? (blendedTgt - blendedCur) / blendedCur : 0,
+      targetSharePct:
+        meta.marketShareCommitment != null
+          ? Number(meta.marketShareCommitment)
+          : null,
+      constructCount: rawConstructs.length,
+    }
+  }
+
   return {
     id,
     vendorId,
@@ -551,6 +599,7 @@ function payloadToProposal(
     aiNotes:
       (meta.aiNotes as string | undefined) ?? terms?.notes ?? undefined,
     terms: (meta.proposalTerms as ProposalTermSummary[]) ?? undefined,
+    dealHandoff,
   }
 }
 
