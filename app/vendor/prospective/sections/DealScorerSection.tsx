@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -40,6 +40,7 @@ import type {
   VendorProspectiveResult,
 } from "@/lib/prospective-analysis/vendor-prospective-analyzer"
 import type { VendorProposal } from "@/lib/actions/prospective"
+import { type OppEngineHandoff } from "./OpportunityEngineSection"
 
 // ─── Types ─────────────────────────────────────────────────────
 
@@ -55,6 +56,12 @@ interface DealScorerSectionProps {
   proposals: VendorProposal[]
   /** Vendor scope for loading the benchmark-comparison picker. */
   vendorId: string
+  /**
+   * Stepper hook (PR 4/5): emitted on Analyze with the blended deal
+   * (facility + Target-vs-Current price change + target share) so the stepper
+   * can auto-seed the Opportunity Engine step without the manual handoff.
+   */
+  onDealAnalyzed?: (deal: OppEngineHandoff) => void
 }
 
 const NO_PROPOSAL = "__none__"
@@ -91,7 +98,7 @@ function makeConstruct(seed?: Partial<ConstructForm>): ConstructForm {
 
 // ─── Section ───────────────────────────────────────────────────
 
-export function DealScorerSection({ facilities, proposals, vendorId }: DealScorerSectionProps) {
+export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed }: DealScorerSectionProps) {
   const queryClient = useQueryClient()
   const [facilityId, setFacilityId] = useState<string>("")
   const [proposalRowId, setProposalRowId] = useState<string>(NO_PROPOSAL)
@@ -106,6 +113,7 @@ export function DealScorerSection({ facilities, proposals, vendorId }: DealScore
     [benchmarks],
   )
   const [benchPick, setBenchPick] = useState("")
+  const analyzeSeqRef = useRef(0)
   const [targetMargin, setTargetMargin] = useState("40")
   const [floorMargin, setFloorMargin] = useState("25")
   const [currentShare, setCurrentShare] = useState("")
@@ -164,6 +172,28 @@ export function DealScorerSection({ facilities, proposals, vendorId }: DealScore
     if (blended.length === 0) {
       toast.error("Add at least one construct with a price and annual volume")
       return
+    }
+
+    // Stepper auto-seed (PR 4/5): hand the just-analyzed deal to the Opportunity
+    // Engine step — facility + blended Target-vs-Current price change + target
+    // share. A fresh proposalId each Analyze so the engine re-applies the latest.
+    if (onDealAnalyzed) {
+      const totalVolume = blended[0]?.estimatedAnnualVolume ?? 0
+      const blendedCurrentUnit =
+        totalVolume > 0 ? currentAnnualSpend / totalVolume : 0
+      const targetUnit =
+        blended.find((s) => s.scenarioName === "Target")?.unitPrice ?? 0
+      const priceChangePct =
+        blendedCurrentUnit > 0
+          ? (targetUnit - blendedCurrentUnit) / blendedCurrentUnit
+          : 0
+      analyzeSeqRef.current += 1
+      onDealAnalyzed({
+        proposalId: `step1-${facilityId}-${analyzeSeqRef.current}`,
+        facilityId,
+        priceChangePct,
+        targetSharePct: targetShare ? Number(targetShare) : null,
+      })
     }
 
     mutation.mutate({
