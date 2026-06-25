@@ -71,6 +71,14 @@ export interface VendorProspectiveAnalysisInput {
   internalUnitCost?: number
   facilityEstimatedAnnualSpend?: number
   facilityCurrentVendorShare?: number
+  /**
+   * The facility's CURRENT annual revenue/spend on these products, summed
+   * directly from the uploaded usage + current-price files
+   * (Σ currentPrice × volume). When provided it is authoritative — penetration
+   * uses it as `currentAnnualRevenue` instead of `spend × share` (Vick
+   * 2026-06-25 "current revenue should come from the usage file").
+   */
+  facilityCurrentVendorRevenue?: number
   targetVendorShare?: number
   capitalDetails?: CapitalDealDetails
   /**
@@ -356,7 +364,13 @@ async function runAnalysis(
   //     a share was supplied (share > 0), else the vendor spend stands in
   //     for the total and we attach an explicit warning.
   let facilityEstimatedAnnualSpend = input.facilityEstimatedAnnualSpend
-  let facilityCurrentVendorRevenue: number | undefined
+  // An explicit usage-derived current revenue (Σ currentPrice × volume from the
+  // uploaded usage + price files) is authoritative — it wins over the
+  // share-derived fallback below (Vick 2026-06-25).
+  let facilityCurrentVendorRevenue: number | undefined =
+    input.facilityCurrentVendorRevenue != null && input.facilityCurrentVendorRevenue > 0
+      ? input.facilityCurrentVendorRevenue
+      : undefined
   let backfillWarning: string | null = null
   if (facilityEstimatedAnnualSpend == null) {
     const { start: oneYearAgo } = getTrailing12MonthWindow()
@@ -375,7 +389,8 @@ async function runAnalysis(
       _sum: { extendedPrice: true },
     })
     const vendorSpend = Number(agg._sum?.extendedPrice ?? 0)
-    facilityCurrentVendorRevenue = vendorSpend
+    // Don't clobber an explicit usage-derived current revenue.
+    facilityCurrentVendorRevenue ??= vendorSpend
     const share = input.facilityCurrentVendorShare
     if (share != null && share > 0) {
       facilityEstimatedAnnualSpend = vendorSpend / share

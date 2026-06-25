@@ -122,11 +122,6 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     () => new Map((benchmarks ?? []).map((b) => [b.id, b])),
     [benchmarks],
   )
-  const benchmarkBySku = useMemo(
-    () =>
-      new Map((benchmarks ?? []).map((b) => [normalizeSku(b.itemNumber), b])),
-    [benchmarks],
-  )
   const [benchPick, setBenchPick] = useState("")
   const analyzeSeqRef = useRef(0)
   // Reference data: usage gives the VOLUME each construct is compared against;
@@ -142,49 +137,93 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
   const [usageLoadedCount, setUsageLoadedCount] = useState(0)
   const [priceLoadedCount, setPriceLoadedCount] = useState(0)
 
-  // Pre-load from a just-created / opened proposal ("save → next step"): select
-  // it in "Attach score" and hydrate the construct grid from its products
-  // (benchmark-matched by SKU; proposedPrice → Ask, quantity → Volume, the
-  // current-price file → Current). One-shot per proposal id. The lookup maps
-  // are read via refs (NOT effect deps) so a late async benchmark/price load
-  // can't re-run the effect and cancel the in-flight fetch before it applies.
-  const benchmarkBySkuRef = useRef(benchmarkBySku)
-  benchmarkBySkuRef.current = benchmarkBySku
-  const currentPriceBySkuRef = useRef(currentPriceBySku)
-  currentPriceBySkuRef.current = currentPriceBySku
+  // Current revenue straight from the usage + price files: Σ(current price ×
+  // volume) across every item. Authoritative for penetration (Vick 2026-06-25
+  // "current revenue should come from the usage file"), not spend × share.
+  const usageCurrentRevenue = useMemo(() => {
+    let sum = 0
+    for (const [sku, price] of currentPriceBySku) {
+      sum += price * (usageVolumeBySku.get(sku) ?? 0)
+    }
+    return sum
+  }, [currentPriceBySku, usageVolumeBySku])
+
+  // Coming from a builder save just SELECTS the proposal in the "Attach score"
+  // dropdown; the load below keys on that selection, so choosing a proposal
+  // manually behaves identically.
+  useEffect(() => {
+    if (preselectedProposalId) setProposalRowId(preselectedProposalId)
+  }, [preselectedProposalId])
+
+  // When a real proposal is attached (via preselect OR the dropdown), load its
+  // usage + pricing as the REFERENCE — you enter usage + pricing ONCE (in the
+  // proposal); the proposal's per-item quantity fills Volume and its current
+  // price fills Current when you pick a product from the benchmark list.
+  // Constructs come ONLY from the benchmark dropdown, never from the proposal's
+  // products (Vick 2026-06-25: "constructs can only come from benchmark upload;
+  // only need to enter usage and pricing once"). Any prior saved deal (benchmark
+  // picks + Floor/Target) is restored so leaving and coming back doesn't lose
+  // it. One-shot per proposal id.
   const appliedProposalRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!preselectedProposalId || appliedProposalRef.current === preselectedProposalId) return
-    appliedProposalRef.current = preselectedProposalId
-    setProposalRowId(preselectedProposalId)
-    void getVendorProposalDetail(preselectedProposalId)
+    if (proposalRowId === NO_PROPOSAL || appliedProposalRef.current === proposalRowId) return
+    appliedProposalRef.current = proposalRowId
+    void getVendorProposalDetail(proposalRowId)
       .then((detail) => {
+        // The facility is part of the proposal too — set it so it isn't
+        // re-entered (Vick 2026-06-25 "missing information from the proposals
+        // page"). Only when the proposal targets a single real facility.
+        if (detail.facilities.length === 1 && detail.facilities[0]) {
+          setFacilityId(detail.facilities[0].id)
+        }
         const items = detail.pricingItems ?? []
-        if (items.length === 0) return
-        setConstructs(
-          items.map((it) => {
-            const sku = normalizeSku(it.vendorItemNo)
-            const b = sku ? benchmarkBySkuRef.current.get(sku) : undefined
-            const price = sku ? currentPriceBySkuRef.current.get(sku) : undefined
-            return makeConstruct({
-              benchmarkId: b?.id ?? null,
-              productName: b
-                ? `${b.itemNumber} — ${b.productName}`.slice(0, 90)
-                : it.description || "(unnamed)",
-              current: price != null ? String(price) : "",
-              ask: it.proposedPrice ? String(it.proposedPrice) : "",
-              annualVolume: it.quantity ? String(it.quantity) : "",
-            })
-          }),
-        )
-        toast.success(
-          `Loaded ${items.length} product${items.length === 1 ? "" : "s"} from the proposal — add Floor / Target`,
-        )
+        const volMap = new Map<string, number>()
+        const priceMap = new Map<string, number>()
+        for (const it of items) {
+          const sku = normalizeSku(it.vendorItemNo)
+          if (!sku) continue
+          if (it.quantity != null && it.quantity > 0) volMap.set(sku, it.quantity)
+          if (it.currentPrice != null && it.currentPrice > 0) priceMap.set(sku, it.currentPrice)
+        }
+        if (volMap.size > 0) {
+          setUsageVolumeBySku(volMap)
+          setUsageLoadedCount(volMap.size)
+        }
+        if (priceMap.size > 0) {
+          setCurrentPriceBySku(priceMap)
+          setPriceLoadedCount(priceMap.size)
+        }
+        // Restore prior benchmark picks (the saved deal) — constructs only.
+        const saved = detail.dealConstructs ?? []
+        if (saved.length > 0) {
+          setConstructs(
+            saved.map((c) =>
+              makeConstruct({
+                benchmarkId: c.benchmarkId,
+                productName: c.productName || "(unnamed)",
+                current: c.current ? String(c.current) : "",
+                floor: c.floor ? String(c.floor) : "",
+                target: c.target ? String(c.target) : "",
+                ask: c.ask ? String(c.ask) : "",
+                annualVolume: c.annualVolume ? String(c.annualVolume) : "",
+                rebatePercent: c.rebatePercent ? String(c.rebatePercent) : "0",
+              }),
+            ),
+          )
+        }
+        const refCount = Math.max(volMap.size, priceMap.size)
+        if (saved.length > 0) {
+          toast.success("Loaded your saved deal + usage/pricing from the proposal")
+        } else if (refCount > 0) {
+          toast.success(
+            `Loaded usage + pricing for ${refCount} item${refCount === 1 ? "" : "s"} — add products from the benchmark list`,
+          )
+        }
       })
       .catch(() => {
         /* non-fatal: leave the grid as-is */
       })
-  }, [preselectedProposalId])
+  }, [proposalRowId])
   const [targetMargin, setTargetMargin] = useState("40")
   const [floorMargin, setFloorMargin] = useState("25")
   const [currentShare, setCurrentShare] = useState("")
@@ -299,6 +338,10 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       facilityCurrentVendorShare: currentShare
         ? Number(currentShare) / 100
         : undefined,
+      // Current revenue from the usage + price files (Σ current price × volume),
+      // authoritative over spend × share when present.
+      facilityCurrentVendorRevenue:
+        usageCurrentRevenue > 0 ? usageCurrentRevenue : undefined,
       targetVendorShare: targetShare ? Number(targetShare) / 100 : undefined,
       capitalDetails:
         isCapital && equipmentCost
