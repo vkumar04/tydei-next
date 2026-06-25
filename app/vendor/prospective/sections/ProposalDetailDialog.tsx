@@ -26,6 +26,8 @@ import type {
 interface Props {
   proposal: VendorProposal
   onClose: () => void
+  /** Open this proposal in the builder to edit it in place. */
+  onEdit?: (id: string) => void
 }
 
 /**
@@ -35,7 +37,7 @@ interface Props {
  * extras, divisions, facility names) is fetched on open via
  * `useVendorProposalDetail` and fills the Pricing / Terms / Facilities tabs.
  */
-export function ProposalDetailDialog({ proposal, onClose }: Props) {
+export function ProposalDetailDialog({ proposal, onClose, onEdit }: Props) {
   const { data: detail, isLoading } = useVendorProposalDetail(proposal.id)
 
   // Header + Overview can render from the lean list row immediately; the
@@ -113,6 +115,16 @@ export function ProposalDetailDialog({ proposal, onClose }: Props) {
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
+          {onEdit && (
+            <Button
+              onClick={() => {
+                onEdit(proposal.id)
+                onClose()
+              }}
+            >
+              Edit
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

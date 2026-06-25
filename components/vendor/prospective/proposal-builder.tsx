@@ -1,9 +1,13 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
-import { useCreateProposal } from "@/hooks/use-prospective"
+import {
+  useCreateProposal,
+  useUpdateProposal,
+  useVendorProposalDetail,
+} from "@/hooks/use-prospective"
 import type { ProposedPricingItem, VendorProposal } from "@/lib/actions/prospective"
 import { DealScoreView } from "./deal-score-view"
 import type { DealScore } from "@/lib/actions/prospective"
@@ -43,6 +47,8 @@ interface ProposalBuilderProps {
 
 export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClose, onProposalCreated }: ProposalBuilderProps) {
   const createMutation = useCreateProposal()
+  const updateMutation = useUpdateProposal()
+  const { data: editDetail } = useVendorProposalDetail(editingProposalId ?? null)
   const [score, setScore] = useState<DealScore | null>(null)
 
   const [customFacilities, setCustomFacilities] = useState<ProspectiveFacility[]>([])
@@ -84,6 +90,48 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     gpoFee: 3,
     aiNotes: "",
   })
+
+  // Edit flow: hydrate the form from the saved proposal once its detail loads.
+  // (The Deal Scorer / Opportunity data on the proposal is preserved server-side
+  // by updateProposal — we only re-edit the builder fields here.)
+  const hydratedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!editingProposalId || !editDetail || hydratedRef.current === editingProposalId) return
+    hydratedRef.current = editingProposalId
+    setNewProposal((prev) => ({
+      ...prev,
+      facilityId: editDetail.facilities[0]?.id ?? "",
+      facilityName: editDetail.facilities[0]?.name ?? "",
+      isMultiFacility: editDetail.facilities.length > 1,
+      facilities: editDetail.facilities.map((f) => ({ id: f.id, name: f.name })),
+      productCategory: editDetail.productCategories?.[0] ?? "",
+      productCategories: editDetail.productCategories ?? [],
+      isGrouped: Boolean(editDetail.divisions && editDetail.divisions.length > 0),
+      divisions: editDetail.divisions ?? [],
+      contractLength: editDetail.contractLengthMonths ?? prev.contractLength,
+      projectedSpend: editDetail.projectedSpend ?? 0,
+      projectedVolume: editDetail.projectedVolume ?? 0,
+      marketShareCommitment: editDetail.marketShareCommitment ?? prev.marketShareCommitment,
+      gpoFee: editDetail.gpoFee ?? prev.gpoFee,
+      aiNotes: editDetail.aiNotes ?? "",
+      products: (editDetail.pricingItems ?? []).map((it) => ({
+        benchmarkId: "",
+        productName: it.description ?? "",
+        refNumber: it.vendorItemNo ?? undefined,
+        proposedPrice: it.proposedPrice,
+        projectedVolume: it.quantity ?? 0,
+      })),
+      terms: (editDetail.terms ?? []).map((t) => ({
+        id: crypto.randomUUID(),
+        termType: (t.termType as ProspectiveTerm["termType"]) ?? "spend_rebate",
+        name: t.name ?? "",
+        targetType: (t.targetType as ProspectiveTerm["targetType"]) ?? "spend",
+        targetValue: t.targetValue ?? 0,
+        rebatePercent: t.rebatePercent ?? 0,
+        tiers: [],
+      })),
+    }))
+  }, [editingProposalId, editDetail])
 
   const addTerm = () => {
     const newTerm: ProspectiveTerm = {
@@ -242,8 +290,9 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     }
 
     try {
-      const created = await createMutation.mutateAsync({
-        vendorId,
+      // Shared builder payload — Charles 2026-04-26 #67: carry the rich fields
+      // so the detail dialog renders what the builder collected.
+      const payload = {
         facilityIds: facilityIds.length > 0 ? facilityIds : ["none"],
         pricingItems,
         terms: {
@@ -251,9 +300,6 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
           startDate: new Date().toISOString().split("T")[0],
           notes: newProposal.aiNotes || undefined,
         },
-        // Charles 2026-04-26 #67: carry through the rich builder
-        // fields so the proposal detail dialog can render the same
-        // info the builder collected.
         productCategories:
           newProposal.productCategories.length > 0
             ? newProposal.productCategories
@@ -280,7 +326,11 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
                 rebatePercent: t.rebatePercent,
               }))
             : undefined,
-      })
+      }
+      // Edit an existing proposal in place, or create a new draft.
+      const created = editingProposalId
+        ? await updateMutation.mutateAsync({ proposalId: editingProposalId, ...payload })
+        : await createMutation.mutateAsync({ vendorId, ...payload })
       // Continue into the Deal Scorer pre-loaded with this proposal ("save →
       // next step"). onProposalCreated owns navigation; only reset the form
       // here (calling handleResetAndClose would fire onClose and override it).
@@ -354,7 +404,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
 
         <ProposalActions
           editingProposalId={editingProposalId}
-          isPending={createMutation.isPending}
+          isPending={createMutation.isPending || updateMutation.isPending}
           onCancel={handleResetAndClose}
           onSubmit={submitProposal}
         />
