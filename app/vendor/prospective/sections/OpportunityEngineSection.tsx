@@ -43,6 +43,9 @@ import {
 } from "./export-opportunity"
 import { formatPercent } from "@/lib/formatting"
 import { cn } from "@/lib/utils"
+import { useToastMutation } from "@/hooks/use-toast-mutation"
+import { queryKeys } from "@/lib/query-keys"
+import { updateProposalOpportunity } from "@/lib/actions/prospective"
 import {
   computeOpportunityEngine,
   DEFAULT_OPPORTUNITY_SCENARIO,
@@ -86,6 +89,9 @@ export interface OppDealConstructRow {
 
 export interface OppEngineHandoff {
   proposalId: string
+  /** The REAL persisted proposal id (when known) — enables "Save to proposal".
+   *  Distinct from `proposalId`, which is the apply-once key. */
+  savedProposalId?: string | null
   facilityId: string | null
   /** Blended Target vs Current unit price, fraction. */
   priceChangePct: number
@@ -154,6 +160,14 @@ export function OpportunityEngineSection({
   // Per-construct deal rows from the handoff — included in the export's
   // by-product breakdown (the unified report).
   const [dealConstructs, setDealConstructs] = useState<OppDealConstructRow[]>([])
+  // The real proposal id (when reached from a saved proposal) — enables
+  // saving this Opportunity run back onto the proposal so View shows it.
+  const [savedProposalId, setSavedProposalId] = useState<string | null>(null)
+  const saveOpportunity = useToastMutation(updateProposalOpportunity, {
+    invalidate: [queryKeys.prospective.all],
+    success: "Opportunity saved to the proposal",
+    error: "Failed to save the opportunity",
+  })
 
   // Apply a scored-deal handoff ONCE per proposal (a one-shot external command,
   // not a derived mirror) — pre-fills the facility label + price/share sliders
@@ -164,6 +178,7 @@ export function OpportunityEngineSection({
     if (!initialDeal || appliedDealRef.current === initialDeal.proposalId) return
     appliedDealRef.current = initialDeal.proposalId
     setDealConstructs(initialDeal.constructs ?? [])
+    setSavedProposalId(initialDeal.savedProposalId ?? null)
     if (initialDeal.facilityId) {
       const f = facilities.find((x) => x.id === initialDeal.facilityId)
       if (f) setFacility(f.name)
@@ -285,6 +300,32 @@ export function OpportunityEngineSection({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {savedProposalId && (
+              <DropdownMenuItem
+                disabled={saveOpportunity.isPending}
+                onSelect={() =>
+                  saveOpportunity.mutate({
+                    proposalId: savedProposalId,
+                    scenario: {
+                      division: effectiveDivision,
+                      facility: facility.trim() || "Unspecified facility",
+                      priceChangePct,
+                      targetShare,
+                      expectedVolumeGrowthPct,
+                      winProbability: engine.winProbability,
+                      incrementalRevenue: engine.incrementalRevenue,
+                      currentRevenue: engine.currentRevenue,
+                      targetRevenue: engine.targetRevenue,
+                      blendedMarketShare: engine.blendedMarketShare,
+                      opportunityScore: score.overall,
+                      savedAt: new Date().toISOString(),
+                    },
+                  })
+                }
+              >
+                Save to proposal
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onSelect={() =>
                 void downloadOpportunityPdf(

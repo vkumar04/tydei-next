@@ -85,6 +85,7 @@ export function ProposalDetailDialog({ proposal, onClose }: Props) {
                 </span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="opportunity">Opportunity</TabsTrigger>
             <TabsTrigger value="facilities">
               Facilities
               <span className="ml-1 text-xs text-muted-foreground">
@@ -103,6 +104,7 @@ export function ProposalDetailDialog({ proposal, onClose }: Props) {
             <TermsTab proposal={p} detail={detail} isLoading={isLoading} />
             <ScoreTab proposal={p} />
             <DealTab detail={detail} isLoading={isLoading} />
+            <OpportunityTab detail={detail} isLoading={isLoading} />
             <FacilitiesTab detail={detail} isLoading={isLoading} />
           </div>
         </Tabs>
@@ -487,6 +489,57 @@ function DealTab({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </TabsContent>
+  )
+}
+
+// ─── Opportunity (last saved Opportunity Engine run) ────────────
+
+function OpportunityTab({
+  detail,
+  isLoading,
+}: {
+  detail: import("@/lib/actions/prospective").VendorProposalDetail | undefined
+  isLoading: boolean
+}) {
+  const o = detail?.opportunityScenario
+  const pctF = (n: number) => `${(n * 100).toFixed(0)}%`
+  return (
+    <TabsContent value="opportunity" className="mt-0">
+      {isLoading ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : !o ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No opportunity saved yet. Open this proposal in the Opportunity Engine
+          and choose <span className="font-medium">Save to proposal</span>.
+        </p>
+      ) : (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+            {[
+              ["Division", o.division],
+              ["Facility", o.facility],
+              ["Price change", pctF(o.priceChangePct)],
+              ["Target share", pctF(o.targetShare)],
+              ["Volume growth", pctF(o.expectedVolumeGrowthPct)],
+              ["Win probability", pctF(o.winProbability)],
+              ["Incremental revenue", formatCurrency(o.incrementalRevenue)],
+              ["Current revenue", formatCurrency(o.currentRevenue)],
+              ["Target revenue", formatCurrency(o.targetRevenue)],
+              ["Blended market share", pctF(o.blendedMarketShare)],
+              ["Opportunity score", `${Math.round(o.opportunityScore)}/100`],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="font-medium">{value}</p>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Saved {formatDate(o.savedAt)}.
+          </p>
         </div>
       )}
     </TabsContent>

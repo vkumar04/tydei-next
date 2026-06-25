@@ -13,6 +13,7 @@ import {
   PROSPECTIVE_PROPOSAL_KIND,
 } from "@/lib/prospective/proposal-rows"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import { z } from "zod"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 // ─── Types ──────────────────────────────────────────────────────
@@ -148,7 +149,42 @@ export interface VendorProposalDetail extends VendorProposal {
     annualVolume: number
     rebatePercent: number
   }[]
+  /** Last Opportunity Engine run saved onto the proposal (View → Opportunity). */
+  opportunityScenario?: ProposalOpportunityScenario
 }
+
+/** A saved Opportunity Engine run (inputs + key outputs). */
+export interface ProposalOpportunityScenario {
+  division: string
+  facility: string
+  /** Fractions. */
+  priceChangePct: number
+  targetShare: number
+  expectedVolumeGrowthPct: number
+  winProbability: number
+  incrementalRevenue: number
+  currentRevenue: number
+  targetRevenue: number
+  blendedMarketShare: number
+  /** 0–100. */
+  opportunityScore: number
+  savedAt: string
+}
+
+const opportunityScenarioSchema = z.object({
+  division: z.string(),
+  facility: z.string(),
+  priceChangePct: z.number(),
+  targetShare: z.number(),
+  expectedVolumeGrowthPct: z.number(),
+  winProbability: z.number(),
+  incrementalRevenue: z.number(),
+  currentRevenue: z.number(),
+  targetRevenue: z.number(),
+  blendedMarketShare: z.number(),
+  opportunityScore: z.number(),
+  savedAt: z.string(),
+})
 
 // NOTE: The legacy `analyzeProposal` 0-100 scoring action and its UI
 // consumers (`components/facility/analysis/proposal-upload.tsx`,
@@ -753,6 +789,8 @@ export async function getVendorProposalDetail(
         rebatePercent: num(c.rebatePercent),
       }))
     : undefined
+  const oppParsed = opportunityScenarioSchema.safeParse(meta.opportunityScenario)
+  const opportunityScenario = oppParsed.success ? oppParsed.data : undefined
 
   // Resolve targeted facilities to names. The builder writes ["none"]
   // when no facility was picked (audit M7) — drop that placeholder.
@@ -778,5 +816,36 @@ export async function getVendorProposalDetail(
     divisions: divisions && divisions.length ? divisions : undefined,
     facilities,
     dealConstructs: dealConstructs && dealConstructs.length ? dealConstructs : undefined,
+    opportunityScenario,
+  })
+}
+
+/**
+ * Persist an Opportunity Engine run onto a proposal so its "View" dialog shows
+ * the last scenario (Vick 2026-06-24 "view should show all of that"). Vendor-
+ * scoped + zod-validated JSON-column write.
+ */
+export async function updateProposalOpportunity(input: {
+  proposalId: string
+  scenario: ProposalOpportunityScenario
+}): Promise<void> {
+  const { vendor } = await requireVendor()
+  await requireCanMutate()
+  const parsed = opportunityScenarioSchema.safeParse(input.scenario)
+  if (!parsed.success) throw new Error("Invalid opportunity scenario")
+  const row = await prisma.pendingContract.findFirst({
+    where: { id: input.proposalId, vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+    select: { id: true, pricingData: true },
+  })
+  if (!row) throw new Error("Proposal not found")
+  const meta = (row.pricingData ?? {}) as Record<string, unknown>
+  // auth-scope-scanner-skip: row authorized via the vendor-scoped findFirst above
+  await prisma.pendingContract.update({
+    where: { id: row.id },
+    data: {
+      pricingData: JSON.parse(
+        JSON.stringify({ ...meta, opportunityScenario: parsed.data }),
+      ) as Prisma.InputJsonValue,
+    },
   })
 }
