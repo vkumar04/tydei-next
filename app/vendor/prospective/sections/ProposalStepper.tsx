@@ -10,7 +10,7 @@
  * "Opportunity Engine" handoff (initialDeal).
  */
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Gauge, Rocket, ChevronLeft, ChevronRight, Check } from "lucide-react"
@@ -37,18 +37,31 @@ export function ProposalStepper({
   facilities,
   proposals,
   initialDeal,
+  preselectedProposalId = null,
 }: {
   vendorId: string
   facilities: FacilityOption[]
   proposals: VendorProposal[]
   /** Optional handoff that jumps straight to step 2 pre-filled. */
   initialDeal?: OppEngineHandoff | null
+  /** A just-created/opened proposal to pre-load into Step 1 (Deal Scorer). */
+  preselectedProposalId?: string | null
 }) {
   const [step, setStep] = useState(initialDeal ? 1 : 0)
   // The deal analyzed in step 1 auto-seeds step 2 (falls back to an external
   // handoff, e.g. from the My-Proposals "Opportunity Engine" button).
   const [stepDeal, setStepDeal] = useState<OppEngineHandoff | null>(null)
   const opportunityDeal = stepDeal ?? initialDeal ?? null
+
+  // A freshly-created proposal arrives → show Step 1 (Deal Scorer) so the user
+  // continues the deal pre-loaded ("save → next step").
+  const lastPreselectRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (preselectedProposalId && lastPreselectRef.current !== preselectedProposalId) {
+      lastPreselectRef.current = preselectedProposalId
+      setStep(0)
+    }
+  }, [preselectedProposalId])
 
   return (
     <div className="space-y-5">
@@ -99,6 +112,7 @@ export function ProposalStepper({
           facilities={facilities}
           proposals={proposals}
           onDealAnalyzed={setStepDeal}
+          preselectedProposalId={preselectedProposalId}
         />
       ) : (
         <OpportunityEngineSection

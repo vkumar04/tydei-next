@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -41,7 +41,10 @@ import type {
   VendorContractVariant,
   VendorProspectiveResult,
 } from "@/lib/prospective-analysis/vendor-prospective-analyzer"
-import type { VendorProposal } from "@/lib/actions/prospective"
+import {
+  getVendorProposalDetail,
+  type VendorProposal,
+} from "@/lib/actions/prospective"
 import { type OppEngineHandoff } from "./OpportunityEngineSection"
 
 // ─── Types ─────────────────────────────────────────────────────
@@ -64,6 +67,11 @@ interface DealScorerSectionProps {
    * can auto-seed the Opportunity Engine step without the manual handoff.
    */
   onDealAnalyzed?: (deal: OppEngineHandoff) => void
+  /**
+   * A just-created/opened proposal id — selects it in "Attach score" and
+   * hydrates the construct grid from its products ("save → next step").
+   */
+  preselectedProposalId?: string | null
 }
 
 const NO_PROPOSAL = "__none__"
@@ -100,7 +108,7 @@ function makeConstruct(seed?: Partial<ConstructForm>): ConstructForm {
 
 // ─── Section ───────────────────────────────────────────────────
 
-export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed }: DealScorerSectionProps) {
+export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed, preselectedProposalId }: DealScorerSectionProps) {
   const queryClient = useQueryClient()
   const [facilityId, setFacilityId] = useState<string>("")
   const [proposalRowId, setProposalRowId] = useState<string>(NO_PROPOSAL)
@@ -112,6 +120,11 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
   const { data: benchmarks } = useVendorBenchmarks(vendorId)
   const benchmarkById = useMemo(
     () => new Map((benchmarks ?? []).map((b) => [b.id, b])),
+    [benchmarks],
+  )
+  const benchmarkBySku = useMemo(
+    () =>
+      new Map((benchmarks ?? []).map((b) => [normalizeSku(b.itemNumber), b])),
     [benchmarks],
   )
   const [benchPick, setBenchPick] = useState("")
@@ -128,6 +141,50 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
   )
   const [usageLoadedCount, setUsageLoadedCount] = useState(0)
   const [priceLoadedCount, setPriceLoadedCount] = useState(0)
+
+  // Pre-load from a just-created / opened proposal ("save → next step"): select
+  // it in "Attach score" and hydrate the construct grid from its products
+  // (benchmark-matched by SKU; proposedPrice → Ask, quantity → Volume, the
+  // current-price file → Current). One-shot per proposal id. The lookup maps
+  // are read via refs (NOT effect deps) so a late async benchmark/price load
+  // can't re-run the effect and cancel the in-flight fetch before it applies.
+  const benchmarkBySkuRef = useRef(benchmarkBySku)
+  benchmarkBySkuRef.current = benchmarkBySku
+  const currentPriceBySkuRef = useRef(currentPriceBySku)
+  currentPriceBySkuRef.current = currentPriceBySku
+  const appliedProposalRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!preselectedProposalId || appliedProposalRef.current === preselectedProposalId) return
+    appliedProposalRef.current = preselectedProposalId
+    setProposalRowId(preselectedProposalId)
+    void getVendorProposalDetail(preselectedProposalId)
+      .then((detail) => {
+        const items = detail.pricingItems ?? []
+        if (items.length === 0) return
+        setConstructs(
+          items.map((it) => {
+            const sku = normalizeSku(it.vendorItemNo)
+            const b = sku ? benchmarkBySkuRef.current.get(sku) : undefined
+            const price = sku ? currentPriceBySkuRef.current.get(sku) : undefined
+            return makeConstruct({
+              benchmarkId: b?.id ?? null,
+              productName: b
+                ? `${b.itemNumber} — ${b.productName}`.slice(0, 90)
+                : it.description || "(unnamed)",
+              current: price != null ? String(price) : "",
+              ask: it.proposedPrice ? String(it.proposedPrice) : "",
+              annualVolume: it.quantity ? String(it.quantity) : "",
+            })
+          }),
+        )
+        toast.success(
+          `Loaded ${items.length} product${items.length === 1 ? "" : "s"} from the proposal — add Floor / Target`,
+        )
+      })
+      .catch(() => {
+        /* non-fatal: leave the grid as-is */
+      })
+  }, [preselectedProposalId])
   const [targetMargin, setTargetMargin] = useState("40")
   const [floorMargin, setFloorMargin] = useState("25")
   const [currentShare, setCurrentShare] = useState("")

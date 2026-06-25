@@ -66,7 +66,7 @@ export function ProspectiveHero({
 
   const headline =
     totalProposals > 0
-      ? `${formatCurrency(totalProjectedSpend)} projected spend across ${totalProposals} proposal${totalProposals === 1 ? "" : "s"}.`
+      ? `${formatCurrency(totalProjectedSpend)} projected annual spend across ${totalProposals} proposal${totalProposals === 1 ? "" : "s"}.`
       : "Model a proposal to a facility to start building pipeline."
 
   return (
@@ -97,9 +97,9 @@ export function ProspectiveHero({
           }
         />
         <HeroStat
-          label="Projected Spend"
+          label="Projected Annual Spend"
           value={formatCurrency(totalProjectedSpend)}
-          sublabel="across all proposals"
+          sublabel="facility annual spend across proposals"
           tone={totalProjectedSpend > 0 ? "positive" : "muted"}
         />
         <HeroStat

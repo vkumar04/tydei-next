@@ -25,9 +25,15 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
   const { data: proposals, isLoading } = useVendorProposals(vendorId)
   const [activeTab, setActiveTab] = useState("opportunities")
   const [oppHandoff, setOppHandoff] = useState<OppEngineHandoff | null>(null)
+  // A just-created (or opened) proposal to pre-load into the stepper's Step 1.
+  const [preselectedProposalId, setPreselectedProposalId] = useState<string | null>(null)
 
   const totalProposals = proposals?.length ?? 0
-  const totalProjectedSpend = proposals?.reduce((s, p) => s + p.totalProposedCost, 0) ?? 0
+  // Facility projected ANNUAL spend (the user-entered assumption) — falls back
+  // to the proposed catalog cost only when a proposal has no spend assumption.
+  // (Was Σ totalProposedCost = catalog cost, mislabeled as projected spend.)
+  const totalProjectedSpend =
+    proposals?.reduce((s, p) => s + (p.projectedSpend ?? p.totalProposedCost), 0) ?? 0
 
   return (
     <div className="space-y-6">
@@ -74,6 +80,7 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             facilities={facilities}
             proposals={proposals ?? []}
             initialDeal={oppHandoff}
+            preselectedProposalId={preselectedProposalId}
           />
         </TabsContent>
 
@@ -90,7 +97,12 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
           <ProposalBuilder
             vendorId={vendorId}
             facilities={facilities}
-            onClose={() => setActiveTab("proposals")}
+            onProposalCreated={(p) => {
+              // Save → continue into the Deal Scorer pre-loaded with this deal.
+              setPreselectedProposalId(p.id)
+              setActiveTab("proposals")
+            }}
+            onClose={() => setActiveTab("opportunities")}
           />
         </TabsContent>
       </Tabs>
