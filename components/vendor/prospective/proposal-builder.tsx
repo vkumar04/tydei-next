@@ -4,7 +4,7 @@ import { useState, useCallback } from "react"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import { useCreateProposal } from "@/hooks/use-prospective"
-import type { ProposedPricingItem } from "@/lib/actions/prospective"
+import type { ProposedPricingItem, VendorProposal } from "@/lib/actions/prospective"
 import { DealScoreView } from "./deal-score-view"
 import type { DealScore } from "@/lib/actions/prospective"
 
@@ -36,9 +36,12 @@ interface ProposalBuilderProps {
   facilities: { id: string; name: string }[]
   editingProposalId?: string | null
   onClose?: () => void
+  /** Called after a proposal is saved, with the created row — lets the parent
+   *  continue into the Deal Scorer pre-loaded ("save → next step"). */
+  onProposalCreated?: (proposal: VendorProposal) => void
 }
 
-export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClose }: ProposalBuilderProps) {
+export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClose, onProposalCreated }: ProposalBuilderProps) {
   const createMutation = useCreateProposal()
   const [score, setScore] = useState<DealScore | null>(null)
 
@@ -178,7 +181,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     return total
   }
 
-  const handleResetAndClose = () => {
+  const resetForm = () => {
     setNewProposal({
       facilityId: "",
       facilityName: "",
@@ -199,6 +202,10 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
       aiNotes: "",
     })
     setProductDescription("")
+  }
+  // Cancel: reset + let the parent navigate away.
+  const handleResetAndClose = () => {
+    resetForm()
     onClose?.()
   }
 
@@ -235,7 +242,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     }
 
     try {
-      await createMutation.mutateAsync({
+      const created = await createMutation.mutateAsync({
         vendorId,
         facilityIds: facilityIds.length > 0 ? facilityIds : ["none"],
         pricingItems,
@@ -253,6 +260,11 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
             : newProposal.productCategory
               ? [newProposal.productCategory]
               : undefined,
+        // Grouped-proposal division labels were silently dropped on save.
+        divisions:
+          newProposal.divisions && newProposal.divisions.length > 0
+            ? newProposal.divisions
+            : undefined,
         projectedSpend: newProposal.projectedSpend || undefined,
         projectedVolume: newProposal.projectedVolume || undefined,
         marketShareCommitment: newProposal.marketShareCommitment || undefined,
@@ -269,7 +281,11 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
               }))
             : undefined,
       })
-      handleResetAndClose()
+      // Continue into the Deal Scorer pre-loaded with this proposal ("save →
+      // next step"). onProposalCreated owns navigation; only reset the form
+      // here (calling handleResetAndClose would fire onClose and override it).
+      resetForm()
+      onProposalCreated?.(created)
     } catch {
       // Error toast handled by mutation
     }
