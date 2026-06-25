@@ -5,6 +5,7 @@ import { queryKeys } from "@/lib/query-keys"
 import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   createProposal,
+  updateProposal,
   deleteProposal,
   getVendorProposals,
   getVendorProposalDetail,
@@ -34,6 +35,14 @@ export function useCreateProposal() {
     invalidate: [queryKeys.prospective.all],
     success: "Proposal draft created",
     error: "Failed to create proposal",
+  })
+}
+
+export function useUpdateProposal() {
+  return useToastMutation(updateProposal, {
+    invalidate: [queryKeys.prospective.all],
+    success: "Proposal updated",
+    error: "Failed to update proposal",
   })
 }
 

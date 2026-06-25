@@ -27,6 +27,8 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
   const [oppHandoff, setOppHandoff] = useState<OppEngineHandoff | null>(null)
   // A just-created (or opened) proposal to pre-load into the stepper's Step 1.
   const [preselectedProposalId, setPreselectedProposalId] = useState<string | null>(null)
+  // A saved proposal opened in the builder for in-place editing.
+  const [editingProposalId, setEditingProposalId] = useState<string | null>(null)
 
   const totalProposals = proposals?.length ?? 0
   // Facility projected ANNUAL spend (the user-entered assumption) — falls back
@@ -65,7 +67,14 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
           <ProposalCards
             proposals={proposals ?? []}
             isLoading={isLoading}
-            onNewProposal={() => setActiveTab("new-proposal")}
+            onNewProposal={() => {
+              setEditingProposalId(null)
+              setActiveTab("new-proposal")
+            }}
+            onEditProposal={(id) => {
+              setEditingProposalId(id)
+              setActiveTab("new-proposal")
+            }}
             onAnalyzeInOpportunityEngine={(deal) => {
               setOppHandoff(deal)
               setActiveTab("proposals")
@@ -97,12 +106,17 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
           <ProposalBuilder
             vendorId={vendorId}
             facilities={facilities}
+            editingProposalId={editingProposalId}
             onProposalCreated={(p) => {
               // Save → continue into the Deal Scorer pre-loaded with this deal.
+              setEditingProposalId(null)
               setPreselectedProposalId(p.id)
               setActiveTab("proposals")
             }}
-            onClose={() => setActiveTab("opportunities")}
+            onClose={() => {
+              setEditingProposalId(null)
+              setActiveTab("opportunities")
+            }}
           />
         </TabsContent>
       </Tabs>

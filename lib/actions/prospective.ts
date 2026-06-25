@@ -456,6 +456,70 @@ export async function createProposal(input: {
   })
 }
 
+// ─── Vendor: Update Proposal (edit a draft in place) ──────────────
+
+/**
+ * Edit a draft proposal in place (Vick 2026-06-24 "View should let me get back
+ * to what I entered"). Mirrors createProposal's builder payload, but MERGES into
+ * the existing pricingData so the Deal Scorer / Opportunity Engine data
+ * (dealScore, dealConstructs, dealCurrentAnnualSpend, opportunityScenario) that
+ * live alongside survive the edit. Vendor-scoped.
+ */
+export async function updateProposal(input: {
+  proposalId: string
+  facilityIds: string[]
+  pricingItems: ProposedPricingItem[]
+  terms: { contractLength: number; startDate: string; paymentTerms?: string; notes?: string }
+  productCategories?: string[]
+  divisions?: string[]
+  projectedSpend?: number
+  projectedVolume?: number
+  marketShareCommitment?: number
+  gpoFee?: number
+  aiNotes?: string
+  proposalTerms?: ProposalTermSummary[]
+}): Promise<VendorProposal> {
+  const { vendor } = await requireVendor()
+  await requireCanMutate()
+  const existingRow = await prisma.pendingContract.findFirst({
+    where: { id: input.proposalId, vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+    select: { id: true, submittedAt: true, pricingData: true },
+  })
+  if (!existingRow) throw new Error("Proposal not found")
+  const existing = (existingRow.pricingData ?? {}) as Record<string, unknown>
+  const totalCost = input.pricingItems.reduce(
+    (s, p) => s + p.proposedPrice * (p.quantity ?? 1),
+    0,
+  )
+  const merged = {
+    ...existing,
+    kind: PROSPECTIVE_PROPOSAL_KIND,
+    facilityIds: input.facilityIds,
+    pricingItems: input.pricingItems,
+    terms: input.terms,
+    totalCost,
+    productCategories: input.productCategories,
+    divisions: input.divisions,
+    projectedSpend: input.projectedSpend,
+    projectedVolume: input.projectedVolume,
+    marketShareCommitment: input.marketShareCommitment,
+    gpoFee: input.gpoFee,
+    aiNotes: input.aiNotes,
+    proposalTerms: input.proposalTerms,
+  }
+  // auth-scope-scanner-skip: row authorized via the vendor-scoped findFirst above
+  const row = await prisma.pendingContract.update({
+    where: { id: existingRow.id },
+    data: {
+      contractName: `Prospective proposal — ${input.pricingItems.length} item${input.pricingItems.length === 1 ? "" : "s"}`,
+      totalValue: totalCost,
+      notes: input.aiNotes ?? input.terms.notes ?? null,
+      pricingData: JSON.parse(JSON.stringify(merged)) as Prisma.InputJsonValue,
+    },
+  })
+  return serialize(payloadToProposal(row.id, vendor.id, row.submittedAt, merged))
+}
+
 // ─── Vendor: Delete Proposal ────────────────────────────────────
 
 /**

@@ -50,6 +50,8 @@ interface Props {
   onNewProposal: () => void
   /** Push a scored deal into the Opportunity Engine (proposal → score → opp). */
   onAnalyzeInOpportunityEngine?: (deal: OppEngineHandoff) => void
+  /** Open a saved proposal in the builder to edit it in place. */
+  onEditProposal?: (id: string) => void
 }
 
 export function ProposalCards({
@@ -57,6 +59,7 @@ export function ProposalCards({
   isLoading,
   onNewProposal,
   onAnalyzeInOpportunityEngine,
+  onEditProposal,
 }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<VendorProposal | null>(null)
   const [viewTarget, setViewTarget] = useState<VendorProposal | null>(null)
@@ -240,6 +243,7 @@ export function ProposalCards({
         <ProposalDetailDialog
           proposal={viewTarget}
           onClose={() => setViewTarget(null)}
+          onEdit={onEditProposal}
         />
       )}
 
