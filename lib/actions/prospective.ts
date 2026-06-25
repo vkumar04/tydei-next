@@ -100,6 +100,17 @@ export interface ProposalDealHandoff {
   /** Deal's market-share commitment, 0–100, or null. */
   targetSharePct: number | null
   constructCount: number
+  /** The per-construct rows — feed the Opportunity Engine's by-product export
+   *  (structurally matches OppEngineHandoff/OppDealConstructRow). */
+  constructs: {
+    productName: string
+    current: number
+    floor: number
+    target: number
+    ask: number
+    annualVolume: number
+    rebatePercent: number
+  }[]
 }
 
 /** A targeted facility resolved to its display name. */
@@ -570,6 +581,17 @@ function payloadToProposal(
           ? Number(meta.marketShareCommitment)
           : null,
       constructCount: rawConstructs.length,
+      // Carry the per-construct rows so the Opportunity Engine's by-product
+      // export works from a saved proposal (was computed-then-discarded).
+      constructs: rawConstructs.map((c) => ({
+        productName: typeof c.productName === "string" ? c.productName : "",
+        current: num(c.current),
+        floor: num(c.floor),
+        target: num(c.target),
+        ask: num(c.ask),
+        annualVolume: num(c.annualVolume),
+        rebatePercent: num(c.rebatePercent),
+      })),
     }
   }
 
