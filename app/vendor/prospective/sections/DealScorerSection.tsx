@@ -261,6 +261,10 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       analyzeSeqRef.current += 1
       onDealAnalyzed({
         proposalId: `step1-${facilityId}-${analyzeSeqRef.current}`,
+        // When the deal is attached to a real proposal, carry its id so Step 2
+        // can save the Opportunity run back onto it.
+        savedProposalId:
+          proposalRowId !== NO_PROPOSAL ? proposalRowId : null,
         facilityId,
         priceChangePct,
         targetSharePct: targetShare ? Number(targetShare) : null,

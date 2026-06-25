@@ -182,6 +182,7 @@ export function ProposalCards({
                         onClick={() =>
                           onAnalyzeInOpportunityEngine({
                             proposalId: p.id,
+                            savedProposalId: p.id,
                             facilityId: p.dealHandoff!.facilityId,
                             priceChangePct: p.dealHandoff!.priceChangePct,
                             targetSharePct: p.dealHandoff!.targetSharePct,
