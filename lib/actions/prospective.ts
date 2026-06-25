@@ -137,6 +137,17 @@ export interface VendorProposalDetail extends VendorProposal {
   divisions?: string[]
   /** `facilityIds` resolved to names; the "none" placeholder is dropped. */
   facilities: ProposalFacilityRef[]
+  /** Per-construct deal rows persisted by the Deal Scorer (View → Deal tab). */
+  dealConstructs?: {
+    benchmarkId: string | null
+    productName: string
+    current: number
+    floor: number
+    target: number
+    ask: number
+    annualVolume: number
+    rebatePercent: number
+  }[]
 }
 
 // NOTE: The legacy `analyzeProposal` 0-100 scoring action and its UI
@@ -728,6 +739,20 @@ export async function getVendorProposalDetail(
     | undefined
   const pricingItems = (meta.pricingItems as ProposedPricingItem[]) ?? []
   const divisions = (meta.divisions as string[] | undefined)?.filter(Boolean)
+  // Per-construct deal rows persisted by the Deal Scorer (View → Deal tab).
+  const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)
+  const dealConstructs = Array.isArray(meta.dealConstructs)
+    ? (meta.dealConstructs as Array<Record<string, unknown>>).map((c) => ({
+        benchmarkId: typeof c.benchmarkId === "string" ? c.benchmarkId : null,
+        productName: typeof c.productName === "string" ? c.productName : "",
+        current: num(c.current),
+        floor: num(c.floor),
+        target: num(c.target),
+        ask: num(c.ask),
+        annualVolume: num(c.annualVolume),
+        rebatePercent: num(c.rebatePercent),
+      }))
+    : undefined
 
   // Resolve targeted facilities to names. The builder writes ["none"]
   // when no facility was picked (audit M7) — drop that placeholder.
@@ -752,5 +777,6 @@ export async function getVendorProposalDetail(
     termsNotes: terms?.notes,
     divisions: divisions && divisions.length ? divisions : undefined,
     facilities,
+    dealConstructs: dealConstructs && dealConstructs.length ? dealConstructs : undefined,
   })
 }

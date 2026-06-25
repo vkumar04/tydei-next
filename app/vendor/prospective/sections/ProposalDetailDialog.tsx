@@ -77,6 +77,14 @@ export function ProposalDetailDialog({ proposal, onClose }: Props) {
               )}
             </TabsTrigger>
             <TabsTrigger value="score">Deal Score</TabsTrigger>
+            <TabsTrigger value="deal">
+              Deal
+              {detail?.dealConstructs && detail.dealConstructs.length > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground">
+                  ({detail.dealConstructs.length})
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="facilities">
               Facilities
               <span className="ml-1 text-xs text-muted-foreground">
@@ -94,6 +102,7 @@ export function ProposalDetailDialog({ proposal, onClose }: Props) {
             />
             <TermsTab proposal={p} detail={detail} isLoading={isLoading} />
             <ScoreTab proposal={p} />
+            <DealTab detail={detail} isLoading={isLoading} />
             <FacilitiesTab detail={detail} isLoading={isLoading} />
           </div>
         </Tabs>
@@ -415,10 +424,10 @@ function ScoreTab({ proposal }: { proposal: VendorProposal }) {
             </p>
           )}
           <p className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-            The full 5-dimension breakdown (financial value, rebate efficiency,
-            pricing competitiveness, market-share alignment, compliance
-            likelihood) is shown live in the Deal Scorer tab. Re-run it with this
-            proposal selected to refresh the score.
+            A single 0–100 score anchored on the deal&rsquo;s gross margin vs your
+            target/floor, plus penetration and term factors. The per-product deal
+            it was scored on is in the <span className="font-medium">Deal</span>{" "}
+            tab. Re-run the Deal Scorer with this proposal selected to refresh it.
           </p>
         </div>
       ) : (
@@ -426,6 +435,59 @@ function ScoreTab({ proposal }: { proposal: VendorProposal }) {
           No deal score yet. Run the Deal Scorer with this proposal selected to
           attach a score.
         </p>
+      )}
+    </TabsContent>
+  )
+}
+
+// ─── Deal (per-construct breakdown) ─────────────────────────────
+
+function DealTab({
+  detail,
+  isLoading,
+}: {
+  detail: import("@/lib/actions/prospective").VendorProposalDetail | undefined
+  isLoading: boolean
+}) {
+  const constructs = detail?.dealConstructs ?? []
+  return (
+    <TabsContent value="deal" className="mt-0">
+      {isLoading ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+      ) : constructs.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No deal yet. Score this proposal in the Deal Scorer to capture the
+          per-product deal (Current / Floor / Target / Ask).
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-md border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Product</th>
+                <th className="px-3 py-2 text-right font-medium">Current</th>
+                <th className="px-3 py-2 text-right font-medium">Floor</th>
+                <th className="px-3 py-2 text-right font-medium">Target</th>
+                <th className="px-3 py-2 text-right font-medium">Ask</th>
+                <th className="px-3 py-2 text-right font-medium">Volume</th>
+                <th className="px-3 py-2 text-right font-medium">Rebate %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {constructs.map((c, i) => (
+                <tr key={`${c.productName}-${i}`} className="border-t">
+                  <td className="px-3 py-2">{c.productName || "(unnamed)"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{c.current ? formatCurrency(c.current) : "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{c.floor ? formatCurrency(c.floor) : "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{c.target ? formatCurrency(c.target) : "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{c.ask ? formatCurrency(c.ask) : "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{c.annualVolume.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{c.rebatePercent}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </TabsContent>
   )
