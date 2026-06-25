@@ -154,7 +154,7 @@ tydei-next/
 │   │   ├── invoices/        # Invoice management
 │   │   ├── market-share/    # Market share analytics
 │   │   ├── performance/     # Performance metrics + radar
-│   │   ├── prospective/     # Proposal builder
+│   │   ├── prospective/     # Proposal stepper (constructs → opportunity → report)
 │   │   ├── renewals/        # Renewal pipeline
 │   │   ├── ai-agent/        # Vendor AI assistant
 │   │   └── settings/        # Profile, team, connections
@@ -273,7 +273,7 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 - **Case Costing** — surgeon scorecards, payor-mix, and a per-procedure **True-Margin** report (revenue from CPT payor-rate reimbursement, rebate allocated by matching each supply's product number to its contract's rebate terms).
 - **Reports** — facility Reports Hub and a vendor-scoped **Vendor Reports Hub** at full parity (Overview / per-contract-type / By Rebate Type / Calculations), reusing the same presentational components. The vendor hub's **facility filter** scopes every trend/table to one facility the vendor serves (`scopeContractWhereToFacility`). Report cards (Rebate Statement / Performance Summary / Contract Roster) export **PDF or CSV** — PDFs render server-side through the one generator in `lib/pdf.ts` (`generateTableReportPDF`) via `/api/reports/pdf`, never a client-side jsPDF.
 - **Analysis (facility CFO dashboard)** — assumption-driven current-state model: Current Vendor Spend, Net Revenue, EBITDA, and a **DCF enterprise value** (explicit-period PV **plus a Gordon-Growth terminal value** — `TV = FCF_N × (1+g) / (r − g)`). Net Revenue is an **Actuals / Manual** control (summed case-costing reimbursement, or avg-reimbursement-per-case × cases) — never the old spend ÷ 30% proxy; **Annual cases** is editable. PDF/CSV export leads with a plain-English **narrative** of the data, not just tables.
-- **Prospective analysis** — unified proposal analyzer (PDF terms + price file + lookback + legal scan → one verdict), whose printed report leads with a plain-English **narrative** of the deal. Plus a vendor **Opportunity Engine**: per-facility **Current State** panel (reuses the facility DCF model; included in the page export) and a deal scorer whose strategic inputs (top competitor, incumbent share, rebate cost, multi-BU breadth) are **derived from the vendor's real COG/contract data**, not hardcoded.
+- **Prospective (vendor) — a guided proposal stepper** (`Opportunities` list · `Proposals` stepper · `Benchmarks` · `Analytics`). **Step 1 Usage & Pricing:** the deal is modeled as **constructs** — one row per product, added from the vendor's **benchmark list**; a 12-month **usage** file (volume reference) and a **current-price** file fill each construct's Volume + Current by SKU, and the vendor enters Floor / Target / Ask. The constructs blend into the tested scenario engine (`blendConstructsToScenarios`). **Step 2 Opportunity Engine:** auto-seeded from the Step-1 deal — per-facility **Current State** panel (reuses the facility DCF model), win-probability / penetration / DCF, and strategic inputs (top competitor, incumbent share, rebate cost, multi-BU breadth) **derived from the vendor's real COG/contract data**, not hardcoded. One unified **PDF/CSV export** carries the whole deal, including a per-product breakdown. The facility side keeps the unified proposal analyzer (PDF terms + price file + lookback + legal scan → one verdict) whose report leads with a plain-English **narrative**.
 
 ## Deployment (Railway)
 
