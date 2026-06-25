@@ -336,10 +336,15 @@ grouped/pricing_only).
   now renders the `ProposalCards` list). `ProposalStepper`
   (`app/vendor/prospective/sections/ProposalStepper.tsx`) has two steps:
   **Step 1 Usage & Pricing** = `DealScorerSection` and **Step 2 Opportunity &
-  Report** = `OpportunityEngineSection`. Step 1 has a usage-file dropzone →
-  `mapUsageRows` → `usageProductsToConstructs` (`lib/prospective-analysis/usage-
-  to-constructs.ts`, tested) **seeds the construct rows from real usage** (the
-  fix for "Analyze isn't using the usage"). On Analyze, `DealScorerSection`
+  Report** = `OpportunityEngineSection`. **Constructs come ONLY from the
+  benchmark dropdown** (Vick 2026-06-24) — usage/price files do NOT create
+  constructs. Step 1 has two reference dropzones: a **usage** file (`mapUsageRows`
+  → SKU→volume map, "what the volume is compared against") and a **current price**
+  file (`mapPricingRows` → SKU→current-price map). When a construct is picked
+  from the benchmark list, its Volume + Current are auto-filled from those maps by
+  matching the benchmark's `normalizeSku(itemNumber)`; the vendor enters Floor /
+  Target / Ask. (The earlier `usageProductsToConstructs` auto-populate was wrong
+  and was removed.) On Analyze, `DealScorerSection`
   emits the blended deal via `onDealAnalyzed`; the stepper forwards it as the
   Opportunity Engine's `initialDeal` so Step 2 auto-seeds WITHOUT the manual
   handoff. The deal's per-construct rows ride `OppEngineHandoff.constructs` into

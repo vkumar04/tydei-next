@@ -24,13 +24,15 @@ import {
   blendConstructsToScenarios,
   type DealConstruct,
 } from "@/lib/prospective-analysis/blend-constructs"
-import { usageProductsToConstructs } from "@/lib/prospective-analysis/usage-to-constructs"
 import { PricingFileDropzone } from "@/components/shared/uploads/pricing-file-dropzone"
 import {
   BUILDER_USAGE_UPLOAD_SPECS,
+  BUILDER_PRICING_UPLOAD_SPECS,
   mapUsageRows,
+  mapPricingRows,
 } from "@/components/vendor/prospective/builder/file-handlers"
 import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 import {
   getVendorProspectiveAnalysis,
   type VendorProspectiveAnalysisInput,
@@ -114,6 +116,18 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
   )
   const [benchPick, setBenchPick] = useState("")
   const analyzeSeqRef = useRef(0)
+  // Reference data: usage gives the VOLUME each construct is compared against;
+  // the price file gives the CURRENT price. Keyed by normalized SKU; they
+  // auto-fill a construct's Volume / Current when it's picked from the benchmark
+  // list (constructs come from the benchmark dropdown, NOT from these files).
+  const [usageVolumeBySku, setUsageVolumeBySku] = useState<Map<string, number>>(
+    () => new Map(),
+  )
+  const [currentPriceBySku, setCurrentPriceBySku] = useState<Map<string, number>>(
+    () => new Map(),
+  )
+  const [usageLoadedCount, setUsageLoadedCount] = useState(0)
+  const [priceLoadedCount, setPriceLoadedCount] = useState(0)
   const [targetMargin, setTargetMargin] = useState("40")
   const [floorMargin, setFloorMargin] = useState("25")
   const [currentShare, setCurrentShare] = useState("")
@@ -251,10 +265,10 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     setConstructs((prev) => [...prev, makeConstruct()])
   }
 
-  // Seed the construct rows from an uploaded 12-month usage file — the fix for
-  // "Analyze deal isn't using the usage" (Vick 2026-06-24). Each usage product
-  // becomes a row pre-filled with current price + annual volume (+ proposed
-  // price as the Ask when the file carries one); Floor/Target stay for entry.
+  // Usage = the VOLUME reference (Vick 2026-06-24: "usage is where volume and
+  // spend is compared against" — it does NOT create constructs). Build a
+  // SKU→volume map and backfill the volume on any already-picked benchmark
+  // constructs that match.
   function handleUsageImport(
     rows: Record<string, string>[],
     mapping: ResolvedMapping,
@@ -265,24 +279,61 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       toast.error("Usage file needs a product-name column")
       return
     }
-    const seeds = usageProductsToConstructs(result.products)
-    if (seeds.length === 0) {
-      toast.warning("No products found in the usage file")
+    const map = new Map<string, number>()
+    for (const p of result.products) {
+      const sku = normalizeSku(p.refNumber)
+      if (!sku) continue
+      map.set(sku, p.historicalAvgVolume ?? p.projectedVolume ?? 0)
+    }
+    setUsageVolumeBySku(map)
+    setUsageLoadedCount(map.size)
+    backfillFromReference({ volume: map })
+    toast.success(`Usage loaded — ${map.size} products (volume reference)`)
+  }
+
+  // Current price file (Vick 2026-06-24: "price file loaded is current price").
+  // SKU→price map; backfills Current on matching benchmark constructs.
+  function handlePriceImport(
+    rows: Record<string, string>[],
+    mapping: ResolvedMapping,
+    meta: { fileName: string; headers: string[] },
+  ) {
+    const result = mapPricingRows(meta.headers, rows, mapping)
+    if (!result.ok) {
+      toast.error("Price file needs a product name or reference column")
       return
     }
-    setConstructs(
-      seeds.map((s) =>
-        makeConstruct({
-          benchmarkId: s.benchmarkId,
-          productName: s.productName,
-          current: s.current ? String(s.current) : "",
-          ask: s.ask ? String(s.ask) : "",
-          annualVolume: s.annualVolume ? String(s.annualVolume) : "",
-        }),
-      ),
-    )
-    toast.success(
-      `Loaded ${seeds.length} product${seeds.length === 1 ? "" : "s"} from ${meta.fileName}`,
+    const map = new Map<string, number>()
+    for (const p of result.products) {
+      const sku = normalizeSku(p.refNumber)
+      if (!sku || !(p.proposedPrice > 0)) continue
+      map.set(sku, p.proposedPrice)
+    }
+    setCurrentPriceBySku(map)
+    setPriceLoadedCount(map.size)
+    backfillFromReference({ price: map })
+    toast.success(`Current prices loaded — ${map.size} products`)
+  }
+
+  // Fill Volume / Current on existing benchmark constructs from the reference
+  // maps (only where the field is still blank — never clobber an entry).
+  function backfillFromReference(ref: {
+    volume?: Map<string, number>
+    price?: Map<string, number>
+  }) {
+    setConstructs((prev) =>
+      prev.map((c) => {
+        const b = c.benchmarkId ? benchmarkById.get(c.benchmarkId) : null
+        if (!b) return c
+        const sku = normalizeSku(b.itemNumber)
+        const v = ref.volume?.get(sku)
+        const p = ref.price?.get(sku)
+        return {
+          ...c,
+          annualVolume: !c.annualVolume && v != null ? String(v) : c.annualVolume,
+          current: !c.current && p != null ? String(p) : c.current,
+        }
+      }),
     )
   }
 
@@ -298,6 +349,11 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     const b = benchmarkById.get(benchmarkId)
     if (!b) return
     const productName = `${b.itemNumber} — ${b.productName}`.slice(0, 90)
+    // Auto-fill Current (price file) + Volume (usage) by matching the
+    // benchmark's SKU; the vendor fills Floor / Target / Ask.
+    const sku = normalizeSku(b.itemNumber)
+    const current = currentPriceBySku.get(sku)
+    const volume = usageVolumeBySku.get(sku)
     setConstructs((prev) => {
       const blankIdx = prev.findIndex(
         (c) =>
@@ -309,7 +365,12 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
           !c.ask &&
           !c.annualVolume,
       )
-      const seed = makeConstruct({ benchmarkId: b.id, productName })
+      const seed = makeConstruct({
+        benchmarkId: b.id,
+        productName,
+        current: current != null ? String(current) : "",
+        annualVolume: volume != null ? String(volume) : "",
+      })
       if (blankIdx >= 0) {
         return prev.map((c, i) =>
           i === blankIdx ? { ...seed, _uid: c._uid } : c,
@@ -407,21 +468,53 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
             </p>
           </div>
 
-          <div className="space-y-2 rounded-md border border-dashed p-3">
-            <Label className="text-sm">Load usage history (auto-fills constructs)</Label>
-            <p className="text-xs text-muted-foreground">
-              Drop a 12-month usage file — each product becomes a construct
-              pre-filled with its current price + annual volume, so the analysis
-              runs on real usage. Then add Floor / Target / Ask.
-            </p>
-            <PricingFileDropzone
-              specs={BUILDER_USAGE_UPLOAD_SPECS}
-              surface="vendor-deal-scorer-usage"
-              accept=".csv,.txt,.xlsx,.xls"
-              onImport={handleUsageImport}
-              triggerLabel="Upload usage history"
-              triggerHint="drop or click to browse (.csv, .txt, .xlsx, .xls)"
-            />
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-2 rounded-md border border-dashed p-3">
+              <Label className="text-sm">
+                Usage history{" "}
+                {usageLoadedCount > 0 && (
+                  <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400">
+                    · {usageLoadedCount} products
+                  </span>
+                )}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                The 12-month volume each construct is compared against. Fills a
+                construct&rsquo;s Volume when you pick its benchmark. Does not
+                create constructs.
+              </p>
+              <PricingFileDropzone
+                specs={BUILDER_USAGE_UPLOAD_SPECS}
+                surface="vendor-deal-scorer-usage"
+                accept=".csv,.txt,.xlsx,.xls"
+                onImport={handleUsageImport}
+                triggerLabel="Upload usage history"
+                triggerHint="drop or click (.csv, .txt, .xlsx, .xls)"
+              />
+            </div>
+
+            <div className="space-y-2 rounded-md border border-dashed p-3">
+              <Label className="text-sm">
+                Current price file{" "}
+                {priceLoadedCount > 0 && (
+                  <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400">
+                    · {priceLoadedCount} products
+                  </span>
+                )}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                The price the facility pays today. Fills a construct&rsquo;s
+                Current price when you pick its benchmark.
+              </p>
+              <PricingFileDropzone
+                specs={BUILDER_PRICING_UPLOAD_SPECS}
+                surface="vendor-deal-scorer-price"
+                accept=".csv,.txt,.xlsx,.xls"
+                onImport={handlePriceImport}
+                triggerLabel="Upload current prices"
+                triggerHint="drop or click (.csv, .txt, .xlsx, .xls)"
+              />
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -429,9 +522,9 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
               <div>
                 <Label>Constructs</Label>
                 <p className="text-xs text-muted-foreground">
-                  One row per product. Pick a benchmark (or add a custom line),
-                  enter Current / Floor / Target / Ask prices, volume and rebate
-                  %, then add another. The score blends every construct.
+                  Pick products from your benchmark list — usage fills Volume and
+                  the price file fills Current; you enter Floor / Target / Ask.
+                  The score blends every construct.
                 </p>
               </div>
               <div className="flex items-center gap-2">
