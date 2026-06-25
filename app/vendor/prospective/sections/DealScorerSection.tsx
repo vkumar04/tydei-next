@@ -558,15 +558,15 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="p-2 text-left font-medium">Product</th>
-                    <th className="p-2 text-right font-medium">Current</th>
-                    <th className="p-2 text-right font-medium">Floor</th>
-                    <th className="p-2 text-right font-medium">Target</th>
-                    <th className="p-2 text-right font-medium">Ask</th>
-                    <th className="p-2 text-right font-medium">Volume</th>
-                    <th className="p-2 text-right font-medium">Rebate %</th>
-                    <th className="p-2 text-right font-medium">Benchmark</th>
-                    <th className="p-2"></th>
+                    <th className="px-2 py-2 text-left font-medium">Product</th>
+                    <th className="w-[92px] px-2 py-2 text-right font-medium">Current</th>
+                    <th className="w-[92px] px-2 py-2 text-right font-medium">Floor</th>
+                    <th className="w-[92px] px-2 py-2 text-right font-medium">Target</th>
+                    <th className="w-[92px] px-2 py-2 text-right font-medium">Ask</th>
+                    <th className="w-[92px] px-2 py-2 text-right font-medium">Volume</th>
+                    <th className="w-[88px] px-2 py-2 text-right font-medium">Rebate %</th>
+                    <th className="w-[120px] px-2 py-2 text-right font-medium">Benchmark</th>
+                    <th className="w-10 px-2 py-2"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -579,9 +579,9 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                       field: keyof ConstructForm,
                       mode: "decimal" | "numeric" = "decimal",
                     ) => (
-                      <td className="p-1.5">
+                      <td className="px-2 py-1.5">
                         <Input
-                          className="h-8 w-[84px] text-right"
+                          className="h-8 w-full text-right"
                           type="number"
                           inputMode={mode}
                           value={c[field] as string}
@@ -596,7 +596,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                     )
                     return (
                       <tr key={c._uid} className="border-t align-top">
-                        <td className="min-w-[180px] p-1.5">
+                        <td className="min-w-[180px] px-2 py-1.5">
                           {b ? (
                             <div className="min-w-0">
                               <div className="truncate font-medium">
@@ -625,7 +625,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                         {numCell("ask")}
                         {numCell("annualVolume", "numeric")}
                         {numCell("rebatePercent")}
-                        <td className="whitespace-nowrap p-1.5 text-right text-xs">
+                        <td className="whitespace-nowrap px-2 py-1.5 text-right text-xs">
                           {b ? (
                             <>
                               <div>avg {formatCurrency(b.nationalAvgPrice)}</div>
@@ -638,7 +638,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                             <span className="text-muted-foreground">—</span>
                           )}
                         </td>
-                        <td className="p-1.5 text-right">
+                        <td className="px-2 py-1.5 text-right">
                           <Button
                             type="button"
                             variant="ghost"
