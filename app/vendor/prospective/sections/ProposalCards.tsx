@@ -185,6 +185,7 @@ export function ProposalCards({
                             facilityId: p.dealHandoff!.facilityId,
                             priceChangePct: p.dealHandoff!.priceChangePct,
                             targetSharePct: p.dealHandoff!.targetSharePct,
+                            constructs: p.dealHandoff!.constructs,
                           })
                         }
                         title="Pre-fill the Opportunity Engine with this scored deal"
