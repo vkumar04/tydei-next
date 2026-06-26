@@ -553,9 +553,37 @@ model Facility {
   crossVendorTieIns  CrossVendorTieIn[]
   vendorNameMappings VendorNameMapping[]
   facilityAssignments FacilityAssignment[]
+  proposalEvaluations ProposalEvaluation[]
 
   @@index([status])
   @@map("facility")
+}
+
+/// A facility's saved evaluation of a vendor proposal (the "Evaluate Proposals"
+/// flow). Replaces the prior localStorage-only store so evaluations survive
+/// refresh / device and can be reopened + re-run. The rich engine payload
+/// (input / result / clauseAnalysis — the `ScoredProposal` shape) lives in the
+/// `payload` JSON column, mirroring how the vendor side stores proposal data in
+/// `PendingContract.pricingData`. `overallScore` + `verdict` are denormalized
+/// for the list/sort without parsing JSON per row.
+model ProposalEvaluation {
+  id             String   @id @default(cuid())
+  facilityId     String
+  vendorName     String
+  /// "upload" | "manual"
+  source         String   @default("manual")
+  /// result.scores.overall (0–100, one decimal)
+  overallScore   Float?
+  /// result.recommendation.verdict — "accept" | "negotiate" | "decline"
+  verdict        String?
+  /// { input: AnalyzeProposalInput, result: AnalyzeProposalResult, clauseAnalysis }
+  payload        Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  facility       Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  @@index([facilityId])
+  @@map("proposal_evaluation")
 }
 
 model Vendor {

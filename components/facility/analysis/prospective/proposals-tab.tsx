@@ -22,8 +22,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { ArrowRight, Trash2 } from "lucide-react"
+import { ArrowRight, Eye, Trash2 } from "lucide-react"
+import { useState } from "react"
 import type { ScoredProposal } from "./types"
+import { ProposalEvaluationDetailDialog } from "./proposal-evaluation-detail-dialog"
 
 interface ProposalsTabProps {
   proposals: ScoredProposal[]
@@ -31,6 +33,8 @@ interface ProposalsTabProps {
   onToggleCompare: (id: string) => void
   onOpenCompare: () => void
   onRemove: (id: string) => void
+  /** Reopen an evaluation's inputs in the Manual tab to edit + re-score. */
+  onRerun?: (proposal: ScoredProposal) => void
 }
 
 function verdictBadge(v: "accept" | "negotiate" | "decline") {
@@ -68,15 +72,18 @@ export function ProposalsTab({
   onToggleCompare,
   onOpenCompare,
   onRemove,
+  onRerun,
 }: ProposalsTabProps) {
+  const [viewTarget, setViewTarget] = useState<ScoredProposal | null>(null)
+
   if (proposals.length === 0) {
     return (
       <Card>
         <CardHeader>
           <CardTitle>No proposals yet</CardTitle>
           <CardDescription>
-            Upload a PDF or use the Manual tab to score a proposal. Session-scoped
-            — not persisted.
+            Upload a PDF or use the Manual tab to score a proposal. Saved
+            evaluations appear here and persist across sessions.
           </CardDescription>
         </CardHeader>
       </Card>
@@ -84,6 +91,7 @@ export function ProposalsTab({
   }
 
   return (
+    <>
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
@@ -112,7 +120,7 @@ export function ProposalsTab({
               <TableHead>Overall</TableHead>
               <TableHead>Verdict</TableHead>
               <TableHead>Scored</TableHead>
-              <TableHead className="w-[40px]"></TableHead>
+              <TableHead className="w-[96px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -145,14 +153,24 @@ export function ProposalsTab({
                     {new Date(p.createdAt).toLocaleString()}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => onRemove(p.id)}
-                      aria-label={`Remove ${p.vendorName}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setViewTarget(p)}
+                        aria-label={`View ${p.vendorName} evaluation`}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onRemove(p.id)}
+                        aria-label={`Remove ${p.vendorName}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               )
@@ -161,5 +179,14 @@ export function ProposalsTab({
         </Table>
       </CardContent>
     </Card>
+
+    {viewTarget && (
+      <ProposalEvaluationDetailDialog
+        proposal={viewTarget}
+        onClose={() => setViewTarget(null)}
+        onRerun={onRerun}
+      />
+    )}
+    </>
   )
 }

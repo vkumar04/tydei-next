@@ -45,8 +45,12 @@ interface ProspectiveTabsProps {
 
   scoredProposals: ScoredProposal[]
   latestScored: ScoredProposal | null
-  onProposalScored: (p: ScoredProposal) => void
+  /** editingId set → the Manual tab is re-scoring an existing evaluation. */
+  onProposalScored: (p: ScoredProposal, editingId?: string) => void
   onRemoveProposal: (id: string) => void
+  /** Reopen an evaluation in the Manual tab to edit + re-score (null = new). */
+  rerunFrom: ScoredProposal | null
+  onRerun: (p: ScoredProposal) => void
   /** Start-over reset for the Upload tab (bug-bash C1) — clears the
    *  parent-held upload proposals so no stale verdict survives. */
   onUploadReset: () => void
@@ -74,6 +78,8 @@ export function ProspectiveTabs(props: ProspectiveTabsProps) {
     latestScored,
     onProposalScored,
     onRemoveProposal,
+    rerunFrom,
+    onRerun,
     onUploadReset,
     pricingAnalyses,
     onPricingAnalysisComplete,
@@ -139,6 +145,9 @@ export function ProspectiveTabs(props: ProspectiveTabsProps) {
 
       <TabsContent value="manual" className="space-y-6 mt-6">
         <ManualEntryTab
+          // Remount when the re-run target changes so the form re-seeds from it.
+          key={rerunFrom?.id ?? "new"}
+          rerunFrom={rerunFrom}
           onProposalScored={onProposalScored}
           lastScored={
             latestScored && latestScored.source === "manual"
@@ -157,6 +166,7 @@ export function ProspectiveTabs(props: ProspectiveTabsProps) {
           onToggleCompare={onToggleCompare}
           onOpenCompare={onOpenCompare}
           onRemove={onRemoveProposal}
+          onRerun={onRerun}
         />
       </TabsContent>
 
