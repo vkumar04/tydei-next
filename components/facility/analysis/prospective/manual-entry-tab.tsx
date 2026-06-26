@@ -79,11 +79,34 @@ function toScoringInput(form: ManualEntryState): AnalyzeProposalInput {
   }
 }
 
+// Inverse of toScoringInput — seed the form when re-running a saved evaluation.
+function inputToForm(p: ScoredProposal): ManualEntryState {
+  const i = p.input
+  return {
+    vendorName: p.vendorName,
+    proposedAnnualSpend: i.proposedAnnualSpend,
+    currentSpend: i.currentSpend,
+    priceVsMarket: i.priceVsMarket,
+    minimumSpend: i.minimumSpend,
+    proposedRebateRate: i.proposedRebateRate,
+    termYears: i.termYears,
+    exclusivity: i.exclusivity,
+    marketShareCommitment: i.marketShareCommitment ?? 0,
+    priceProtection: i.priceProtection,
+    paymentTermsNet60Or90: i.paymentTermsNet60Or90,
+    volumeDiscountAbove5Percent: i.volumeDiscountAbove5Percent,
+  }
+}
+
 interface ManualEntryTabProps {
-  onProposalScored: (proposal: ScoredProposal) => void
+  /** editingId set → re-scoring an existing evaluation (update, not create). */
+  onProposalScored: (proposal: ScoredProposal, editingId?: string) => void
   lastScored: ScoredProposal | null
   phase: AnalysisPhase
   onPhaseChange: (phase: AnalysisPhase) => void
+  /** When set, the form seeds from this saved evaluation and a re-score
+   *  updates it in place. The parent remounts via `key` on change. */
+  rerunFrom?: ScoredProposal | null
 }
 
 export function ManualEntryTab({
@@ -91,8 +114,11 @@ export function ManualEntryTab({
   lastScored,
   phase,
   onPhaseChange,
+  rerunFrom,
 }: ManualEntryTabProps) {
-  const [form, setForm] = useState<ManualEntryState>(INITIAL)
+  const [form, setForm] = useState<ManualEntryState>(() =>
+    rerunFrom ? inputToForm(rerunFrom) : INITIAL,
+  )
   const [loadingActuals, setLoadingActuals] = useState(false)
   const mutation = useAnalyzeProspectiveProposal()
 
@@ -157,9 +183,9 @@ export function ManualEntryTab({
         result,
         clauseAnalysis: null,
       }
-      onProposalScored(scored)
+      onProposalScored(scored, rerunFrom?.id)
       onPhaseChange("complete")
-      toast.success("Proposal scored")
+      toast.success(rerunFrom ? "Proposal re-scored" : "Proposal scored")
     } catch {
       onPhaseChange("error")
     }

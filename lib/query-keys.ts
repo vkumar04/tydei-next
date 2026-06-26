@@ -496,6 +496,10 @@ export const queryKeys = {
     all: ["my-notifications"] as const,
   },
   prospectiveAnalysis: {
+    // Facility "Evaluate Proposals" — persisted proposal evaluations (DB-backed
+    // since 2026-06-26; was localStorage). Prefix-invalidated on every write.
+    evaluationsBase: ["prospectiveAnalysis", "evaluations"] as const,
+    evaluations: ["prospectiveAnalysis", "evaluations"] as const,
     // Facility Analysis dashboard — real DB data seed.
     facilityData: (facilityId: string) =>
       ["prospectiveAnalysis", "facilityData", facilityId] as const,

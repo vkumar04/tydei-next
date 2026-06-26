@@ -20,6 +20,13 @@ import type {
 } from "./types"
 import { ProspectiveTabs } from "./prospective-tabs"
 import { usePersistedState } from "@/hooks/use-persisted-state"
+import {
+  useProposalEvaluations,
+  useSaveProposalEvaluation,
+  useUpdateProposalEvaluation,
+  useDeleteProposalEvaluation,
+  useDeleteProposalEvaluationsBySource,
+} from "@/hooks/use-proposal-evaluations"
 
 interface ProspectiveClientProps {
   facilityId: string
@@ -57,12 +64,21 @@ export function ProspectiveClient({
   const [activeTab, setActiveTab] = useState<ProspectiveTabId>(() =>
     asTab(initialTab ?? (initialCompareId ? "compare" : null)),
   )
-  // Persist scored proposals + pricing analyses to localStorage (keyed by
-  // facility) so they survive leaving the page / reloading — they used to be
-  // session-only React state and vanished on navigation (Vick 2026-06-21).
-  const [scoredProposals, setScoredProposals] = usePersistedState<
-    ScoredProposal[]
-  >(`tydei:prospective:proposals:${facilityId}`, [])
+  // Scored proposals are now DB-backed (ProposalEvaluation) so they survive
+  // refresh / device and can be reopened + re-run (2026-06-26 — was
+  // localStorage). Pricing-file analyses stay localStorage for now.
+  const { data: evaluations } = useProposalEvaluations()
+  const scoredProposals: ScoredProposal[] = evaluations ?? []
+  const { mutate: saveEvaluation } = useSaveProposalEvaluation()
+  const { mutate: updateEvaluation } = useUpdateProposalEvaluation()
+  const { mutate: deleteEvaluation } = useDeleteProposalEvaluation()
+  const { mutate: deleteEvaluationsBySource } =
+    useDeleteProposalEvaluationsBySource()
+  // The just-scored proposal — kept for the inline Upload/Manual result render
+  // so it shows immediately, before the list query refetches.
+  const [lastScored, setLastScored] = useState<ScoredProposal | null>(null)
+  // A saved evaluation reopened in the Manual tab for edit + re-score.
+  const [rerunTarget, setRerunTarget] = useState<ScoredProposal | null>(null)
   const [pricingAnalyses, setPricingAnalyses] = usePersistedState<
     PricingFileAnalysisRecord[]
   >(`tydei:prospective:pricing:${facilityId}`, [])
@@ -75,8 +91,9 @@ export function ProspectiveClient({
   const [phase, setPhase] = useState<AnalysisPhase>("idle")
 
   // Latest scored proposal — used by Upload + Manual tabs for local render.
+  // Prefer the just-scored one (instant), fall back to the newest persisted.
   const latestScored =
-    scoredProposals.length > 0 ? scoredProposals[0]! : null
+    lastScored ?? (scoredProposals.length > 0 ? scoredProposals[0]! : null)
 
   // Sync active tab → ?tab= URL param so reloads stay put.
   useEffect(() => {
@@ -89,14 +106,42 @@ export function ProspectiveClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab])
 
-  const handleProposalScored = useCallback((p: ScoredProposal) => {
-    setScoredProposals((prev) => [p, ...prev])
+  const handleProposalScored = useCallback(
+    (p: ScoredProposal, editingId?: string) => {
+      setLastScored(p)
+      const payload = {
+        vendorName: p.vendorName,
+        source: p.source,
+        input: p.input,
+        result: p.result,
+        clauseAnalysis: p.clauseAnalysis,
+      }
+      // Re-run of a saved evaluation updates it in place; otherwise create.
+      // Server assigns the real id; the list query refetches on success and
+      // lastScored covers the inline render until then.
+      if (editingId) {
+        updateEvaluation({ id: editingId, input: payload })
+      } else {
+        saveEvaluation(payload)
+      }
+      setRerunTarget(null)
+    },
+    [saveEvaluation, updateEvaluation],
+  )
+
+  const handleRerun = useCallback((p: ScoredProposal) => {
+    setRerunTarget(p)
+    setActiveTab("manual")
   }, [])
 
-  const handleRemoveProposal = useCallback((id: string) => {
-    setScoredProposals((prev) => prev.filter((p) => p.id !== id))
-    setComparisonSelection((prev) => prev.filter((x) => x !== id))
-  }, [])
+  const handleRemoveProposal = useCallback(
+    (id: string) => {
+      deleteEvaluation(id)
+      setComparisonSelection((prev) => prev.filter((x) => x !== id))
+      setLastScored((prev) => (prev?.id === id ? null : prev))
+    },
+    [deleteEvaluation],
+  )
 
   // Start-over for the Upload tab (bug-bash C1: "clear the data and start
   // over"). Drops every upload-sourced proposal — removing only the newest
@@ -107,10 +152,11 @@ export function ProspectiveClient({
     const removedIds = new Set(
       scoredProposals.filter((p) => p.source === "upload").map((p) => p.id),
     )
-    setScoredProposals((prev) => prev.filter((p) => p.source !== "upload"))
+    deleteEvaluationsBySource("upload")
     setComparisonSelection((prev) => prev.filter((id) => !removedIds.has(id)))
+    setLastScored((prev) => (prev?.source === "upload" ? null : prev))
     setPhase("idle")
-  }, [scoredProposals])
+  }, [scoredProposals, deleteEvaluationsBySource])
 
   const handlePricingAnalysisComplete = useCallback(
     (record: PricingFileAnalysisRecord) => {
@@ -158,6 +204,8 @@ export function ProspectiveClient({
         latestScored={latestScored}
         onProposalScored={handleProposalScored}
         onRemoveProposal={handleRemoveProposal}
+        rerunFrom={rerunTarget}
+        onRerun={handleRerun}
         onUploadReset={handleUploadReset}
         pricingAnalyses={pricingAnalyses}
         onPricingAnalysisComplete={handlePricingAnalysisComplete}
