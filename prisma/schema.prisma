@@ -700,6 +700,7 @@ model VendorDivision {
   contracts        Contract[]        @relation("ContractDivision")
   vendorCogRecords VendorCogRecord[]
   connections      Connection[]
+  pendingContracts PendingContract[]
 
   @@unique([vendorId, code])
   @@index([vendorId])
@@ -1376,6 +1377,11 @@ model PendingContract {
   tieInContractId   String?
   // Vendor's organizational division (e.g. "Surgical", "Cardiology").
   division          String?
+  // Hard division-isolation FK (Settings/Users feature; additive, nullable —
+  // legacy rows stay null and are hidden from division-restricted members,
+  // mirroring Contract.vendorDivisionId semantics). Stamped on create when
+  // the creator is attached to exactly one division.
+  vendorDivisionId  String?
   terms          Json                  @default("[]")
   documents      Json                  @default("[]")
   pricingData    Json?
@@ -1394,13 +1400,15 @@ model PendingContract {
   approvedContractId String?
   approvedContract   Contract? @relation("ApprovedFromPending", fields: [approvedContractId], references: [id], onDelete: SetNull)
 
-  vendor   Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
-  facility Facility? @relation(fields: [facilityId], references: [id])
+  vendor         Vendor          @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  facility       Facility?       @relation(fields: [facilityId], references: [id])
+  vendorDivision VendorDivision? @relation(fields: [vendorDivisionId], references: [id])
 
   @@index([vendorId])
   @@index([facilityId])
   @@index([status])
   @@index([approvedContractId])
+  @@index([vendorDivisionId])
   @@map("pending_contract")
 }
 

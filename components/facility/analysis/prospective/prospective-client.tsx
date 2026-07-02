@@ -9,7 +9,7 @@
  * the point of subsystem-5.
  */
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import type {
   AnalysisPhase,
@@ -18,6 +18,7 @@ import type {
   ScoredProposal,
   VendorOption,
 } from "./types"
+import { isUnsavedEvaluationId } from "./types"
 import { ProspectiveTabs } from "./prospective-tabs"
 import { usePersistedState } from "@/hooks/use-persisted-state"
 import {
@@ -69,7 +70,7 @@ export function ProspectiveClient({
   // localStorage). Pricing-file analyses stay localStorage for now.
   const { data: evaluations } = useProposalEvaluations()
   const scoredProposals: ScoredProposal[] = evaluations ?? []
-  const { mutate: saveEvaluation } = useSaveProposalEvaluation()
+  const { mutateAsync: saveEvaluationAsync } = useSaveProposalEvaluation()
   const { mutate: updateEvaluation } = useUpdateProposalEvaluation()
   const { mutate: deleteEvaluation } = useDeleteProposalEvaluation()
   const { mutate: deleteEvaluationsBySource } =
@@ -77,6 +78,21 @@ export function ProspectiveClient({
   // The just-scored proposal — kept for the inline Upload/Manual result render
   // so it shows immediately, before the list query refetches.
   const [lastScored, setLastScored] = useState<ScoredProposal | null>(null)
+  // Maps the just-scored proposal's client-minted id (`upl-…`/`man-…`) to the
+  // persisted row id, so a follow-on score of the SAME proposal (the price-file
+  // re-score) UPDATEs that row instead of creating a duplicate, and delete can
+  // clear the inline render (bug-bash F-B1 / F-C7).
+  const savedIdRef = useRef<{ clientId: string; serverId: string } | null>(
+    null,
+  )
+  // In-flight create for a client id — a follow-on score of the SAME proposal
+  // (price-file re-score, legal-scan attach) arriving before the save
+  // round-trips chains onto this promise as an UPDATE instead of racing into
+  // a second create.
+  const pendingSaveRef = useRef<{
+    clientId: string
+    promise: Promise<{ id: string } | null>
+  } | null>(null)
   // A saved evaluation reopened in the Manual tab for edit + re-score.
   const [rerunTarget, setRerunTarget] = useState<ScoredProposal | null>(null)
   const [pricingAnalyses, setPricingAnalyses] = usePersistedState<
@@ -115,18 +131,55 @@ export function ProspectiveClient({
         input: p.input,
         result: p.result,
         clauseAnalysis: p.clauseAnalysis,
+        signals: p.signals ?? null,
       }
-      // Re-run of a saved evaluation updates it in place; otherwise create.
-      // Server assigns the real id; the list query refetches on success and
-      // lastScored covers the inline render until then.
-      if (editingId) {
-        updateEvaluation({ id: editingId, input: payload })
+      // Resolve which persisted row this score belongs to: an explicit
+      // editingId (Manual-tab re-run), the proposal's own id when it's already
+      // a persisted row (re-score after reload), or the just-saved row for the
+      // same client id (price-file re-score before/after the list refetched).
+      // Only when none match is this a NEW evaluation (F-B1: the price-file
+      // re-score used to fall through here and persist a duplicate row).
+      const targetId =
+        editingId ??
+        (!isUnsavedEvaluationId(p.id)
+          ? p.id
+          : savedIdRef.current?.clientId === p.id
+            ? savedIdRef.current.serverId
+            : undefined)
+      if (targetId) {
+        updateEvaluation({ id: targetId, input: payload })
+        savedIdRef.current = { clientId: p.id, serverId: targetId }
+        // Manual re-run: STAY in edit mode (rerunTarget keeps the same id, so
+        // the form isn't remounted) — iterative tweak-and-rescore keeps
+        // updating the same row (F-C2). Cancel / tab-switch exits.
+      } else if (pendingSaveRef.current?.clientId === p.id) {
+        // Save still in flight for this proposal — chain as an update.
+        const prior = pendingSaveRef.current.promise
+        pendingSaveRef.current = {
+          clientId: p.id,
+          promise: prior.then((row) => {
+            if (row) updateEvaluation({ id: row.id, input: payload })
+            return row
+          }),
+        }
       } else {
-        saveEvaluation(payload)
+        const promise = saveEvaluationAsync(payload)
+          .then((row) => {
+            savedIdRef.current = { clientId: p.id, serverId: row.id }
+            // Adopt the server id so follow-on re-scores and deletes resolve
+            // to the persisted row.
+            setLastScored((prev) =>
+              prev?.id === p.id
+                ? { ...prev, id: row.id, createdAt: row.createdAt }
+                : prev,
+            )
+            return row
+          })
+          .catch(() => null)
+        pendingSaveRef.current = { clientId: p.id, promise }
       }
-      setRerunTarget(null)
     },
-    [saveEvaluation, updateEvaluation],
+    [saveEvaluationAsync, updateEvaluation],
   )
 
   const handleRerun = useCallback((p: ScoredProposal) => {
@@ -134,11 +187,25 @@ export function ProspectiveClient({
     setActiveTab("manual")
   }, [])
 
+  const handleCancelRerun = useCallback(() => {
+    setRerunTarget(null)
+  }, [])
+
+  // Leaving the Manual tab exits edit mode — otherwise a later, unrelated
+  // manual score would silently UPDATE the reopened evaluation (F-C1).
+  const handleTabChange = useCallback((tab: ProspectiveTabId) => {
+    setRerunTarget((prev) => (tab === "manual" ? prev : null))
+    setActiveTab(tab)
+  }, [])
+
   const handleRemoveProposal = useCallback(
     (id: string) => {
       deleteEvaluation(id)
       setComparisonSelection((prev) => prev.filter((x) => x !== id))
-      setLastScored((prev) => (prev?.id === id ? null : prev))
+      setLastScored((prev) =>
+        prev?.id === id || savedIdRef.current?.serverId === id ? null : prev,
+      )
+      setRerunTarget((prev) => (prev?.id === id ? null : prev))
     },
     [deleteEvaluation],
   )
@@ -196,7 +263,7 @@ export function ProspectiveClient({
 
       <ProspectiveTabs
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         vendors={vendors}
         selectedVendorId={selectedVendorId}
         onVendorChange={setSelectedVendorId}
@@ -206,6 +273,7 @@ export function ProspectiveClient({
         onRemoveProposal={handleRemoveProposal}
         rerunFrom={rerunTarget}
         onRerun={handleRerun}
+        onCancelRerun={handleCancelRerun}
         onUploadReset={handleUploadReset}
         pricingAnalyses={pricingAnalyses}
         onPricingAnalysisComplete={handlePricingAnalysisComplete}

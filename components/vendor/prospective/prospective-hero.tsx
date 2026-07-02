@@ -41,8 +41,12 @@ export function ProspectiveHero({
         p.dealScore.recommendation === "strong_accept"),
   ).length
 
-  const submitted = proposals.filter((p) => p.status === "submitted").length
-  const accepted = proposals.filter((p) => p.status === "accepted").length
+  // Pipeline stages (derived server-side): these proposals are internal
+  // analysis drafts — `status` is honestly always "draft" (audit M7), so the
+  // funnel tracks draft → scored → analyzed instead of counting a
+  // submitted/accepted lifecycle that can never occur (bug-bash D7).
+  const inProgress = proposals.filter((p) => p.stage !== "analyzed").length
+  const analyzed = proposals.filter((p) => p.stage === "analyzed").length
 
   const bestProspect =
     scored.length > 0
@@ -55,7 +59,7 @@ export function ProspectiveHero({
     acceptable > 0
       ? `${acceptable} acceptable deal${acceptable === 1 ? "" : "s"}`
       : totalProposals > 0
-        ? `${submitted} in flight`
+        ? `${inProgress} in progress`
         : "No proposals yet"
   const statusTone =
     acceptable > 0
@@ -93,7 +97,7 @@ export function ProspectiveHero({
           sublabel={
             totalProposals === 0
               ? "nothing in pipeline"
-              : `${scored.length} scored / ${accepted} accepted`
+              : `${scored.length} scored / ${analyzed} analyzed`
           }
         />
         <HeroStat

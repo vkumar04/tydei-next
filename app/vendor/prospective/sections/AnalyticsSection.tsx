@@ -16,16 +16,18 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { FileText, DollarSign, Percent, Trophy } from "lucide-react"
 import { formatCurrency } from "@/lib/formatting"
 import { chartTooltipStyle } from "@/lib/chart-config"
-import { scoreColor, STATUS_CONFIG } from "./shared"
+import { scoreColor } from "./shared"
 import type { VendorProposal } from "@/lib/actions/prospective"
 
-const STATUS_BAR_COLORS: Record<string, string> = {
-  draft: "#94a3b8",
-  submitted: "#3b82f6",
-  accepted: "#22c55e",
-  rejected: "#ef4444",
-  under_review: "#f59e0b",
+// Pipeline stages (derived server-side, D7): these proposals are internal
+// analysis drafts — a submitted/accepted lifecycle never occurs (audit M7),
+// so the chart tracks draft → scored → analyzed instead.
+const STAGE_BAR_CONFIG: Record<string, { label: string; fill: string }> = {
+  draft: { label: "Draft", fill: "#94a3b8" },
+  scored: { label: "Scored", fill: "#3b82f6" },
+  analyzed: { label: "Analyzed", fill: "#22c55e" },
 }
+const STAGE_ORDER = ["draft", "scored", "analyzed"] as const
 
 interface Props {
   proposals: VendorProposal[]
@@ -34,7 +36,7 @@ interface Props {
 
 export function AnalyticsSection({ proposals, isLoading }: Props) {
   const metrics = useMemo(() => {
-    if (!proposals) return { total: 0, avgScore: 0, pipeline: 0, winRate: 0 }
+    if (!proposals) return { total: 0, avgScore: 0, pipeline: 0, analyzedPct: 0 }
 
     const scored = proposals.filter((p) => p.dealScore)
     const avgScore =
@@ -43,26 +45,26 @@ export function AnalyticsSection({ proposals, isLoading }: Props) {
         : 0
 
     const pipeline = proposals.reduce((s, p) => s + p.totalProposedCost, 0)
-    const accepted = proposals.filter((p) => p.status === "accepted").length
-    const decidedCount = proposals.filter(
-      (p) => p.status === "accepted" || p.status === "rejected",
-    ).length
-    const winRate = decidedCount > 0 ? Math.round((accepted / decidedCount) * 100) : 0
+    const analyzed = proposals.filter((p) => p.stage === "analyzed").length
+    const analyzedPct =
+      proposals.length > 0
+        ? Math.round((analyzed / proposals.length) * 100)
+        : 0
 
-    return { total: proposals.length, avgScore, pipeline, winRate }
+    return { total: proposals.length, avgScore, pipeline, analyzedPct }
   }, [proposals])
 
-  const statusChart = useMemo(() => {
+  const stageChart = useMemo(() => {
     if (!proposals) return []
     const counts: Record<string, number> = {}
     for (const p of proposals) {
-      counts[p.status] = (counts[p.status] ?? 0) + 1
+      counts[p.stage] = (counts[p.stage] ?? 0) + 1
     }
-    return Object.entries(counts).map(([status, count]) => ({
-      status: STATUS_CONFIG[status]?.label ?? status,
-      count,
-      fill: STATUS_BAR_COLORS[status] ?? "#6b7280",
-    }))
+    return STAGE_ORDER.map((stage) => ({
+      status: STAGE_BAR_CONFIG[stage]!.label,
+      count: counts[stage] ?? 0,
+      fill: STAGE_BAR_CONFIG[stage]!.fill,
+    })).filter((s) => s.count > 0)
   }, [proposals])
 
   if (isLoading) {
@@ -85,7 +87,7 @@ export function AnalyticsSection({ proposals, isLoading }: Props) {
           { icon: FileText, label: "Total Proposals", value: String(metrics.total), color: "text-primary", bg: "bg-primary/10" },
           { icon: Trophy, label: "Avg Score", value: metrics.avgScore > 0 ? String(metrics.avgScore) : "--", color: metrics.avgScore > 0 ? scoreColor(metrics.avgScore) : "", bg: "bg-blue-100 dark:bg-blue-900/30" },
           { icon: DollarSign, label: "Revenue Pipeline", value: formatCurrency(metrics.pipeline), color: "text-green-600", bg: "bg-green-100 dark:bg-green-900/30" },
-          { icon: Percent, label: "Win Rate (decided)", value: metrics.winRate > 0 ? `${metrics.winRate}%` : "--", color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/30" },
+          { icon: Percent, label: "Analyzed (opportunity run)", value: metrics.total > 0 ? `${metrics.analyzedPct}%` : "--", color: "text-amber-600", bg: "bg-amber-100 dark:bg-amber-900/30" },
         ].map((m) => (
           <Card key={m.label}>
             <CardContent className="pt-6">
@@ -105,14 +107,17 @@ export function AnalyticsSection({ proposals, isLoading }: Props) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Proposals by Status</CardTitle>
-          <CardDescription>Distribution of proposals across workflow stages</CardDescription>
+          <CardTitle className="text-base">Proposals by Stage</CardTitle>
+          <CardDescription>
+            Pipeline progression: draft → scored (Deal Scorer) → analyzed
+            (Opportunity Engine)
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {statusChart.length > 0 ? (
+          {stageChart.length > 0 ? (
             <div className="h-[250px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={statusChart}>
+                <BarChart data={stageChart}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis
                     dataKey="status"
@@ -128,7 +133,7 @@ export function AnalyticsSection({ proposals, isLoading }: Props) {
                   />
                   <RechartsTooltip contentStyle={chartTooltipStyle} />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]} name="Proposals">
-                    {statusChart.map((entry, index) => (
+                    {stageChart.map((entry, index) => (
                       <Cell key={index} fill={entry.fill} />
                     ))}
                   </Bar>

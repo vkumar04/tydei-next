@@ -8,6 +8,14 @@ import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 import { onlyProspectiveProposalRows } from "@/lib/prospective/proposal-rows"
 import {
+  callerVendorDivisionIds,
+  divisionScopeWhere,
+} from "@/lib/actions/division-auth"
+import {
+  divisionCategoryKeySet,
+  categoryInDivisionScope,
+} from "@/lib/divisions/category-scope"
+import {
   buildCptRateSchedule,
   resolveCaseReimbursement,
 } from "@/lib/case-costing/cpt-rate-map"
@@ -252,11 +260,17 @@ export async function getFacilityCurrentStateForVendor(
 export async function getVendorProspectiveAnalysis(
   input: VendorProspectiveAnalysisInput,
 ): Promise<VendorProspectiveResult> {
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
   await requireCanMutate()
+  // Division isolation: a restricted member can only attach a score to a
+  // proposal in their own divisions, and only sees benchmark rows in their
+  // divisions' categories.
+  const divisionIds = await callerVendorDivisionIds(user.id, vendor.id)
+  const divisionScope = await divisionScopeWhere(divisionIds)
+  const divisionCategoryKeys = await divisionCategoryKeySet(divisionIds)
 
   try {
-    return await runAnalysis(vendor, input)
+    return await runAnalysis(vendor, input, divisionScope, divisionCategoryKeys)
   } catch (err) {
     // AI-action error-path convention (CLAUDE.md): log the underlying
     // exception server-side, surface a named user-facing message.
@@ -273,6 +287,8 @@ export async function getVendorProspectiveAnalysis(
 async function runAnalysis(
   vendor: { id: string },
   input: VendorProspectiveAnalysisInput,
+  divisionScope: { vendorDivisionId?: { in: string[] } } = {},
+  divisionCategoryKeys: Set<string> | null = null,
 ): Promise<VendorProspectiveResult> {
   // Audit M5: scope the facility lookup to vendor-related facilities,
   // and fail with a clear message instead of a bare findUniqueOrThrow
@@ -298,6 +314,7 @@ async function runAnalysis(
           id: input.proposalRowId,
           vendorId: vendor.id,
           ...onlyProspectiveProposalRows(),
+          ...divisionScope,
         },
         select: { id: true, pricingData: true },
       })
@@ -343,7 +360,10 @@ async function runAnalysis(
     take: 200,
   })
 
-  const benchmarks: BenchmarkDataPoint[] = benchmarkRows.map((b) => ({
+  const benchmarks: BenchmarkDataPoint[] = benchmarkRows
+    // Division isolation by category (ProductBenchmark has no division column).
+    .filter((b) => categoryInDivisionScope(b.category, divisionCategoryKeys))
+    .map((b) => ({
     vendorItemNo: b.vendorItemNo,
     category: b.category,
     nationalAvgPrice: b.nationalAvgPrice ? Number(b.nationalAvgPrice) : null,
@@ -448,6 +468,15 @@ async function runAnalysis(
               // Deal-Scorer handoff payload for the Opportunity Engine.
               dealConstructs: safeConstructs.success ? safeConstructs.data : [],
               dealCurrentAnnualSpend: input.currentAnnualSpend ?? 0,
+              // The facility + target share the deal was ANALYZED with, so
+              // the persisted handoff (My-Proposals "Opportunity Engine"
+              // button) seeds Step 2 exactly like the live post-Analyze
+              // handoff (bug-bash V-C5).
+              dealFacilityId: input.facilityId,
+              dealTargetSharePct:
+                input.targetVendorShare != null
+                  ? input.targetVendorShare * 100
+                  : null,
             }),
           ) as Prisma.InputJsonValue,
         },

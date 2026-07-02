@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { calculateMACRS, type DepreciationSchedule } from "@/lib/analysis/depreciation"
 import { serialize } from "@/lib/serialize"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -75,8 +76,8 @@ export async function getPriceProjections(input: {
   const currentPrice =
     records.reduce((s, r) => s + Number(r.unitCost), 0) / records.length
 
-  // Estimate monthly trend from data (simple linear regression proxy)
-  const monthlyRate = -0.5 // assume slight price decrease trend %/month
+  // Assumption-driven monthly trend (%/month) — not estimated from the data.
+  const monthlyRate = -0.5
 
   return serialize(Array.from({ length: input.periods }, (_, i) => {
     const factor = 1 + (monthlyRate * (i + 1)) / 100
@@ -86,8 +87,12 @@ export async function getPriceProjections(input: {
       month: getMonthLabel(i + 1),
       projectedPrice: projected,
       currentPrice: Math.round(currentPrice * 100) / 100,
+      // All-zero unitCost samples must not emit NaN (bug-bash E-C4).
       changePercent:
-        Math.round(((projected - currentPrice) / currentPrice) * 10000) / 100,
+        currentPrice > 0
+          ? Math.round(((projected - currentPrice) / currentPrice) * 10000) /
+            100
+          : 0,
     }
   }))
 }
@@ -162,18 +167,28 @@ export async function getCategorySpendTrends(input: {
   })
 
   const map = new Map<string, number>()
+  // Merge case/word-order variants ("Joint replacement" / "Joint Replacement")
+  // into ONE series (category-canonicalization invariant, bug-bash E-C5);
+  // first-seen raw name is the display label.
+  const labels = new Map<string, string>()
 
   for (const r of records) {
     const month = r.transactionDate.toISOString().slice(0, 7)
-    const cat = r.category ?? "Uncategorized"
-    const key = `${month}|${cat}`
+    const raw = r.category ?? "Uncategorized"
+    const canon = canonicalizeCategoryName(raw)
+    if (!labels.has(canon)) labels.set(canon, raw)
+    const key = `${month}|${canon}`
     map.set(key, (map.get(key) ?? 0) + Number(r.extendedPrice))
   }
 
   return serialize(Array.from(map.entries())
     .map(([key, spend]) => {
-      const [month, categoryName] = key.split("|")
-      return { month: month!, categoryName: categoryName!, spend }
+      const [month, canon] = key.split("|")
+      return {
+        month: month!,
+        categoryName: labels.get(canon!) ?? canon!,
+        spend,
+      }
     })
     .sort((a, b) => a.month.localeCompare(b.month)))
 }

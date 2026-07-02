@@ -550,6 +550,14 @@ for existing rows until a caller opts in.
   "No data" row, >6 cols → landscape). When you need a new PDF, add a generator
   here + a route branch, and POST from the client — do NOT spin up a client jsPDF
   helper (Vick 2026-06-22 "we have a server side pdf generator").
+  **No exemptions (Vick 2026-07-02 "make all pdf gen backend only"):** the two
+  Analysis exporters — `components/facility/analysis/dashboard/export-analysis.ts`
+  and `app/vendor/prospective/sections/export-opportunity.ts` — now serialize
+  their live client model into a payload and POST it to `/api/reports/pdf`
+  (`type: "analysis"` facility-scoped / `type: "opportunity"` vendor-scoped) →
+  `generateAnalysisReportPDF` / `generateOpportunityReportPDF` in `lib/pdf.ts`
+  (payload interfaces live there too; clients import the TYPE only). CSV paths
+  stay client-side. `grep -rl jspdf app components` must stay empty.
 - **Report PDF export** (server-side, table-only — no charts): `/api/reports/pdf`
   `type: "report"` with `scope: facility|vendor` → `generateReportPerformancePDF`
   (`lib/pdf.ts`, jsPDF/autotable, reuses `getReportData`/`getVendorReportData`).

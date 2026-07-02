@@ -149,9 +149,21 @@ describe("getVendorLookbackComparison", () => {
     )
     // Top tier rate considers only percent_of_spend tiers, scaled to %.
     expect(c.topTierRatePct).toBeCloseTo(7)
-    // Group-aware: the where clause includes additionalVendorIds.
+    // Group-aware AND ownership-canonical (E-C1): the where AND-composes the
+    // contractsOwnedByFacility predicate (primary facilityId OR
+    // contractFacilities share) with the vendor group (vendorId OR
+    // additionalVendorIds) so the two OR groups can't collide.
     const where = contractFindMany.mock.calls[0][0].where
-    expect(where.OR).toEqual(
+    expect(where.AND).toHaveLength(2)
+    expect(where.AND[0].OR).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ facilityId: "fac-1" }),
+        expect.objectContaining({
+          contractFacilities: { some: { facilityId: "fac-1" } },
+        }),
+      ]),
+    )
+    expect(where.AND[1].OR).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ vendorId: "v-1" }),
         expect.objectContaining({ additionalVendorIds: { has: "v-1" } }),

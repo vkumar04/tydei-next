@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -71,7 +71,7 @@ export function ProposalCards({
   // coded." Real scoring lives in the Deal Scorer tab
   // (`getVendorProspectiveAnalysis` with a proposal selected persists
   // `pricingData.dealScore` on the row — audit H2).
-  const enrichedProposals = useMemo(() => proposals, [proposals])
+  const enrichedProposals = proposals
 
   function handleConfirmDelete() {
     if (!deleteTarget) return
@@ -206,8 +206,8 @@ export function ProposalCards({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {/* No Edit item: no edit flow exists for proposals
-                            (audit L9) — delete + recreate is the rework path. */}
+                        {/* Edit lives in the detail dialog (View → Edit,
+                            lifecycle 5/4); legacy Alert rows hide it there. */}
                         <DropdownMenuItem
                           className="text-destructive"
                           onClick={() => setDeleteTarget(p)}
@@ -243,7 +243,9 @@ export function ProposalCards({
         <ProposalDetailDialog
           proposal={viewTarget}
           onClose={() => setViewTarget(null)}
-          onEdit={onEditProposal}
+          // Legacy pre-split Alert rows can't be saved by updateProposal —
+          // offering Edit would fail AFTER the user redoes the form (D9).
+          onEdit={viewTarget.editable ? onEditProposal : undefined}
         />
       )}
 

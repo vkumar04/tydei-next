@@ -13,6 +13,15 @@ import {
   PROSPECTIVE_PROPOSAL_KIND,
 } from "@/lib/prospective/proposal-rows"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import { blendConstructsToScenarios } from "@/lib/prospective-analysis/blend-constructs"
+import {
+  callerVendorDivisionIds,
+  divisionScopeWhere,
+} from "@/lib/actions/division-auth"
+import {
+  divisionCategoryKeySet,
+  categoryInDivisionScope,
+} from "@/lib/divisions/category-scope"
 import { z } from "zod"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
@@ -70,6 +79,17 @@ export interface VendorProposal {
   vendorId: string
   facilityIds: string[]
   status: "draft" | "submitted" | "accepted" | "rejected"
+  /**
+   * Pipeline stage derived from what the vendor actually DID with the row —
+   * these proposals are internal analysis drafts (audit M7: `status` is
+   * honestly always "draft"), so the hero/Analytics funnel tracks
+   * draft → scored (Deal Scorer ran) → analyzed (Opportunity run persisted)
+   * instead of a submitted/accepted lifecycle that can never occur.
+   */
+  stage: "draft" | "scored" | "analyzed"
+  /** False for legacy pre-split Alert rows — they can be viewed/deleted but
+   *  not edited (updateProposal only writes PendingContract rows). */
+  editable: boolean
   itemCount: number
   totalProposedCost: number
   dealScore: ProposalDealScore | null
@@ -356,9 +376,33 @@ export async function createProposal(input: {
   gpoFee?: number
   aiNotes?: string
   proposalTerms?: ProposalTermSummary[]
+  /** Explicit division pick from the builder's selector. Must belong to this
+   *  vendor AND (for restricted callers) be one of the caller's divisions. */
+  vendorDivisionId?: string | null
 }): Promise<VendorProposal> {
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
   await requireCanMutate()
+  // Division stamping (hard isolation): a division-restricted creator's
+  // proposal is stamped with their division so it stays visible to them and
+  // isolated from other divisions. An explicit picker choice wins (validated
+  // below); otherwise a restricted member's first division; enterprise/Super
+  // creates stay null (enterprise-only visibility, mirroring grouped
+  // contracts).
+  const creatorDivisionIds = await callerVendorDivisionIds(user.id, vendor.id)
+  let stampedDivisionId = creatorDivisionIds?.[0] ?? null
+  if (input.vendorDivisionId) {
+    const inCallerScope =
+      creatorDivisionIds === undefined ||
+      creatorDivisionIds.includes(input.vendorDivisionId)
+    const division = inCallerScope
+      ? await prisma.vendorDivision.findFirst({
+          where: { id: input.vendorDivisionId, vendorId: vendor.id },
+          select: { id: true },
+        })
+      : null
+    if (!division) throw new Error("Division not found")
+    stampedDivisionId = division.id
+  }
 
   const totalCost = input.pricingItems.reduce(
     (s, p) => s + p.proposedPrice * (p.quantity ?? 1),
@@ -380,6 +424,7 @@ export async function createProposal(input: {
       facilityName: null,
       contractName: `Prospective proposal — ${input.pricingItems.length} item${input.pricingItems.length === 1 ? "" : "s"}`,
       status: "draft",
+      vendorDivisionId: stampedDivisionId,
       totalValue: totalCost,
       notes: input.aiNotes ?? input.terms.notes ?? null,
       pricingData: JSON.parse(
@@ -441,6 +486,8 @@ export async function createProposal(input: {
     vendorId: vendor.id,
     facilityIds: input.facilityIds,
     status: "draft",
+    stage: "draft",
+    editable: true,
     itemCount: input.pricingItems.length,
     totalProposedCost: totalCost,
     dealScore: null,
@@ -479,10 +526,18 @@ export async function updateProposal(input: {
   aiNotes?: string
   proposalTerms?: ProposalTermSummary[]
 }): Promise<VendorProposal> {
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
   await requireCanMutate()
+  const divisionScope = await divisionScopeWhere(
+    await callerVendorDivisionIds(user.id, vendor.id),
+  )
   const existingRow = await prisma.pendingContract.findFirst({
-    where: { id: input.proposalId, vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+    where: {
+      id: input.proposalId,
+      vendorId: vendor.id,
+      ...onlyProspectiveProposalRows(),
+      ...divisionScope,
+    },
     select: { id: true, submittedAt: true, pricingData: true },
   })
   if (!existingRow) throw new Error("Proposal not found")
@@ -538,12 +593,19 @@ export async function updateProposal(input: {
  * facilityId null).
  */
 export async function deleteProposal(id: string): Promise<void> {
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
   await requireCanMutate()
+  const divisionIds = await callerVendorDivisionIds(user.id, vendor.id)
+  const divisionScope = await divisionScopeWhere(divisionIds)
 
-  // Current storage: draft PendingContract row, vendor-scoped.
+  // Current storage: draft PendingContract row, vendor- and division-scoped.
   const pending = await prisma.pendingContract.findFirst({
-    where: { id, vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+    where: {
+      id,
+      vendorId: vendor.id,
+      ...onlyProspectiveProposalRows(),
+      ...divisionScope,
+    },
     select: { id: true },
   })
   if (pending) {
@@ -554,11 +616,15 @@ export async function deleteProposal(id: string): Promise<void> {
 
   // Legacy cleanup: pre-split masquerade Alert rows. A non-vendor row
   // or a row owned by another vendor is invisible here, which gives
-  // us the auth gate in a single query.
-  const alert = await prisma.alert.findFirst({
-    where: { id, vendorId: vendor.id, ...onlyVendorProposalAlerts() },
-    select: { id: true },
-  })
+  // us the auth gate in a single query. Division-restricted members can't
+  // see legacy rows (no division column), so they can't delete them either.
+  const alert =
+    divisionIds !== undefined
+      ? null
+      : await prisma.alert.findFirst({
+          where: { id, vendorId: vendor.id, ...onlyVendorProposalAlerts() },
+          select: { id: true },
+        })
 
   if (!alert) {
     throw new Error("Proposal not found")
@@ -594,7 +660,12 @@ export interface VendorBenchmarkRow {
  * `requireVendor()` + the `vendorId` filter.
  */
 export async function getVendorBenchmarks(): Promise<VendorBenchmarkRow[]> {
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
+  // Division isolation by CATEGORY (ProductBenchmark has no division column):
+  // restricted members see only benchmark rows in their divisions' categories.
+  const divisionCategoryKeys = await divisionCategoryKeySet(
+    await callerVendorDivisionIds(user.id, vendor.id),
+  )
 
   // Uploaded-only (Vick 2026-06-22 "Benchmark should only come from uploaded
   // files"): prospective benchmarks are the vendor's OWN uploaded rows
@@ -608,6 +679,7 @@ export async function getVendorBenchmarks(): Promise<VendorBenchmarkRow[]> {
 
   const seen = new Set<string>()
   const all = direct.filter((b) => {
+    if (!categoryInDivisionScope(b.category, divisionCategoryKeys)) return false
     const k = `${b.vendorItemNo}|${b.source}`
     if (seen.has(k)) return false
     seen.add(k)
@@ -645,6 +717,7 @@ function payloadToProposal(
   vendorId: string,
   createdAt: Date,
   meta: Record<string, unknown>,
+  editable = true,
 ): VendorProposal {
   const terms = meta.terms as
     | { contractLength?: number; notes?: string }
@@ -672,25 +745,46 @@ function payloadToProposal(
   let dealHandoff: ProposalDealHandoff | null = null
   if (rawConstructs.length > 0) {
     const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)
-    const totalVol = rawConstructs.reduce((s, c) => s + num(c.annualVolume), 0)
-    const curSpend = rawConstructs.reduce(
-      (s, c) => s + num(c.current) * num(c.annualVolume),
-      0,
+    // Route through the canonical blend (CLAUDE.md: never re-derive inline).
+    // Its Target tier is dropped when no target prices were entered — in that
+    // case the price change is 0, not −100% (bug-bash V-C6).
+    const blended = blendConstructsToScenarios(
+      rawConstructs.map((c) => ({
+        current: num(c.current),
+        floor: num(c.floor),
+        target: num(c.target),
+        ask: num(c.ask),
+        annualVolume: num(c.annualVolume),
+        rebatePercent: num(c.rebatePercent),
+      })),
     )
-    const tgtSpend = rawConstructs.reduce(
-      (s, c) => s + num(c.target) * num(c.annualVolume),
-      0,
-    )
-    const blendedCur = totalVol > 0 ? curSpend / totalVol : 0
-    const blendedTgt = totalVol > 0 ? tgtSpend / totalVol : 0
+    const totalVol =
+      blended.scenarios[0]?.estimatedAnnualVolume ??
+      rawConstructs.reduce((s, c) => s + Math.max(0, num(c.annualVolume)), 0)
+    const blendedCur = totalVol > 0 ? blended.currentAnnualSpend / totalVol : 0
+    const blendedTgt =
+      blended.scenarios.find((s) => s.scenarioName === "Target")?.unitPrice ?? 0
     dealHandoff = {
-      facilityId: ((meta.facilityIds as string[]) ?? [])[0] ?? null,
-      currentAnnualSpend: num(meta.dealCurrentAnnualSpend) || curSpend,
-      priceChangePct: blendedCur > 0 ? (blendedTgt - blendedCur) / blendedCur : 0,
+      // Prefer the facility/share the deal was actually ANALYZED with
+      // (persisted by runAnalysis, bug-bash V-C5) — the builder's
+      // facilityIds[0]/marketShareCommitment are only the pre-lifecycle
+      // fallback, so persisted and live handoffs stay identical.
+      facilityId:
+        (typeof meta.dealFacilityId === "string" && meta.dealFacilityId) ||
+        ((meta.facilityIds as string[]) ?? [])[0] ||
+        null,
+      currentAnnualSpend:
+        num(meta.dealCurrentAnnualSpend) || blended.currentAnnualSpend,
+      priceChangePct:
+        blendedCur > 0 && blendedTgt > 0
+          ? (blendedTgt - blendedCur) / blendedCur
+          : 0,
       targetSharePct:
-        meta.marketShareCommitment != null
-          ? Number(meta.marketShareCommitment)
-          : null,
+        meta.dealTargetSharePct != null
+          ? Number(meta.dealTargetSharePct)
+          : meta.marketShareCommitment != null
+            ? Number(meta.marketShareCommitment)
+            : null,
       constructCount: rawConstructs.length,
       // Carry the per-construct rows so the Opportunity Engine's by-product
       // export works from a saved proposal (was computed-then-discarded).
@@ -714,6 +808,13 @@ function payloadToProposal(
     // status "draft" in PendingContract; legacy alert rows were never
     // submitted to a facility either). Don't claim "submitted".
     status: "draft" as const,
+    stage:
+      meta.opportunityScenario != null
+        ? ("analyzed" as const)
+        : dealScore
+          ? ("scored" as const)
+          : ("draft" as const),
+    editable,
     itemCount: ((meta.pricingItems as unknown[]) ?? []).length,
     totalProposedCost: Number(meta.totalCost ?? 0),
     dealScore,
@@ -747,26 +848,37 @@ function payloadToProposal(
 export async function getVendorProposals(
   _vendorId?: string
 ): Promise<VendorProposal[]> {
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
+  // Hard division isolation: restricted members see only their divisions'
+  // proposals (undefined = enterprise/Super, byte-identical to pre-feature).
+  // Legacy Alert rows carry no division, so they are enterprise-only.
+  const divisionIds = await callerVendorDivisionIds(user.id, vendor.id)
+  const divisionScope = await divisionScopeWhere(divisionIds)
 
   // Audit L13: select only the columns the mapper reads — the payload
   // sent to the client is already count-mapped (itemCount, not the full
   // pricingItems array), so don't drag whole rows out of the DB either.
   const [pendingRows, legacyAlerts] = await Promise.all([
     prisma.pendingContract.findMany({
-      where: { vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+      where: {
+        vendorId: vendor.id,
+        ...onlyProspectiveProposalRows(),
+        ...divisionScope,
+      },
       select: { id: true, submittedAt: true, pricingData: true },
       orderBy: { submittedAt: "desc" },
     }),
-    prisma.alert.findMany({
-      where: {
-        vendorId: vendor.id,
-        alertType: "compliance",
-        ...onlyVendorProposalAlerts(),
-      },
-      select: { id: true, createdAt: true, metadata: true },
-      orderBy: { createdAt: "desc" },
-    }),
+    divisionIds === undefined
+      ? prisma.alert.findMany({
+          where: {
+            vendorId: vendor.id,
+            alertType: "compliance",
+            ...onlyVendorProposalAlerts(),
+          },
+          select: { id: true, createdAt: true, metadata: true },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
   ])
 
   const proposals = [
@@ -784,6 +896,9 @@ export async function getVendorProposals(
         vendor.id,
         a.createdAt,
         (a.metadata ?? {}) as Record<string, unknown>,
+        // Legacy Alert rows can't be edited — updateProposal only writes
+        // PendingContract rows, so the Edit affordance is hidden (D9).
+        false,
       ),
     ),
   ].sort(
@@ -808,18 +923,27 @@ export async function getVendorProposals(
 export async function getVendorProposalDetail(
   id: string,
 ): Promise<VendorProposalDetail> {
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
+  const divisionIds = await callerVendorDivisionIds(user.id, vendor.id)
+  const divisionScope = await divisionScopeWhere(divisionIds)
 
   const pending = await prisma.pendingContract.findFirst({
-    where: { id, vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+    where: {
+      id,
+      vendorId: vendor.id,
+      ...onlyProspectiveProposalRows(),
+      ...divisionScope,
+    },
     select: { id: true, submittedAt: true, pricingData: true },
   })
-  const legacy = pending
-    ? null
-    : await prisma.alert.findFirst({
-        where: { id, vendorId: vendor.id, ...onlyVendorProposalAlerts() },
-        select: { id: true, createdAt: true, metadata: true },
-      })
+  // Legacy Alert rows carry no division — enterprise-only under restriction.
+  const legacy =
+    pending || divisionIds !== undefined
+      ? null
+      : await prisma.alert.findFirst({
+          where: { id, vendorId: vendor.id, ...onlyVendorProposalAlerts() },
+          select: { id: true, createdAt: true, metadata: true },
+        })
 
   if (!pending && !legacy) throw new Error("Proposal not found")
 
@@ -827,7 +951,7 @@ export async function getVendorProposalDetail(
   const meta = ((pending ? pending.pricingData : legacy!.metadata) ??
     {}) as Record<string, unknown>
 
-  const base = payloadToProposal(id, vendor.id, createdAt, meta)
+  const base = payloadToProposal(id, vendor.id, createdAt, meta, !!pending)
 
   const terms = meta.terms as
     | {
@@ -893,12 +1017,20 @@ export async function updateProposalOpportunity(input: {
   proposalId: string
   scenario: ProposalOpportunityScenario
 }): Promise<void> {
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
   await requireCanMutate()
   const parsed = opportunityScenarioSchema.safeParse(input.scenario)
   if (!parsed.success) throw new Error("Invalid opportunity scenario")
+  const divisionScope = await divisionScopeWhere(
+    await callerVendorDivisionIds(user.id, vendor.id),
+  )
   const row = await prisma.pendingContract.findFirst({
-    where: { id: input.proposalId, vendorId: vendor.id, ...onlyProspectiveProposalRows() },
+    where: {
+      id: input.proposalId,
+      vendorId: vendor.id,
+      ...onlyProspectiveProposalRows(),
+      ...divisionScope,
+    },
     select: { id: true, pricingData: true },
   })
   if (!row) throw new Error("Proposal not found")

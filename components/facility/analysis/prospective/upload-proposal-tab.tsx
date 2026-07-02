@@ -102,7 +102,12 @@ import {
   type PricingFileAnalysis,
   type PricingFileItem,
 } from "@/lib/prospective-analysis/pricing-file-analysis"
-import { synthesizeProposalVerdict } from "@/lib/prospective-analysis/proposal-verdict"
+import {
+  synthesizeProposalVerdict,
+  type VerdictLegalSignal,
+  type VerdictLookbackSignal,
+  type VerdictPricingSignal,
+} from "@/lib/prospective-analysis/proposal-verdict"
 import type {
   ContractVariant,
   PDFContractAnalysisResult,
@@ -203,6 +208,51 @@ export function priceVsMarketFromAnalysis(
   return -(Math.round(analysis.summary.avgVariancePercent * 10) / 10)
 }
 
+// ── Verdict-signal builders (bug-bash F-C3) ─────────────────────────
+// One place adapts each live analysis object into the compact snapshot the
+// verdict synthesizer consumes — used BOTH for the live verdict memo and for
+// persisting onto the saved evaluation, so reload re-synthesizes identically.
+
+function pricingSignalFrom(
+  analysis: PricingFileAnalysis | null,
+): VerdictPricingSignal | null {
+  if (!analysis) return null
+  return {
+    avgVariancePercent: analysis.summary.avgVariancePercent,
+    potentialSavings: analysis.summary.potentialSavings,
+    itemsWithCOGMatch: analysis.summary.itemsWithCOGMatch,
+    totalItems: analysis.summary.totalItems,
+    itemsAboveCOG: analysis.summary.itemsAboveCOG,
+  }
+}
+
+function lookbackSignalFrom(
+  lookback: VendorLookbackComparison | null,
+): VerdictLookbackSignal | null {
+  if (!lookback || lookback.vendorId === null) return null
+  const rates = lookback.existingContracts
+    .map((c) => c.effectiveRatePct)
+    .filter((r): r is number => r !== null)
+  return {
+    trailing12moSpend: lookback.trailing12moSpend,
+    predictedAnnualRebate: lookback.predicted?.annualRebate ?? null,
+    predictedRatePct: lookback.predicted?.rebatePercent ?? null,
+    bestExistingEffectiveRatePct: rates.length > 0 ? Math.max(...rates) : null,
+    hasExistingContracts: lookback.existingContracts.length > 0,
+  }
+}
+
+function legalSignalFrom(
+  canonical: { analysis: PDFContractAnalysisResult } | null,
+): VerdictLegalSignal | null {
+  if (!canonical) return null
+  return {
+    overallRiskScore: canonical.analysis.overallRiskScore,
+    overallRiskLevel: String(canonical.analysis.overallRiskLevel),
+    criticalFlagCount: canonical.analysis.criticalFlags.length,
+  }
+}
+
 /**
  * Map AI-extracted contract data to a scoring input with reasonable
  * fallbacks. Users can re-enter via the manual tab if any field needs
@@ -212,11 +262,12 @@ function buildScoringInput(
   extracted: ExtractedContract,
   currentSpend: number,
   /**
-   * Proposal price vs the facility's current COG price, as a percent (negative
-   * = cheaper than current = better score). Sourced from the uploaded price
-   * file's COG-matched variance (PricingFileSummary.avgVariancePercent) when
-   * available; 0 when no price file has been analyzed (audit P1#6 — was
-   * hardcoded 0). The scoring engine reads priceVsMarket as a percent.
+   * Proposal price vs the facility's current COG price, as a percent —
+   * POSITIVE = cheaper than current = better score (the engine's convention,
+   * sign locked by scoring.test.ts; `priceVsMarketFromAnalysis` above already
+   * negated the raw variance). Sourced from the uploaded price file's
+   * COG-matched variance when available; 0 when no price file has been
+   * analyzed (audit P1#6 — was hardcoded 0).
    */
   priceVsMarketPct = 0,
 ): AnalyzeProposalInput {
@@ -508,6 +559,11 @@ export function UploadProposalTab({
             ...scored,
             input: rescoreInput,
             result: rescored,
+            signals: {
+              lookback: scored.signals?.lookback ?? null,
+              legal: scored.signals?.legal ?? null,
+              pricing: pricingSignalFrom(result),
+            },
           })
           toast.success(
             priceVsMarket >= 0
@@ -743,6 +799,7 @@ export function UploadProposalTab({
         setLookback(null)
         lookbackRequestedVendorRef.current = selectedVendorId
         let trailingSpend = 0
+        let lookbackResult: VendorLookbackComparison | null = null
         try {
           const lb = await getVendorLookbackComparison({
             vendorId: selectedVendorId,
@@ -751,6 +808,7 @@ export function UploadProposalTab({
           })
           if (resetGenRef.current !== gen) return
           setLookback(lb)
+          lookbackResult = lb
           trailingSpend = lb.trailing12moSpend
           // PDF auto-detection only FILLS THE GAP — reflect it in the dropdown
           // so the user sees which vendor the analysis is running as.
@@ -795,6 +853,14 @@ export function UploadProposalTab({
           input,
           result,
           clauseAnalysis: null,
+          // Persist what the user is about to SEE (F-C3): lookback + any
+          // already-analyzed price file. The legal scan attaches below once
+          // it completes.
+          signals: {
+            lookback: lookbackSignalFrom(lookbackResult),
+            pricing: pricingSignalFrom(pricingAnalysisRef.current),
+            legal: null,
+          },
         }
         onProposalScored(scored)
         onPhaseChange("complete")
@@ -821,6 +887,17 @@ export function UploadProposalTab({
             })
             if (resetGenRef.current !== gen) return
             setCanonicalResult(canonical)
+            // Attach the legal summary onto the persisted evaluation — the
+            // orchestrator resolves this to an UPDATE of the just-saved row
+            // (same client id), so View-after-reload has the legal signal.
+            onProposalScored({
+              ...scored,
+              signals: {
+                lookback: scored.signals?.lookback ?? null,
+                pricing: scored.signals?.pricing ?? null,
+                legal: legalSignalFrom(canonical),
+              },
+            })
             toast.success(
               `Legal scan: ${canonical.extractedClauseCount} clause${
                 canonical.extractedClauseCount === 1 ? "" : "s"
@@ -907,39 +984,17 @@ export function UploadProposalTab({
   const isAnalyzing = phase === "analyzing"
 
   // ── The verdict: one answer from all four signals ────────────────────
+  // Live analysis state wins; the evaluation's PERSISTED signals back-fill
+  // after a reload, so the verdict matches what was shown at score time
+  // instead of being re-synthesized from the score alone (F-C3).
   const verdict = useMemo(() => {
     if (!lastScored) return null
     const lb =
-      lookback && lookback.vendorId !== null
-        ? {
-            trailing12moSpend: lookback.trailing12moSpend,
-            predictedAnnualRebate: lookback.predicted?.annualRebate ?? null,
-            predictedRatePct: lookback.predicted?.rebatePercent ?? null,
-            bestExistingEffectiveRatePct: (() => {
-              const rates = lookback.existingContracts
-                .map((c) => c.effectiveRatePct)
-                .filter((r): r is number => r !== null)
-              return rates.length > 0 ? Math.max(...rates) : null
-            })(),
-            hasExistingContracts: lookback.existingContracts.length > 0,
-          }
-        : null
-    const legal = canonicalResult
-      ? {
-          overallRiskScore: canonicalResult.analysis.overallRiskScore,
-          overallRiskLevel: String(canonicalResult.analysis.overallRiskLevel),
-          criticalFlagCount: canonicalResult.analysis.criticalFlags.length,
-        }
-      : null
-    const pricing = pricingAnalysis
-      ? {
-          avgVariancePercent: pricingAnalysis.summary.avgVariancePercent,
-          potentialSavings: pricingAnalysis.summary.potentialSavings,
-          itemsWithCOGMatch: pricingAnalysis.summary.itemsWithCOGMatch,
-          totalItems: pricingAnalysis.summary.totalItems,
-          itemsAboveCOG: pricingAnalysis.summary.itemsAboveCOG,
-        }
-      : null
+      lookbackSignalFrom(lookback) ?? lastScored.signals?.lookback ?? null
+    const legal =
+      legalSignalFrom(canonicalResult) ?? lastScored.signals?.legal ?? null
+    const pricing =
+      pricingSignalFrom(pricingAnalysis) ?? lastScored.signals?.pricing ?? null
     return synthesizeProposalVerdict({
       scoreOverall: lastScored.result.scores.overall,
       scoreVerdict: lastScored.result.recommendation.verdict,
@@ -1236,11 +1291,16 @@ export function UploadProposalTab({
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Clear this analysis?</AlertDialogTitle>
+                  <AlertDialogTitle>Clear upload evaluations?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    The verdict, scoring, lookback, price-file comparison, and
-                    legal scan will be cleared so you can analyze a new
-                    proposal. Export the report first if you want to keep it.
+                    This clears the verdict, scoring, lookback, price-file
+                    comparison, and legal scan — and deletes{" "}
+                    <strong>
+                      every saved upload evaluation for your facility
+                    </strong>
+                    , including ones saved by teammates in earlier sessions.
+                    Manually-entered evaluations are kept. Export the report
+                    first if you want to keep it.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

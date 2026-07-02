@@ -1,11 +1,15 @@
 /**
- * Client-side export of the vendor Opportunity Engine deal scenario. Captures
- * the live tuned scenario + outputs + score + recommended offer (the page
- * recalculates client-side, so this runs in the browser off the live result).
+ * Export of the vendor Opportunity Engine deal scenario. Captures the live
+ * tuned scenario + outputs + score + recommended offer (the page recalculates
+ * client-side). CSV builds in the browser; the PDF serializes the snapshot
+ * into an `OpportunityReportPayload` and POSTs it to /api/reports/pdf, which
+ * renders it server-side (all PDF generation is backend-only — Vick 2026-07-02).
  */
 
+import { toast } from "sonner"
 import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
 import { formatPercent, formatCompactCurrency } from "@/lib/formatting"
+import type { OpportunityReportPayload } from "@/lib/pdf"
 import type { OpportunityEngineResult } from "@/lib/prospective-analysis/opportunity-engine"
 import type { VendorOpportunityScore } from "@/lib/prospective-analysis/vendor-opportunity-score"
 import type { FacilityCurrentStateSnapshot } from "@/components/vendor/prospective/facility-current-state"
@@ -176,7 +180,73 @@ export interface ExportDealConstruct {
   rebatePercent: number
 }
 
-const usd = (n: number) => `$${Math.round(n).toLocaleString()}`
+// ─── PDF (rendered SERVER-SIDE via /api/reports/pdf) ────────────
+//
+// All PDF generation is backend-only (Vick 2026-07-02): the client serializes
+// the live scenario/score/snapshot into an OpportunityReportPayload, POSTs it
+// to /api/reports/pdf (type: "opportunity", vendor-scoped), and downloads the
+// returned blob.
+
+/**
+ * Pure payload builder — exported so tests can assert the snapshot carries
+ * every section the server generator renders. The Facility Current State rows
+ * are pre-formatted through `facilityCurrentStateRows` (the ONE builder shared
+ * with the CSV export) so the two exports can't drift.
+ */
+export function buildOpportunityPdfPayload(
+  engine: OpportunityEngineResult,
+  score: VendorOpportunityScore,
+  scenario: OpportunityScenarioMeta,
+  facility?: FacilityCurrentStateSnapshot | null,
+  constructs?: ExportDealConstruct[],
+): OpportunityReportPayload {
+  return {
+    scenario: {
+      division: scenario.division,
+      facility: scenario.facility,
+      priceChangePct: scenario.priceChangePct,
+      targetShare: scenario.targetShare,
+      expectedVolumeGrowthPct: scenario.expectedVolumeGrowthPct,
+    },
+    engine: {
+      winProbability: engine.winProbability,
+      incrementalRevenue: engine.incrementalRevenue,
+      currentRevenue: engine.currentRevenue,
+      targetRevenue: engine.targetRevenue,
+      netUnitImpact: engine.netUnitImpact,
+      blendedMarketShare: engine.blendedMarketShare,
+      territoryRecurringRevenue: engine.territoryRecurringRevenue,
+      capitalRoboticRevenue: engine.capitalRoboticRevenue,
+    },
+    score: {
+      overall: score.overall,
+      winProbability: {
+        probability: score.winProbability.probability,
+        riskLevel: score.winProbability.riskLevel,
+        recommendedAction: score.winProbability.recommendedAction,
+      },
+      recommendedOffer: {
+        targetConversionPct: score.recommendedOffer.targetConversionPct,
+        items: [...score.recommendedOffer.items],
+      },
+    },
+    facility: facility
+      ? {
+          facilityName: facility.facilityName,
+          rows: facilityCurrentStateRows(facility),
+        }
+      : null,
+    constructs: (constructs ?? []).map((c) => ({
+      productName: c.productName,
+      current: c.current,
+      floor: c.floor,
+      target: c.target,
+      ask: c.ask,
+      annualVolume: c.annualVolume,
+      rebatePercent: c.rebatePercent,
+    })),
+  }
+}
 
 export async function downloadOpportunityPdf(
   engine: OpportunityEngineResult,
@@ -185,121 +255,33 @@ export async function downloadOpportunityPdf(
   facility?: FacilityCurrentStateSnapshot | null,
   constructs?: ExportDealConstruct[],
 ): Promise<void> {
-  const { jsPDF } = await import("jspdf")
-  const autoTable = (await import("jspdf-autotable")).default
-
-  const doc = new jsPDF({ unit: "pt", format: "letter" })
-  const margin = 40
-  let y = margin
-
-  doc.setFontSize(18)
-  doc.text("Opportunity Engine — Deal Scenario", margin, y)
-  y += 18
-  doc.setFontSize(10)
-  doc.setTextColor(120)
-  doc.text(
-    `${scenario.division} · ${scenario.facility} · ${new Date().toLocaleDateString("en-US")}`,
-    margin,
-    y,
-  )
-  doc.setTextColor(0)
-  y += 16
-
-  const after = (fallback: number) =>
-    (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable
-      ?.finalY ?? fallback + 20
-
-  // Facility Current State — the financial picture of the pitch target.
-  if (facility) {
-    doc.setFontSize(12)
-    doc.text(`Facility Current State — ${facility.facilityName}`, margin, y + 6)
-    autoTable(doc, {
-      startY: y + 12,
-      head: [["Metric", "Value"]],
-      body: facilityCurrentStateRows(facility),
-      theme: "striped",
-      headStyles: { fillColor: [30, 41, 59] },
-      styles: { fontSize: 9 },
+  try {
+    const res = await fetch("/api/reports/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "opportunity",
+        payload: buildOpportunityPdfPayload(
+          engine,
+          score,
+          scenario,
+          facility,
+          constructs,
+        ),
+      }),
     })
-    y = after(y)
+    if (!res.ok) {
+      const msg = await res.json().catch(() => null)
+      throw new Error(
+        (msg as { error?: string } | null)?.error ?? `Export failed (${res.status})`,
+      )
+    }
+    triggerDownload(
+      await res.blob(),
+      buildReportFilename("Opportunity Engine Scenario").replace(/\.csv$/, ".pdf"),
+    )
+    toast.success("PDF downloaded")
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Failed to export PDF")
   }
-
-  autoTable(doc, {
-    startY: y,
-    head: [["Lever", "Value"]],
-    body: [
-      ["Division", scenario.division],
-      ["Facility", scenario.facility],
-      ["Price change vs ASP", pct(scenario.priceChangePct)],
-      ["Target market share", pct(scenario.targetShare)],
-      ["Expected volume growth", pct(scenario.expectedVolumeGrowthPct)],
-    ],
-    theme: "striped",
-    headStyles: { fillColor: [30, 41, 59] },
-    styles: { fontSize: 9 },
-  })
-  y = after(y)
-
-  autoTable(doc, {
-    startY: y + 6,
-    head: [["Outcome", "Value"]],
-    body: [
-      ["Win probability", pct(engine.winProbability)],
-      ["Incremental revenue", `+${formatCompactCurrency(engine.incrementalRevenue)} (${formatCompactCurrency(engine.currentRevenue)} → ${formatCompactCurrency(engine.targetRevenue)})`],
-      ["Net unit impact", `+${Math.round(engine.netUnitImpact)}`],
-      ["Blended market share", pct(engine.blendedMarketShare)],
-      ["Territory recurring revenue", formatCompactCurrency(engine.territoryRecurringRevenue)],
-      ["Capital / robotic revenue", formatCompactCurrency(engine.capitalRoboticRevenue)],
-      ["Opportunity score", `${score.overall} / 100`],
-      ["AI win probability", `${pct(score.winProbability.probability)} (risk ${score.winProbability.riskLevel})`],
-      ["Recommended action", score.winProbability.recommendedAction],
-    ],
-    theme: "striped",
-    headStyles: { fillColor: [30, 41, 59] },
-    styles: { fontSize: 9 },
-  })
-  y = after(y)
-
-  // Proposed Deal — by product (the per-construct breakdown of the deal built
-  // in step 1; present when the export was reached via the stepper).
-  if (constructs && constructs.length > 0) {
-    doc.setFontSize(12)
-    doc.text("Proposed Deal — by product", margin, y + 6)
-    autoTable(doc, {
-      startY: y + 12,
-      head: [["Product", "Current", "Floor", "Target", "Ask", "Volume", "Rebate %"]],
-      body: constructs.map((c) => [
-        c.productName,
-        usd(c.current),
-        usd(c.floor),
-        usd(c.target),
-        usd(c.ask),
-        c.annualVolume.toLocaleString(),
-        `${c.rebatePercent}%`,
-      ]),
-      theme: "striped",
-      headStyles: { fillColor: [30, 41, 59] },
-      styles: { fontSize: 8 },
-    })
-    y = after(y)
-  }
-
-  doc.setFontSize(12)
-  doc.text(
-    `Recommended Offer — ${score.recommendedOffer.targetConversionPct}% conversion`,
-    margin,
-    y + 6,
-  )
-  autoTable(doc, {
-    startY: y + 12,
-    head: [["Offer lever"]],
-    body: score.recommendedOffer.items.map((i) => [i]),
-    theme: "striped",
-    headStyles: { fillColor: [30, 41, 59] },
-    styles: { fontSize: 9 },
-  })
-
-  doc.save(
-    buildReportFilename("Opportunity Engine Scenario").replace(/\.csv$/, ".pdf"),
-  )
 }

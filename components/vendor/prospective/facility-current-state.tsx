@@ -12,7 +12,7 @@
  * (`getFacilityCurrentStateForVendor` → measurable seeds, no competitor mix).
  */
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   Select,
@@ -76,16 +76,34 @@ const IMPLIED_SUPPLY_COST_PCT = 0.3
 export function FacilityCurrentStatePanel({
   vendorId,
   facilities,
+  syncFacilityId,
   onSnapshotChange,
 }: {
   vendorId: string
   facilities: FacilityOption[]
+  /**
+   * When the parent's deal scenario targets a known facility, the panel
+   * follows it — otherwise the exported report can pair Facility A's
+   * current-state figures with a Facility B deal scenario (bug-bash V-B1).
+   * The user can still switch manually after a sync.
+   */
+  syncFacilityId?: string | null
   /** Emits the current facility model so the parent export can include it. */
   onSnapshotChange?: (snapshot: FacilityCurrentStateSnapshot | null) => void
 }) {
   const [facilityId, setFacilityId] = useState<string>(
-    () => facilities[0]?.id ?? "",
+    () => syncFacilityId ?? facilities[0]?.id ?? "",
   )
+  // One-shot follow per scenario-facility change (external command, not a
+  // derived mirror — manual re-selection afterwards is preserved).
+  const lastSyncRef = useRef<string | null>(syncFacilityId ?? null)
+  useEffect(() => {
+    if (!syncFacilityId || lastSyncRef.current === syncFacilityId) return
+    lastSyncRef.current = syncFacilityId
+    if (facilities.some((f) => f.id === syncFacilityId)) {
+      setFacilityId(syncFacilityId)
+    }
+  }, [syncFacilityId, facilities])
 
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.prospectiveAnalysis.vendorFacilityCurrentState(

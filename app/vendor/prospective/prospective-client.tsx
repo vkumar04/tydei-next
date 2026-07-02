@@ -76,14 +76,25 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
               setActiveTab("new-proposal")
             }}
             onAnalyzeInOpportunityEngine={(deal) => {
+              // Mutually exclusive with a builder-save preselect: a stale
+              // preselect would force the stepper back to Step 1 and defeat
+              // this jump to the Opportunity Engine (bug-bash V-C1).
+              setPreselectedProposalId(null)
               setOppHandoff(deal)
               setActiveTab("proposals")
             }}
           />
         </TabsContent>
 
-        {/* Proposals = the guided stepper (Usage & Pricing → Opportunity). */}
-        <TabsContent value="proposals" className="mt-4 space-y-4">
+        {/* Proposals = the guided stepper (Usage & Pricing → Opportunity).
+            forceMount: Radix unmounts inactive tab content, which used to
+            discard unsaved Deal-Scorer work on a peek at Benchmarks — the
+            stepper stays mounted and is CSS-hidden instead. */}
+        <TabsContent
+          value="proposals"
+          forceMount
+          className="mt-4 space-y-4 data-[state=inactive]:hidden"
+        >
           <ProposalStepper
             vendorId={vendorId}
             facilities={facilities}
@@ -109,7 +120,9 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             editingProposalId={editingProposalId}
             onProposalCreated={(p) => {
               // Save → continue into the Deal Scorer pre-loaded with this deal.
+              // Clears any card-handoff so Step 1 is the landing step (V-C1).
               setEditingProposalId(null)
+              setOppHandoff(null)
               setPreselectedProposalId(p.id)
               setActiveTab("proposals")
             }}

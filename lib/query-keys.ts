@@ -393,6 +393,8 @@ export const queryKeys = {
     byVendor: (vendorId: string) => ["divisionMembers", "byVendor", vendorId] as const,
     byDivision: (divisionId: string) =>
       ["divisionMembers", "byDivision", divisionId] as const,
+    // The CALLER's pickable divisions (proposal-builder division selector).
+    mine: ["divisionMembers", "mine"] as const,
   },
   // Vendor 1-/2-way connection mode.
   connectionMode: {

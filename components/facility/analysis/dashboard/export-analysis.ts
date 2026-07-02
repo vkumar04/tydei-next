@@ -1,15 +1,19 @@
 /**
- * Client-side export of the facility "Current State" CFO analysis. The
- * dashboard recalculates live from the sliders, so the export must capture the
- * CURRENT client model — these run in the browser off the live `DashboardModel`,
- * not a server snapshot. PDF (shareable exec artifact) + CSV (pull into Excel).
+ * Export of the facility "Current State" CFO analysis. The dashboard
+ * recalculates live from the sliders, so the export captures the CURRENT
+ * client model (`DashboardModel`), not a server snapshot. CSV builds in the
+ * browser (pull into Excel); the PDF serializes the model into an
+ * `AnalysisReportPayload` and POSTs it to /api/reports/pdf, which renders it
+ * server-side (all PDF generation is backend-only — Vick 2026-07-02).
  */
 
+import { toast } from "sonner"
 import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
 import { formatCurrency } from "@/lib/formatting"
 import type { FacilityModelAssumptions } from "@/lib/financial-analysis/prospective-impact-model"
+import type { AnalysisReportPayload } from "@/lib/pdf"
 import type { DashboardModel } from "./model"
-import { usdCompact, pctFromFraction } from "./format"
+import { usdCompact } from "./format"
 
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
@@ -66,10 +70,14 @@ export function buildNarrative(
 
 // ─── CSV ────────────────────────────────────────────────────────
 
-export function downloadAnalysisCsv(
+/**
+ * Pure CSV builder — exported so the "exports carry the full picture" rule is
+ * testable without a DOM download.
+ */
+export function buildAnalysisCsv(
   model: DashboardModel,
   assumptions: FacilityModelAssumptions,
-): void {
+): string {
   const { current, impact } = model.prospective
 
   const summary = toCSV({
@@ -166,7 +174,106 @@ export function downloadAnalysisCsv(
     rows: impact.enterpriseValue as unknown as Record<string, unknown>[],
   })
 
-  const csv = [
+  // ── AI Prospective Impact Engine layer (parity with the PDF + dashboard) ──
+
+  const opportunityScore = toCSV({
+    columns: [
+      { key: "component", label: "Component" },
+      { key: "weight", label: "Weight" },
+      { key: "score", label: "Score (0-100)" },
+      { key: "weightedContribution", label: "Weighted Points" },
+    ],
+    rows: [
+      ...model.opportunityScore.components.map((c) => ({
+        component: c.label,
+        weight: c.weight,
+        score: c.score,
+        weightedContribution: c.weightedContribution,
+      })),
+      {
+        component: `Overall (top ${model.opportunityScore.topPercentile}%)`,
+        weight: 100,
+        score: model.opportunityScore.overall,
+        weightedContribution: model.opportunityScore.overall,
+      },
+    ],
+  })
+
+  const waterfall = toCSV({
+    columns: [
+      { key: "label", label: "Step" },
+      { key: "value", label: "Value" },
+      { key: "cumulative", label: "Cumulative EBITDA" },
+    ],
+    rows: model.waterfall.steps as unknown as Record<string, unknown>[],
+  })
+
+  const waterfallEv = toCSV({
+    columns: [
+      { key: "metric", label: "Metric" },
+      { key: "value", label: "Value" },
+    ],
+    rows: [
+      { metric: "EV multiple", value: `${model.waterfall.ev.multiple}x` },
+      { metric: "Current EV", value: model.waterfall.ev.currentEv },
+      { metric: "Future EV", value: model.waterfall.ev.futureEv },
+      { metric: "Incremental EV", value: model.waterfall.ev.incrementalEv },
+    ],
+  })
+
+  const conversionTargets = toCSV({
+    columns: [
+      { key: "category", label: "Category" },
+      { key: "savingsOpportunity", label: "Savings" },
+      { key: "pctOfTotalBenefit", label: "% of Benefit", format: (v) => pct1((v as number) * 100) },
+      { key: "cumulativeBenefitPct", label: "Cumulative Benefit", format: (v) => pct1((v as number) * 100) },
+      { key: "volumeSharePct", label: "Behavior Change", format: (v) => pct1((v as number) * 100) },
+      { key: "aboveBenchmarkAsp", label: "Above Benchmark ASP", format: (v) => (v ? "Yes" : "No") },
+    ],
+    rows: model.conversionTargets.targets as unknown as Record<string, unknown>[],
+  })
+
+  const conversionHeadline = toCSV({
+    columns: [{ key: "headline", label: "Headline" }],
+    rows: model.conversionTargets.headline
+      ? [{ headline: model.conversionTargets.headline }]
+      : [],
+  })
+
+  const managedCare = toCSV({
+    columns: [
+      { key: "metric", label: "Metric" },
+      { key: "value", label: "Value" },
+    ],
+    rows: [
+      { metric: "Reimbursement low", value: `${model.managedCare.lowPct}% of Medicare` },
+      { metric: "Reimbursement high", value: `${model.managedCare.highPct}% of Medicare` },
+      { metric: "Midpoint", value: `${model.managedCare.midpointPct}% of Medicare` },
+      { metric: "Insight", value: model.managedCare.insight },
+    ],
+  })
+
+  const payback = toCSV({
+    columns: [
+      { key: "scenario", label: "Scenario" },
+      { key: "annualBenefit", label: "Annual Benefit" },
+      { key: "paybackYears", label: "Payback (yrs)", format: (v) => (v == null ? "—" : String(v)) },
+    ],
+    rows: [
+      {
+        scenario: `Investment: ${formatCurrency(model.payback.investmentCost)}`,
+        annualBenefit: "",
+        paybackYears: null,
+      },
+      ...model.payback.scenarios.map((s) => ({
+        scenario: s.scenario,
+        annualBenefit: s.annualBenefit,
+        paybackYears: s.paybackYears,
+      })),
+    ],
+  })
+
+  return [
     "Current State Analysis",
     narrativeCsv,
     "",
@@ -190,197 +297,166 @@ export function downloadAnalysisCsv(
     "",
     "Enterprise Value Impact",
     ev,
+    "",
+    "AI Prospective Impact Engine",
+    "",
+    "Contract Opportunity Score",
+    opportunityScore,
+    "",
+    "EBITDA to EV Waterfall",
+    waterfall,
+    waterfallEv,
+    "",
+    "Conversion Targets",
+    ...(model.conversionTargets.headline ? [conversionHeadline] : []),
+    conversionTargets,
+    "",
+    "Managed Care Reimbursement",
+    managedCare,
+    "",
+    "Payback Analysis",
+    payback,
   ].join("\n")
+}
 
+export function downloadAnalysisCsv(
+  model: DashboardModel,
+  assumptions: FacilityModelAssumptions,
+): void {
   triggerDownload(
-    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    new Blob([buildAnalysisCsv(model, assumptions)], {
+      type: "text/csv;charset=utf-8",
+    }),
     buildReportFilename("Current State Analysis"),
   )
 }
 
-// ─── PDF ────────────────────────────────────────────────────────
+// ─── PDF (rendered SERVER-SIDE via /api/reports/pdf) ────────────
+//
+// All PDF generation is backend-only (Vick 2026-07-02): the client serializes
+// the live model into an AnalysisReportPayload, POSTs it to /api/reports/pdf
+// (type: "analysis", facility-scoped), and downloads the returned blob.
+
+/**
+ * Pure payload builder — exported so tests can assert the snapshot carries
+ * every dashboard section the server generator renders.
+ */
+export function buildAnalysisPdfPayload(
+  model: DashboardModel,
+  assumptions: FacilityModelAssumptions,
+  sourceLabel: string,
+): AnalysisReportPayload {
+  const { current, impact } = model.prospective
+  return {
+    sourceLabel,
+    narrative: buildNarrative(model, assumptions),
+    current: {
+      vendorSpend: current.vendorSpend,
+      netRevenue: current.netRevenue,
+      ebitda: current.ebitda,
+      dcf: current.dcf,
+      dcfExplicit: current.dcfExplicit,
+      dcfTerminalValue: current.dcfTerminalValue,
+    },
+    impact: {
+      annualSupplySavings: impact.annualSupplySavings,
+      impactToEbitda: impact.impactToEbitda,
+      impactToMarginPoints: impact.impactToMarginPoints,
+      impactToDistributableCashFlow: impact.impactToDistributableCashFlow,
+      impactPerCase: impact.impactPerCase,
+    },
+    assumptions: {
+      netRevenue: assumptions.netRevenue,
+      currentVendorSpend: assumptions.currentVendorSpend,
+      annualCaseVolume: assumptions.annualCaseVolume,
+      ebitdaMarginPct: assumptions.ebitdaMarginPct,
+      dcfPctOfEbitda: assumptions.dcfPctOfEbitda,
+      discountRatePct: assumptions.discountRatePct,
+      cashFlowGrowthPct: assumptions.cashFlowGrowthPct,
+      terminalGrowthPct: assumptions.terminalGrowthPct ?? 0.03,
+      dcfProjectionYears: assumptions.dcfProjectionYears,
+    },
+    categoryAsp: model.categoryAsp.map((c) => ({
+      category: c.category,
+      spend: c.spend,
+      asp: c.asp,
+      share: c.share,
+    })),
+    vendorShare: model.vendorShare.map((v) => ({
+      vendor: v.vendor,
+      spend: v.spend,
+      share: v.share,
+    })),
+    contributionMargin: model.contributionMargin.map((c) => ({
+      procedure: c.procedure,
+      cases: c.cases,
+      supplyPerCase: c.supplyPerCase,
+      contributionMargin: c.contributionMargin,
+      marginPct: c.marginPct,
+    })),
+    categoryImpact: model.categoryImpact.map((c) => ({
+      category: c.category,
+      cases: c.cases,
+      annualImpact: c.annualImpact,
+      impactPerCase: c.impactPerCase,
+      marginPct: c.marginPct,
+      newMarginPct: c.newMarginPct,
+    })),
+    enterpriseValue: impact.enterpriseValue.map((ev) => ({
+      scenario: ev.scenario,
+      multiple: ev.multiple,
+      currentEv: ev.currentEv,
+      futureEv: ev.futureEv,
+      incrementalEv: ev.incrementalEv,
+    })),
+    ai: {
+      opportunityOverall: model.opportunityScore.overall,
+      opportunityTopPercentile: model.opportunityScore.topPercentile,
+      waterfallFutureEbitda: model.waterfall.futureEbitda,
+      waterfallIncrementalEv: model.waterfall.ev.incrementalEv,
+      managedCareLowPct: model.managedCare.lowPct,
+      managedCareHighPct: model.managedCare.highPct,
+      paybackYears: model.payback.scenarios.map((s) => s.paybackYears),
+    },
+    conversionTargets: {
+      headline: model.conversionTargets.headline || null,
+      targets: model.conversionTargets.targets.map((t) => ({
+        category: t.category,
+        savingsOpportunity: t.savingsOpportunity,
+        pctOfTotalBenefit: t.pctOfTotalBenefit,
+        volumeSharePct: t.volumeSharePct,
+        aboveBenchmarkAsp: t.aboveBenchmarkAsp,
+      })),
+    },
+  }
+}
 
 export async function downloadAnalysisPdf(
   model: DashboardModel,
   assumptions: FacilityModelAssumptions,
   sourceLabel: string,
 ): Promise<void> {
-  const { jsPDF } = await import("jspdf")
-  const autoTable = (await import("jspdf-autotable")).default
-
-  const doc = new jsPDF({ unit: "pt", format: "letter" })
-  const { current, impact } = model.prospective
-  const margin = 40
-  let y = margin
-
-  doc.setFontSize(18)
-  doc.text("Current State Analysis", margin, y)
-  y += 18
-  doc.setFontSize(10)
-  doc.setTextColor(120)
-  doc.text(
-    `Administrator / CFO view · ${sourceLabel} · ${new Date().toLocaleDateString("en-US")}`,
-    margin,
-    y,
-  )
-  doc.setTextColor(0)
-  y += 18
-
-  // Narrative — tell the story before the tables.
-  doc.setFontSize(10)
-  const narrativeLines = doc.splitTextToSize(
-    buildNarrative(model, assumptions),
-    515,
-  ) as string[]
-  doc.text(narrativeLines, margin, y)
-  y += narrativeLines.length * 13 + 8
-
-  // KPI summary
-  autoTable(doc, {
-    startY: y,
-    head: [["Current Vendor Spend", "Net Revenue", "EBITDA", "DCF (EV)"]],
-    body: [
-      [
-        usdCompact(current.vendorSpend),
-        usdCompact(current.netRevenue),
-        usdCompact(current.ebitda),
-        usdCompact(current.dcf),
-      ],
-    ],
-    theme: "grid",
-    headStyles: { fillColor: [30, 41, 59] },
-  })
-  y = afterTable(doc, y)
-
-  const section = (title: string, head: string[][], body: string[][]) => {
-    doc.setFontSize(12)
-    doc.text(title, margin, y + 6)
-    autoTable(doc, {
-      startY: y + 12,
-      head,
-      body,
-      theme: "striped",
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [30, 41, 59] },
+  try {
+    const res = await fetch("/api/reports/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "analysis",
+        payload: buildAnalysisPdfPayload(model, assumptions, sourceLabel),
+      }),
     })
-    y = afterTable(doc, y)
+    if (!res.ok) {
+      const msg = await res.json().catch(() => null)
+      throw new Error(
+        (msg as { error?: string } | null)?.error ?? `Export failed (${res.status})`,
+      )
+    }
+    triggerDownload(
+      await res.blob(),
+      buildReportFilename("Current State Analysis").replace(/\.csv$/, ".pdf"),
+    )
+    toast.success("PDF downloaded")
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Failed to export PDF")
   }
-
-  section(
-    "Enterprise Value (DCF) breakdown",
-    [["Component", "Value"]],
-    [
-      ["Explicit window PV", usdCompact(current.dcfExplicit)],
-      ["Terminal value PV", usdCompact(current.dcfTerminalValue)],
-      ["Enterprise value (total)", usdCompact(current.dcf)],
-    ],
-  )
-
-  section(
-    "Financial Assumptions",
-    [["Assumption", "Value"]],
-    [
-      ["Net revenue", usdCompact(assumptions.netRevenue)],
-      ["Current vendor spend", usdCompact(assumptions.currentVendorSpend)],
-      ["Annual case volume", assumptions.annualCaseVolume.toLocaleString("en-US")],
-      ["EBITDA margin", pct1(assumptions.ebitdaMarginPct * 100)],
-      ["Distributable cash flow % of EBITDA", pct1(assumptions.dcfPctOfEbitda * 100)],
-      ["Discount rate", pct1(assumptions.discountRatePct * 100)],
-      ["Cash flow growth", pct1(assumptions.cashFlowGrowthPct * 100)],
-      ["Terminal growth", pct1((assumptions.terminalGrowthPct ?? 0.03) * 100)],
-      ["DCF projection years", String(assumptions.dcfProjectionYears)],
-    ],
-  )
-
-  section(
-    "Category Spend & ASP",
-    [["Category", "Spend", "ASP", "Share"]],
-    model.categoryAsp.map((c) => [
-      c.category,
-      usdCompact(c.spend),
-      formatCurrency(c.asp),
-      pctFromFraction(c.share),
-    ]),
-  )
-
-  section(
-    "Vendor Market Share",
-    [["Vendor", "Spend", "Share"]],
-    model.vendorShare.map((v) => [v.vendor, usdCompact(v.spend), pctFromFraction(v.share)]),
-  )
-
-  section(
-    "Contribution Margin by Procedure",
-    [["Procedure", "Cases", "Supply / Case", "Contribution Margin", "Margin %"]],
-    model.contributionMargin.map((c) => [
-      c.procedure,
-      c.cases.toLocaleString("en-US"),
-      formatCurrency(c.supplyPerCase),
-      usdCompact(c.contributionMargin),
-      pct1(c.marginPct * 100),
-    ]),
-  )
-
-  section(
-    "Individual Impact by Category",
-    [["Category", "Cases", "Annual Impact", "Impact / Case", "Margin %", "New Margin %"]],
-    model.categoryImpact.map((c) => [
-      c.category,
-      c.cases.toLocaleString("en-US"),
-      usdCompact(c.annualImpact),
-      formatCurrency(c.impactPerCase),
-      pct1(c.marginPct * 100),
-      pct1(c.newMarginPct * 100),
-    ]),
-  )
-
-  section(
-    "Prospective Impact Engine",
-    [["Metric", "Value"]],
-    [
-      ["Negotiated annual savings", usdCompact(impact.annualSupplySavings)],
-      ["Impact to EBITDA", usdCompact(impact.impactToEbitda)],
-      ["Impact to margin", `+${impact.impactToMarginPoints.toFixed(2)} pts`],
-      ["Impact to distributable cash flow", usdCompact(impact.impactToDistributableCashFlow)],
-      ["$ impact per case", formatCurrency(impact.impactPerCase)],
-    ],
-  )
-
-  section(
-    "Enterprise Value Impact",
-    [["Scenario", "Multiple", "Current EV", "Future EV", "Incremental EV"]],
-    impact.enterpriseValue.map((ev) => [
-      ev.scenario,
-      `${ev.multiple}x`,
-      usdCompact(ev.currentEv),
-      usdCompact(ev.futureEv),
-      usdCompact(ev.incrementalEv),
-    ]),
-  )
-
-  section(
-    "AI Prospective Impact Engine",
-    [["Surface", "Result"]],
-    [
-      ["Contract Opportunity Score", `${model.opportunityScore.overall} / 100 (top ${model.opportunityScore.topPercentile}%)`],
-      ["Future EBITDA (waterfall)", usdCompact(model.waterfall.futureEbitda)],
-      ["Incremental EV", usdCompact(model.waterfall.ev.incrementalEv)],
-      ["Managed care reimbursement", `${model.managedCare.lowPct}%–${model.managedCare.highPct}% of Medicare`],
-      [
-        "Payback (Conservative / Expected / Aggressive)",
-        model.payback.scenarios
-          .map((s) => (s.paybackYears != null ? `${s.paybackYears} yrs` : "—"))
-          .join(" / "),
-      ],
-    ],
-  )
-
-  doc.save(buildReportFilename("Current State Analysis").replace(/\.csv$/, ".pdf"))
-}
-
-interface AutoTableDoc {
-  lastAutoTable?: { finalY: number }
-}
-function afterTable(doc: unknown, fallback: number): number {
-  return (doc as AutoTableDoc).lastAutoTable?.finalY ?? fallback + 20
 }

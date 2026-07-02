@@ -107,6 +107,8 @@ interface ManualEntryTabProps {
   /** When set, the form seeds from this saved evaluation and a re-score
    *  updates it in place. The parent remounts via `key` on change. */
   rerunFrom?: ScoredProposal | null
+  /** Exit re-run edit mode without scoring. */
+  onCancelRerun?: () => void
 }
 
 export function ManualEntryTab({
@@ -115,6 +117,7 @@ export function ManualEntryTab({
   phase,
   onPhaseChange,
   rerunFrom,
+  onCancelRerun,
 }: ManualEntryTabProps) {
   const [form, setForm] = useState<ManualEntryState>(() =>
     rerunFrom ? inputToForm(rerunFrom) : INITIAL,
@@ -175,13 +178,16 @@ export function ManualEntryTab({
       const input = toScoringInput(form)
       const result = await mutation.mutateAsync(input)
       const scored: ScoredProposal = {
-        id: `man-${Date.now().toString(36)}`,
+        id: rerunFrom?.id ?? `man-${Date.now().toString(36)}`,
         vendorName: form.vendorName || "Manual proposal",
-        createdAt: new Date().toISOString(),
-        source: "manual",
+        createdAt: rerunFrom?.createdAt ?? new Date().toISOString(),
+        // A re-run keeps the evaluation's provenance — re-scoring an uploaded
+        // proposal must not flip its badge to "Manual" (bug-bash F-C1).
+        source: rerunFrom?.source ?? "manual",
         input,
         result,
-        clauseAnalysis: null,
+        clauseAnalysis: rerunFrom?.clauseAnalysis ?? null,
+        signals: rerunFrom?.signals ?? null,
       }
       onProposalScored(scored, rerunFrom?.id)
       onPhaseChange("complete")
@@ -194,7 +200,20 @@ export function ManualEntryTab({
   const isBusy = phase === "analyzing" || mutation.isPending
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="space-y-4">
+      {rerunFrom ? (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm">
+          <span>
+            Re-running the saved evaluation for{" "}
+            <span className="font-medium">{rerunFrom.vendorName}</span> —
+            scoring updates it in place.
+          </span>
+          <Button variant="ghost" size="sm" onClick={onCancelRerun}>
+            Cancel
+          </Button>
+        </div>
+      ) : null}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <Card>
         <CardHeader>
           <CardTitle>Manual proposal entry</CardTitle>
@@ -382,7 +401,9 @@ export function ManualEntryTab({
       </Card>
 
       <div>
-        {lastScored && lastScored.source === "manual" ? (
+        {/* Parent filters to manual-sourced OR the evaluation being re-run
+            (an upload re-run keeps source "upload" but renders here). */}
+        {lastScored ? (
           <ScoredProposalCard proposal={lastScored} />
         ) : (
           <Card>
@@ -395,6 +416,7 @@ export function ManualEntryTab({
             </CardHeader>
           </Card>
         )}
+      </div>
       </div>
     </div>
   )

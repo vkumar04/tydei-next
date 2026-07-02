@@ -13,6 +13,7 @@ import type {
   SpendPatternAnalysis,
 } from "@/lib/actions/prospective-analysis"
 import type { PricingFileAnalysis } from "@/lib/prospective-analysis/pricing-file-analysis"
+import type { ProposalVerdictSignals } from "@/lib/prospective-analysis/proposal-verdict"
 
 export type ScoredProposalSource = "upload" | "manual"
 
@@ -30,6 +31,9 @@ export interface ScoredProposal {
   result: AnalyzeProposalResult
   /** Optional PDF clause analysis attached when the user uploaded a PDF. */
   clauseAnalysis: ClauseAnalysis | null
+  /** What the user saw at score time (lookback / pricing / legal summaries),
+   *  persisted so the verdict survives reload (bug-bash F-C3). */
+  signals?: ProposalVerdictSignals | null
 }
 
 /**
@@ -41,6 +45,16 @@ export interface PricingFileAnalysisRecord {
   vendorName: string | null
   createdAt: string // ISO
   analysis: PricingFileAnalysis
+}
+
+/**
+ * Client-minted evaluation ids (`upl-…` / `man-…`) exist only until the save
+ * round-trips; persisted rows carry DB cuids. The orchestrator uses this to
+ * decide create-vs-update when a score arrives without an explicit editingId
+ * (e.g. the price-file re-score of an already-saved upload evaluation).
+ */
+export function isUnsavedEvaluationId(id: string): boolean {
+  return id.startsWith("upl-") || id.startsWith("man-")
 }
 
 export type AnalysisPhase = "idle" | "analyzing" | "complete" | "error"

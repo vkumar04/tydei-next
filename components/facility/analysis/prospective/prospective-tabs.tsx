@@ -51,6 +51,8 @@ interface ProspectiveTabsProps {
   /** Reopen an evaluation in the Manual tab to edit + re-score (null = new). */
   rerunFrom: ScoredProposal | null
   onRerun: (p: ScoredProposal) => void
+  /** Exit re-run edit mode without scoring (Cancel in the Manual tab). */
+  onCancelRerun: () => void
   /** Start-over reset for the Upload tab (bug-bash C1) — clears the
    *  parent-held upload proposals so no stale verdict survives. */
   onUploadReset: () => void
@@ -80,6 +82,7 @@ export function ProspectiveTabs(props: ProspectiveTabsProps) {
     onRemoveProposal,
     rerunFrom,
     onRerun,
+    onCancelRerun,
     onUploadReset,
     pricingAnalyses,
     onPricingAnalysisComplete,
@@ -148,9 +151,12 @@ export function ProspectiveTabs(props: ProspectiveTabsProps) {
           // Remount when the re-run target changes so the form re-seeds from it.
           key={rerunFrom?.id ?? "new"}
           rerunFrom={rerunFrom}
+          onCancelRerun={onCancelRerun}
           onProposalScored={onProposalScored}
           lastScored={
-            latestScored && latestScored.source === "manual"
+            latestScored &&
+            (latestScored.source === "manual" ||
+              latestScored.id === rerunFrom?.id)
               ? latestScored
               : null
           }

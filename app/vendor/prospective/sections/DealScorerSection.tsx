@@ -293,8 +293,9 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
         totalVolume > 0 ? currentAnnualSpend / totalVolume : 0
       const targetUnit =
         blended.find((s) => s.scenarioName === "Target")?.unitPrice ?? 0
+      // No Target prices entered → no proposed change (0), not −100% (V-C6).
       const priceChangePct =
-        blendedCurrentUnit > 0
+        blendedCurrentUnit > 0 && targetUnit > 0
           ? (targetUnit - blendedCurrentUnit) / blendedCurrentUnit
           : 0
       analyzeSeqRef.current += 1

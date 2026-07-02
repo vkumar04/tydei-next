@@ -9,7 +9,11 @@ import {
   generateSurgeonScorecard,
   generateReportPerformancePDF,
   generateTableReportPDF,
+  generateAnalysisReportPDF,
+  generateOpportunityReportPDF,
   type ReportPerfType,
+  type AnalysisReportPayload,
+  type OpportunityReportPayload,
 } from "@/lib/pdf"
 import { getReportData } from "@/lib/actions/reports"
 import { getVendorReportData } from "@/lib/actions/vendor-reports/report-data"
@@ -73,8 +77,16 @@ export async function POST(request: NextRequest) {
       reportType,
       contractId,
       vendorReport,
+      payload,
     } = body as {
-      type: "contract" | "rebate" | "surgeon" | "report" | "vendor-report"
+      type:
+        | "contract"
+        | "rebate"
+        | "surgeon"
+        | "report"
+        | "vendor-report"
+        | "analysis"
+        | "opportunity"
       id?: string
       facilityId?: string
       surgeonName?: string
@@ -83,6 +95,8 @@ export async function POST(request: NextRequest) {
       reportType?: ReportPerfType
       contractId?: string
       vendorReport?: "rebates" | "performance" | "roster"
+      /** Live client-model snapshot for type analysis/opportunity. */
+      payload?: unknown
     }
 
     let pdfBytes: Uint8Array
@@ -266,6 +280,60 @@ export async function POST(request: NextRequest) {
         headers: {
           "Content-Type": "application/pdf",
           "Content-Disposition": `attachment; filename="${title.replace(/\s+/g, "-").toLowerCase()}.pdf"`,
+          "Content-Length": String(pdfBytes.byteLength),
+        },
+      })
+    }
+
+    // ── Vendor Opportunity Engine export (Deal Scenario) ──
+    // Vendor-scoped: the page recalculates client-side and POSTs its live
+    // scenario snapshot; nothing tenant-owned is read server-side, so the
+    // only gate is a vendor membership (no facility membership needed).
+    if (type === "opportunity") {
+      if (!userVendor) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+      const p = payload as OpportunityReportPayload | undefined
+      if (!p?.scenario || !p.engine || !p.score) {
+        return NextResponse.json(
+          { error: "Invalid or missing payload" },
+          { status: 400 },
+        )
+      }
+      const pdfBytes = generateOpportunityReportPDF(p)
+      return new Response(Buffer.from(pdfBytes), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition":
+            'attachment; filename="opportunity-engine-scenario.pdf"',
+          "Content-Length": String(pdfBytes.byteLength),
+        },
+      })
+    }
+
+    // ── Facility Analysis dashboard export (Current State Analysis) ──
+    // Facility-scoped: hard-fail when the caller has NO facility membership
+    // (never gate ownership behind `if (userFacilityId)`). The payload is the
+    // caller's own live slider model, so membership is the ownership check.
+    if (type === "analysis") {
+      if (!userFacilityId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+      const p = payload as AnalysisReportPayload | undefined
+      if (!p?.current || !p.impact || !p.assumptions) {
+        return NextResponse.json(
+          { error: "Invalid or missing payload" },
+          { status: 400 },
+        )
+      }
+      const pdfBytes = generateAnalysisReportPDF(p)
+      return new Response(Buffer.from(pdfBytes), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition":
+            'attachment; filename="current-state-analysis.pdf"',
           "Content-Length": String(pdfBytes.byteLength),
         },
       })
