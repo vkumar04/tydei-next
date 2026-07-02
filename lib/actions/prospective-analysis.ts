@@ -58,6 +58,8 @@ import { extractClauses } from "@/lib/contracts/clause-extractor"
 import { computeRebateFromPrismaTiers } from "@/lib/rebates/calculate"
 import { normalizeAIRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
+import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 // ─── Re-exported types for callers ──────────────────────────────────
@@ -169,7 +171,7 @@ export async function getVendorCOGPatterns(
   try {
   const { start: twelveMonthsAgo } = getTrailing12MonthWindow()
 
-  const [cogRows, pricingRows, facilityTotalAgg] = await Promise.all([
+  const [cogRows, pricingRows, facilityCategoryGroups] = await Promise.all([
     prisma.cOGRecord.findMany({
       where: {
         facilityId: facility.id,
@@ -195,7 +197,8 @@ export async function getVendorCOGPatterns(
         contractPrice: true,
       },
     }),
-    prisma.cOGRecord.aggregate({
+    prisma.cOGRecord.groupBy({
+      by: ["category"],
       where: {
         facilityId: facility.id,
         transactionDate: { gte: twelveMonthsAgo },
@@ -220,9 +223,23 @@ export async function getVendorCOGPatterns(
       contractPrice: Number(p.contractPrice ?? 0),
     }))
 
-  const categoryTotalSpend12Mo = Number(
-    facilityTotalAgg._sum.extendedPrice ?? 0,
+  // Denominator for `categoryMarketShare` = facility spend in the VENDOR'S
+  // categories (canonicalized), not the whole facility (bug-bash E-C3 — the
+  // all-spend denominator diluted the share so `tieInRiskFlag` almost never
+  // fired). Vendors with only uncategorized rows fall back to total facility
+  // spend, the pre-fix behavior.
+  const vendorCategories = new Set(
+    cogRows
+      .map((r) => canonicalizeCategoryName(r.category))
+      .filter((c) => c !== ""),
   )
+  const categoryTotalSpend12Mo = facilityCategoryGroups
+    .filter(
+      (g) =>
+        vendorCategories.size === 0 ||
+        vendorCategories.has(canonicalizeCategoryName(g.category)),
+    )
+    .reduce((s, g) => s + Number(g._sum.extendedPrice ?? 0), 0)
 
   const analysis = analyzeCOGSpendPatterns({
     vendorId,
@@ -616,12 +633,20 @@ export async function getVendorLookbackComparison(input: {
         : null
 
     // ── Existing contracts at this facility (group-aware) ─────────────
+    // Ownership via the canonical helper (primary OR contractFacilities
+    // share) — a bare `facilityId` dropped shared contracts, so the lookback
+    // claimed "no existing contracts" for them (bug-bash E-C1). The two OR
+    // groups are AND-composed so they can't collide.
     const contracts = await prisma.contract.findMany({
       where: {
-        facilityId: facility.id,
-        OR: [
-          { vendorId: vendor.id },
-          { additionalVendorIds: { has: vendor.id } },
+        AND: [
+          contractsOwnedByFacility(facility.id),
+          {
+            OR: [
+              { vendorId: vendor.id },
+              { additionalVendorIds: { has: vendor.id } },
+            ],
+          },
         ],
       },
       select: {

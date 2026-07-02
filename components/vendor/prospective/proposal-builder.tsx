@@ -8,6 +8,15 @@ import {
   useUpdateProposal,
   useVendorProposalDetail,
 } from "@/hooks/use-prospective"
+import { useMyVendorDivisions } from "@/hooks/use-divisions"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 import type { ProposedPricingItem, VendorProposal } from "@/lib/actions/prospective"
 import { DealScoreView } from "./deal-score-view"
 import type { DealScore } from "@/lib/actions/prospective"
@@ -48,7 +57,18 @@ interface ProposalBuilderProps {
 export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClose, onProposalCreated }: ProposalBuilderProps) {
   const createMutation = useCreateProposal()
   const updateMutation = useUpdateProposal()
-  const { data: editDetail } = useVendorProposalDetail(editingProposalId ?? null)
+  const { data: editDetail, isFetching: editDetailFetching } =
+    useVendorProposalDetail(editingProposalId ?? null)
+  // Division picker (hard isolation): a member attached to 2+ divisions
+  // chooses which division the new proposal belongs to — otherwise the server
+  // stamps their only division (restricted) or null (enterprise). "" = let
+  // the server default.
+  const { data: myDivisions } = useMyVendorDivisions()
+  const [vendorDivisionId, setVendorDivisionId] = useState<string>("")
+  const showDivisionPicker =
+    !editingProposalId &&
+    (myDivisions?.restricted ?? false) &&
+    (myDivisions?.divisions.length ?? 0) >= 2
   const [score, setScore] = useState<DealScore | null>(null)
 
   const [customFacilities, setCustomFacilities] = useState<ProspectiveFacility[]>([])
@@ -96,7 +116,17 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
   // by updateProposal — we only re-edit the builder fields here.)
   const hydratedRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!editingProposalId || !editDetail || hydratedRef.current === editingProposalId) return
+    // Gate on !isFetching: after a save + invalidation, React Query hands back
+    // the STALE cached detail synchronously while refetching — hydrating from
+    // it (and one-shot-locking via the ref) would re-edit outdated values and
+    // clobber the prior save on submit (bug-bash V-C3).
+    if (
+      !editingProposalId ||
+      !editDetail ||
+      editDetailFetching ||
+      hydratedRef.current === editingProposalId
+    )
+      return
     hydratedRef.current = editingProposalId
     setNewProposal((prev) => ({
       ...prev,
@@ -109,6 +139,10 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
       isGrouped: Boolean(editDetail.divisions && editDetail.divisions.length > 0),
       divisions: editDetail.divisions ?? [],
       contractLength: editDetail.contractLengthMonths ?? prev.contractLength,
+      // Round-trip survival (bug-bash V-C4): keep the saved start date and
+      // payment terms so re-saving doesn't silently rewrite/drop them.
+      startDate: editDetail.startDate ?? prev.startDate,
+      paymentTerms: editDetail.paymentTerms ?? prev.paymentTerms,
       projectedSpend: editDetail.projectedSpend ?? 0,
       projectedVolume: editDetail.projectedVolume ?? 0,
       marketShareCommitment: editDetail.marketShareCommitment ?? prev.marketShareCommitment,
@@ -119,6 +153,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
         productName: it.description ?? "",
         refNumber: it.vendorItemNo ?? undefined,
         proposedPrice: it.proposedPrice,
+        currentPrice: it.currentPrice,
         projectedVolume: it.quantity ?? 0,
       })),
       terms: (editDetail.terms ?? []).map((t) => ({
@@ -281,6 +316,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
         vendorItemNo: p.refNumber || p.benchmarkId,
         description: p.productName,
         proposedPrice: p.proposedPrice,
+        currentPrice: p.currentPrice,
         quantity: p.projectedVolume || 1,
       }))
 
@@ -297,7 +333,11 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
         pricingItems,
         terms: {
           contractLength: newProposal.contractLength,
-          startDate: new Date().toISOString().split("T")[0],
+          // Editing keeps the hydrated start date; only a NEW proposal
+          // defaults to today (V-C4 — edit used to reset it).
+          startDate:
+            newProposal.startDate ?? new Date().toISOString().split("T")[0]!,
+          paymentTerms: newProposal.paymentTerms,
           notes: newProposal.aiNotes || undefined,
         },
         productCategories:
@@ -330,7 +370,13 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
       // Edit an existing proposal in place, or create a new draft.
       const created = editingProposalId
         ? await updateMutation.mutateAsync({ proposalId: editingProposalId, ...payload })
-        : await createMutation.mutateAsync({ vendorId, ...payload })
+        : await createMutation.mutateAsync({
+            vendorId,
+            ...payload,
+            vendorDivisionId: showDivisionPicker
+              ? vendorDivisionId || (myDivisions?.divisions[0]?.id ?? null)
+              : null,
+          })
       // Continue into the Deal Scorer pre-loaded with this proposal ("save →
       // next step"). onProposalCreated owns navigation; only reset the form
       // here (calling handleResetAndClose would fire onClose and override it).
@@ -362,6 +408,31 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
           setCustomFacilities={setCustomFacilities}
           setCustomCategories={setCustomCategories}
         />
+
+        {showDivisionPicker ? (
+          <div className="space-y-1.5">
+            <Label htmlFor="proposal-division">Division</Label>
+            <Select
+              value={vendorDivisionId || (myDivisions?.divisions[0]?.id ?? "")}
+              onValueChange={setVendorDivisionId}
+            >
+              <SelectTrigger id="proposal-division" className="w-[280px]">
+                <SelectValue placeholder="Select a division" />
+              </SelectTrigger>
+              <SelectContent>
+                {(myDivisions?.divisions ?? []).map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              You belong to several divisions — the proposal is visible only
+              inside the one you pick.
+            </p>
+          </div>
+        ) : null}
 
         <ContractParameters
           newProposal={newProposal}

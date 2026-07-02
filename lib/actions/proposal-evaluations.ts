@@ -25,6 +25,7 @@ import type {
   AnalyzeProposalResult,
   ClauseAnalysis,
 } from "@/lib/actions/prospective-analysis"
+import type { ProposalVerdictSignals } from "@/lib/prospective-analysis/proposal-verdict"
 
 export type ProposalEvaluationSource = "upload" | "manual"
 
@@ -41,6 +42,8 @@ export interface SavedProposalEvaluation {
   input: AnalyzeProposalInput
   result: AnalyzeProposalResult
   clauseAnalysis: ClauseAnalysis | null
+  /** Lookback / pricing / legal summaries captured at score time (F-C3). */
+  signals: ProposalVerdictSignals | null
 }
 
 export interface SaveProposalEvaluationInput {
@@ -49,6 +52,7 @@ export interface SaveProposalEvaluationInput {
   input: AnalyzeProposalInput
   result: AnalyzeProposalResult
   clauseAnalysis: ClauseAnalysis | null
+  signals?: ProposalVerdictSignals | null
 }
 
 // Validate only the envelope + the two denormalized fields. The deep
@@ -72,11 +76,30 @@ type EvaluationRow = {
   payload: Prisma.JsonValue
 }
 
-function rowToEvaluation(row: EvaluationRow): SavedProposalEvaluation {
+// Structural guard for the READ path: the payload is engine-produced display
+// data persisted as JSON, so a row written by an older shape (or hand-edited)
+// must be dropped from the list instead of crashing every consumer on
+// `result.scores.overall` (bug-bash F-C5). Mirrors what the UI dereferences.
+const readPayloadSchema = z.object({
+  input: z.record(z.string(), z.unknown()),
+  result: z.object({
+    scores: z.object({ overall: z.number() }),
+    recommendation: z.object({ verdict: z.string() }),
+  }),
+})
+
+function rowToEvaluation(row: EvaluationRow): SavedProposalEvaluation | null {
   const p = (row.payload ?? {}) as {
     input?: unknown
     result?: unknown
     clauseAnalysis?: unknown
+    signals?: unknown
+  }
+  if (!readPayloadSchema.safeParse(p).success) {
+    console.error("[proposal-evaluations] dropping malformed payload", {
+      id: row.id,
+    })
+    return null
   }
   return {
     id: row.id,
@@ -86,7 +109,16 @@ function rowToEvaluation(row: EvaluationRow): SavedProposalEvaluation {
     input: p.input as AnalyzeProposalInput,
     result: p.result as AnalyzeProposalResult,
     clauseAnalysis: (p.clauseAnalysis ?? null) as ClauseAnalysis | null,
+    signals: (p.signals ?? null) as ProposalVerdictSignals | null,
   }
+}
+
+/** Write-path variant: the payload was envelope-validated this request, so a
+ *  read-back failure is a programming error, not user data. */
+function rowToEvaluationOrThrow(row: EvaluationRow): SavedProposalEvaluation {
+  const evaluation = rowToEvaluation(row)
+  if (!evaluation) throw new Error("Evaluation payload failed validation")
+  return evaluation
 }
 
 function toPayload(input: SaveProposalEvaluationInput): Prisma.InputJsonValue {
@@ -95,6 +127,7 @@ function toPayload(input: SaveProposalEvaluationInput): Prisma.InputJsonValue {
       input: input.input,
       result: input.result,
       clauseAnalysis: input.clauseAnalysis ?? null,
+      signals: input.signals ?? null,
     }),
   ) as Prisma.InputJsonValue
 }
@@ -107,7 +140,11 @@ export async function getProposalEvaluations(): Promise<
     where: { facilityId: facility.id },
     orderBy: { createdAt: "desc" },
   })
-  return serialize(rows.map(rowToEvaluation))
+  return serialize(
+    rows
+      .map(rowToEvaluation)
+      .filter((e): e is SavedProposalEvaluation => e !== null),
+  )
 }
 
 export async function saveProposalEvaluation(
@@ -130,7 +167,7 @@ export async function saveProposalEvaluation(
       payload: toPayload(input),
     },
   })
-  return serialize(rowToEvaluation(row))
+  return serialize(rowToEvaluationOrThrow(row))
 }
 
 export async function updateProposalEvaluation(
@@ -154,13 +191,15 @@ export async function updateProposalEvaluation(
     where: { id: existing.id },
     data: {
       vendorName: input.vendorName,
-      source: input.source,
+      // `source` is intentionally NOT updated: provenance is immutable — a
+      // Manual-tab re-run of an uploaded evaluation must not flip its badge
+      // to "Manual" or move it under deleteBySource("manual") (F-C1).
       overallScore: input.result.scores.overall,
       verdict: input.result.recommendation.verdict,
       payload: toPayload(input),
     },
   })
-  return serialize(rowToEvaluation(row))
+  return serialize(rowToEvaluationOrThrow(row))
 }
 
 export async function deleteProposalEvaluation(id: string): Promise<void> {

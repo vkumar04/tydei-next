@@ -20,6 +20,11 @@ import { serialize } from "@/lib/serialize"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
+import { callerVendorDivisionIds } from "@/lib/actions/division-auth"
+import {
+  divisionCategoryKeySet,
+  categoryInDivisionScope,
+} from "@/lib/divisions/category-scope"
 import { clamp01 } from "@/lib/math/clamp"
 
 // The ContractType enum has 6 members — used to scale multi-BU penetration.
@@ -61,7 +66,14 @@ export interface VendorCategoryBenchmark {
 }
 
 export async function getVendorOpportunityData(): Promise<VendorOpportunityData> {
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
+  // Division isolation: contract-derived inputs scope by vendorDivisionId;
+  // facility COGRecord rows carry no division column, so the revenue/ASP
+  // figures scope by the caller's division CATEGORIES instead
+  // (lib/divisions/category-scope.ts — divisions with no categories declared
+  // fall back to vendor-wide).
+  const divisionIds = await callerVendorDivisionIds(user.id, vendor.id)
+  const divisionCategoryKeys = await divisionCategoryKeySet(divisionIds)
 
   const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow()
 
@@ -79,14 +91,14 @@ export async function getVendorOpportunityData(): Promise<VendorOpportunityData>
     }),
     prisma.contract.findMany({
       where: {
-        ...contractsOwnedByVendor(vendor.id),
+        ...contractsOwnedByVendor(vendor.id, divisionIds),
         status: { in: ["active", "expiring"] },
       },
       select: { contractType: true },
     }),
     prisma.rebate.findMany({
       where: {
-        contract: contractsOwnedByVendor(vendor.id),
+        contract: contractsOwnedByVendor(vendor.id, divisionIds),
         payPeriodEnd: { gte: windowStart, lte: windowEnd },
       },
       select: { rebateEarned: true },
@@ -99,7 +111,10 @@ export async function getVendorOpportunityData(): Promise<VendorOpportunityData>
   const facilityIds = new Set<string>()
   // Per-category actuals (spend + qty → ASP) for the benchmark-position card.
   const catAgg = new Map<string, { label: string; spend: number; qty: number }>()
-  for (const r of vendorRows) {
+  const scopedVendorRows = vendorRows.filter((r) =>
+    categoryInDivisionScope(r.category, divisionCategoryKeys),
+  )
+  for (const r of scopedVendorRows) {
     const spend = Number(r.extendedPrice ?? 0)
     currentRevenue += spend
     vendorQty += r.quantity ?? 0

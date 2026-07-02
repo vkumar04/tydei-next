@@ -25,6 +25,9 @@ export interface ProposalProduct {
   productName: string
   refNumber?: string
   proposedPrice: number
+  /** The facility's CURRENT price for this item — feeds the Deal Scorer's
+   *  Current-price prefill. Preserved through the edit round-trip. */
+  currentPrice?: number
   projectedVolume: number
   historicalAvgPrice?: number
   historicalAvgVolume?: number
@@ -47,6 +50,11 @@ export interface NewProposalState {
    *  Optional so the builder's initial state needn't set it. */
   divisions?: string[]
   contractLength: number
+  /** Contract start date (YYYY-MM-DD). Hydrated on edit so re-saving doesn't
+   *  reset a saved proposal's start date to today; empty = today on create. */
+  startDate?: string
+  /** Payment terms — hydrated on edit so re-saving doesn't drop them. */
+  paymentTerms?: string
   projectedSpend: number
   projectedVolume: number
   totalOpportunity: number

@@ -29,7 +29,12 @@ interface PricingRow {
 
 let cogRows: CogRow[] = []
 let pricingRows: PricingRow[] = []
-let aggregateSum = 0
+// Facility-wide per-category totals for the groupBy denominator (E-C3: the
+// action scopes the market-share denominator to the vendor's categories).
+let categoryGroups: Array<{
+  category: string | null
+  _sum: { extendedPrice: number }
+}> = []
 const auditCalls: Array<Record<string, unknown>> = []
 
 vi.mock("@/lib/db", () => ({
@@ -47,9 +52,7 @@ vi.mock("@/lib/db", () => ({
               (!r.vendorId && where.vendorId === "v-mixed"),
           ),
       ),
-      aggregate: vi.fn(async () => ({
-        _sum: { extendedPrice: aggregateSum },
-      })),
+      groupBy: vi.fn(async () => categoryGroups),
     },
     pricingFile: {
       findMany: vi.fn(async () => pricingRows),
@@ -81,7 +84,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   cogRows = []
   pricingRows = []
-  aggregateSum = 0
+  categoryGroups = []
   auditCalls.length = 0
 })
 
@@ -175,7 +178,7 @@ describe("getVendorCOGPatterns", () => {
   it("returns zeroed analysis when vendor has no COG history", async () => {
     cogRows = []
     pricingRows = []
-    aggregateSum = 0
+    categoryGroups = []
 
     const result = await getVendorCOGPatterns("v-empty")
     expect(result.vendorId).toBe("v-empty")
@@ -205,7 +208,13 @@ describe("getVendorCOGPatterns", () => {
       },
     ]
     pricingRows = [{ vendorItemNo: "ITEM-A", contractPrice: 100 }]
-    aggregateSum = 140_000 // category total
+    // E-C3: the denominator counts ONLY the vendor's categories ("supplies",
+    // case-insensitively canonical) — the unrelated "Implants" spend must NOT
+    // dilute the share the way the old all-facility aggregate did.
+    categoryGroups = [
+      { category: "Supplies", _sum: { extendedPrice: 140_000 } },
+      { category: "Implants", _sum: { extendedPrice: 500_000 } },
+    ]
 
     const result = await getVendorCOGPatterns("v-1")
     expect(result.totalSpend12Mo).toBe(70_000)
@@ -230,7 +239,7 @@ describe("getVendorCOGPatterns", () => {
       { vendorItemNo: "ITEM-C", contractPrice: null },
       { vendorItemNo: "ITEM-C", contractPrice: 100 },
     ]
-    aggregateSum = 0
+    categoryGroups = []
 
     const result = await getVendorCOGPatterns("v-1")
     // Drift is computed — no exception, and the null row is ignored.

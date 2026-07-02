@@ -18,6 +18,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { RefreshCw } from "lucide-react"
 import { ScoredProposalCard } from "./scored-proposal-card"
+import { ProposalVerdictCard } from "./proposal-verdict-card"
+import { synthesizeProposalVerdict } from "@/lib/prospective-analysis/proposal-verdict"
 import type { ScoredProposal } from "./types"
 
 interface Props {
@@ -32,6 +34,19 @@ export function ProposalEvaluationDetailDialog({
   onClose,
   onRerun,
 }: Props) {
+  // Evaluations saved after F-C3 carry the score-time signal snapshots —
+  // re-synthesize the SAME verdict the user saw (lookback / pricing / legal
+  // included), instead of showing only the bare score card.
+  const verdict = proposal.signals
+    ? synthesizeProposalVerdict({
+        scoreOverall: proposal.result.scores.overall,
+        scoreVerdict: proposal.result.recommendation.verdict,
+        pricing: proposal.signals.pricing,
+        lookback: proposal.signals.lookback,
+        legal: proposal.signals.legal,
+      })
+    : null
+
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
@@ -41,6 +56,12 @@ export function ProposalEvaluationDetailDialog({
           </DialogTitle>
         </DialogHeader>
 
+        {verdict ? (
+          <ProposalVerdictCard
+            verdict={verdict}
+            vendorName={proposal.vendorName}
+          />
+        ) : null}
         <ScoredProposalCard proposal={proposal} />
 
         <DialogFooter>

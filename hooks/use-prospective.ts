@@ -98,7 +98,13 @@ export function useImportVendorBenchmarks(vendorId: string) {
         onProgress: input.onProgress,
       }),
     {
-      invalidate: [queryKeys.prospective.vendorBenchmarks(vendorId)],
+      invalidate: [
+        queryKeys.prospective.vendorBenchmarks(vendorId),
+        // The Opportunity Engine's Benchmark Position card reads uploaded
+        // benchmarks through vendorOpportunityData (5-min staleTime) — a new
+        // upload must refresh it too (bug-bash V-C9).
+        queryKeys.prospectiveAnalysis.vendorOpportunityData(vendorId),
+      ],
       success: (res) =>
         `Imported ${res.inserted} benchmark row${res.inserted === 1 ? "" : "s"}` +
         (res.replaced > 0

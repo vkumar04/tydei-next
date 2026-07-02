@@ -12,6 +12,7 @@ import {
   attachUserToDivision,
   detachUserFromDivision,
 } from "@/lib/actions/division-members"
+import { getMyVendorDivisions } from "@/lib/actions/division-auth"
 
 /**
  * TanStack Query hooks for vendor division membership (Settings/Users).
@@ -70,4 +71,12 @@ export function useDetachUserFromDivision() {
       detachUserFromDivision(input.divisionId, input.userId),
     { invalidate: [queryKeys.divisionMembers.base] },
   )
+}
+
+/** The caller's own pickable divisions (proposal-builder division selector). */
+export function useMyVendorDivisions() {
+  return useQuery({
+    queryKey: queryKeys.divisionMembers.mine,
+    queryFn: () => getMyVendorDivisions(),
+  })
 }

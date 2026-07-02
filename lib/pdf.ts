@@ -5,7 +5,11 @@ import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { deriveContractCadence } from "@/lib/contracts/contract-cadence"
 import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
-import { formatCurrency } from "@/lib/formatting"
+import {
+  formatCurrency,
+  formatCompactCurrency,
+  formatPercent,
+} from "@/lib/formatting"
 import { computeRunningCapitalBalances } from "@/lib/reports/running-capital-balance"
 
 // ─── jspdf-autotable extends the doc with lastAutoTable ──────────
@@ -871,4 +875,482 @@ export async function generateSurgeonScorecard(
 
   addFooter(doc)
   return new Uint8Array(doc.output("arraybuffer"))
+}
+
+// ─── Facility Analysis dashboard export (Current State Analysis) ──
+//
+// The dashboard recalculates live from client-side sliders, so the client
+// serializes the CURRENT model into this payload and POSTs it to
+// /api/reports/pdf (type: "analysis"); the layout renders here server-side
+// (Vick 2026-07-02 "make all pdf gen backend only").
+
+export interface AnalysisReportAssumptions {
+  netRevenue: number
+  currentVendorSpend: number
+  annualCaseVolume: number
+  /** Fractions (0.28 = 28%). */
+  ebitdaMarginPct: number
+  dcfPctOfEbitda: number
+  discountRatePct: number
+  cashFlowGrowthPct: number
+  terminalGrowthPct: number
+  dcfProjectionYears: number
+}
+
+export interface AnalysisReportPayload {
+  /** e.g. "Live COG" or "Uploaded file: <name>". */
+  sourceLabel: string
+  /** Pre-built plain-English narrative (buildNarrative, client-side). */
+  narrative: string
+  current: {
+    vendorSpend: number
+    netRevenue: number
+    ebitda: number
+    dcf: number
+    dcfExplicit: number
+    dcfTerminalValue: number
+  }
+  impact: {
+    annualSupplySavings: number
+    impactToEbitda: number
+    impactToMarginPoints: number
+    impactToDistributableCashFlow: number
+    impactPerCase: number
+  }
+  assumptions: AnalysisReportAssumptions
+  categoryAsp: { category: string; spend: number; asp: number; share: number }[]
+  vendorShare: { vendor: string; spend: number; share: number }[]
+  contributionMargin: {
+    procedure: string
+    cases: number
+    supplyPerCase: number
+    contributionMargin: number
+    marginPct: number
+  }[]
+  categoryImpact: {
+    category: string
+    cases: number
+    annualImpact: number
+    impactPerCase: number
+    marginPct: number
+    newMarginPct: number
+  }[]
+  enterpriseValue: {
+    scenario: string
+    multiple: number
+    currentEv: number
+    futureEv: number
+    incrementalEv: number
+  }[]
+  /** AI Prospective Impact Engine summary row values. */
+  ai: {
+    opportunityOverall: number
+    opportunityTopPercentile: number
+    waterfallFutureEbitda: number
+    waterfallIncrementalEv: number
+    managedCareLowPct: number
+    managedCareHighPct: number
+    /** Conservative / Expected / Aggressive payback years (null = n/a). */
+    paybackYears: (number | null)[]
+  }
+  conversionTargets: {
+    headline: string | null
+    targets: {
+      category: string
+      savingsOpportunity: number
+      pctOfTotalBenefit: number
+      volumeSharePct: number
+      aboveBenchmarkAsp: boolean
+    }[]
+  }
+}
+
+const usdCompact = (n: number) => formatCompactCurrency(n, { kDecimals: 1 })
+const pct1 = (n: number) => `${n.toFixed(1)}%`
+const pctFromFraction = (fraction: number, decimals = 2) =>
+  `${(fraction * 100).toFixed(decimals)}%`
+
+export function generateAnalysisReportPDF(
+  payload: AnalysisReportPayload,
+): Uint8Array {
+  const { current, impact, assumptions } = payload
+  const doc = new jsPDF({ unit: "pt", format: "letter" })
+  const margin = 40
+  let y = margin
+
+  doc.setFontSize(18)
+  doc.text("Current State Analysis", margin, y)
+  y += 18
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text(
+    `Administrator / CFO view · ${payload.sourceLabel} · ${new Date().toLocaleDateString("en-US")}`,
+    margin,
+    y,
+  )
+  doc.setTextColor(0)
+  y += 18
+
+  // Narrative — tell the story before the tables.
+  doc.setFontSize(10)
+  const narrativeLines = doc.splitTextToSize(payload.narrative, 515) as string[]
+  doc.text(narrativeLines, margin, y)
+  y += narrativeLines.length * 13 + 8
+
+  const afterTable = (fallback: number) => getFinalY(doc, fallback + 20)
+
+  // KPI summary
+  autoTable(doc, {
+    startY: y,
+    head: [["Current Vendor Spend", "Net Revenue", "EBITDA", "DCF (EV)"]],
+    body: [
+      [
+        usdCompact(current.vendorSpend),
+        usdCompact(current.netRevenue),
+        usdCompact(current.ebitda),
+        usdCompact(current.dcf),
+      ],
+    ],
+    theme: "grid",
+    headStyles: { fillColor: [30, 41, 59] },
+  })
+  y = afterTable(y)
+
+  const section = (title: string, head: string[][], body: string[][]) => {
+    doc.setFontSize(12)
+    doc.text(title, margin, y + 6)
+    autoTable(doc, {
+      startY: y + 12,
+      head,
+      body,
+      theme: "striped",
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [30, 41, 59] },
+    })
+    y = afterTable(y)
+  }
+
+  section(
+    "Enterprise Value (DCF) breakdown",
+    [["Component", "Value"]],
+    [
+      ["Explicit window PV", usdCompact(current.dcfExplicit)],
+      ["Terminal value PV", usdCompact(current.dcfTerminalValue)],
+      ["Enterprise value (total)", usdCompact(current.dcf)],
+    ],
+  )
+
+  section(
+    "Financial Assumptions",
+    [["Assumption", "Value"]],
+    [
+      ["Net revenue", usdCompact(assumptions.netRevenue)],
+      ["Current vendor spend", usdCompact(assumptions.currentVendorSpend)],
+      ["Annual case volume", assumptions.annualCaseVolume.toLocaleString("en-US")],
+      ["EBITDA margin", pct1(assumptions.ebitdaMarginPct * 100)],
+      ["Distributable cash flow % of EBITDA", pct1(assumptions.dcfPctOfEbitda * 100)],
+      ["Discount rate", pct1(assumptions.discountRatePct * 100)],
+      ["Cash flow growth", pct1(assumptions.cashFlowGrowthPct * 100)],
+      ["Terminal growth", pct1(assumptions.terminalGrowthPct * 100)],
+      ["DCF projection years", String(assumptions.dcfProjectionYears)],
+    ],
+  )
+
+  section(
+    "Category Spend & ASP",
+    [["Category", "Spend", "ASP", "Share"]],
+    payload.categoryAsp.map((c) => [
+      c.category,
+      usdCompact(c.spend),
+      fmtCurrency(c.asp),
+      pctFromFraction(c.share),
+    ]),
+  )
+
+  section(
+    "Vendor Market Share",
+    [["Vendor", "Spend", "Share"]],
+    payload.vendorShare.map((v) => [
+      v.vendor,
+      usdCompact(v.spend),
+      pctFromFraction(v.share),
+    ]),
+  )
+
+  section(
+    "Contribution Margin by Procedure",
+    [["Procedure", "Cases", "Supply / Case", "Contribution Margin", "Margin %"]],
+    payload.contributionMargin.map((c) => [
+      c.procedure,
+      c.cases.toLocaleString("en-US"),
+      fmtCurrency(c.supplyPerCase),
+      usdCompact(c.contributionMargin),
+      pct1(c.marginPct * 100),
+    ]),
+  )
+
+  section(
+    "Individual Impact by Category",
+    [["Category", "Cases", "Annual Impact", "Impact / Case", "Margin %", "New Margin %"]],
+    payload.categoryImpact.map((c) => [
+      c.category,
+      c.cases.toLocaleString("en-US"),
+      usdCompact(c.annualImpact),
+      fmtCurrency(c.impactPerCase),
+      pct1(c.marginPct * 100),
+      pct1(c.newMarginPct * 100),
+    ]),
+  )
+
+  section(
+    "Prospective Impact Engine",
+    [["Metric", "Value"]],
+    [
+      ["Negotiated annual savings", usdCompact(impact.annualSupplySavings)],
+      ["Impact to EBITDA", usdCompact(impact.impactToEbitda)],
+      ["Impact to margin", `+${impact.impactToMarginPoints.toFixed(2)} pts`],
+      ["Impact to distributable cash flow", usdCompact(impact.impactToDistributableCashFlow)],
+      ["$ impact per case", fmtCurrency(impact.impactPerCase)],
+    ],
+  )
+
+  section(
+    "Enterprise Value Impact",
+    [["Scenario", "Multiple", "Current EV", "Future EV", "Incremental EV"]],
+    payload.enterpriseValue.map((ev) => [
+      ev.scenario,
+      `${ev.multiple}x`,
+      usdCompact(ev.currentEv),
+      usdCompact(ev.futureEv),
+      usdCompact(ev.incrementalEv),
+    ]),
+  )
+
+  section(
+    "AI Prospective Impact Engine",
+    [["Surface", "Result"]],
+    [
+      [
+        "Contract Opportunity Score",
+        `${payload.ai.opportunityOverall} / 100 (top ${payload.ai.opportunityTopPercentile}%)`,
+      ],
+      ["Future EBITDA (waterfall)", usdCompact(payload.ai.waterfallFutureEbitda)],
+      ["Incremental EV", usdCompact(payload.ai.waterfallIncrementalEv)],
+      [
+        "Managed care reimbursement",
+        `${payload.ai.managedCareLowPct}%–${payload.ai.managedCareHighPct}% of Medicare`,
+      ],
+      [
+        "Payback (Conservative / Expected / Aggressive)",
+        payload.ai.paybackYears
+          .map((years) => (years != null ? `${years} yrs` : "—"))
+          .join(" / "),
+      ],
+    ],
+  )
+
+  section(
+    "Recommended Conversion Targets",
+    [["Category", "Savings", "% of Benefit", "Behavior Change", "Above Benchmark ASP"]],
+    payload.conversionTargets.targets.map((t) => [
+      t.category,
+      usdCompact(t.savingsOpportunity),
+      pct1(t.pctOfTotalBenefit * 100),
+      pct1(t.volumeSharePct * 100),
+      t.aboveBenchmarkAsp ? "Yes" : "No",
+    ]),
+  )
+  if (payload.conversionTargets.headline) {
+    doc.setFontSize(9)
+    doc.setTextColor(120)
+    const headlineLines = doc.splitTextToSize(
+      payload.conversionTargets.headline,
+      515,
+    ) as string[]
+    doc.text(headlineLines, margin, y + 4)
+    doc.setTextColor(0)
+    y += headlineLines.length * 11 + 10
+  }
+
+  return toBytes(doc)
+}
+
+// ─── Vendor Opportunity Engine export (Deal Scenario) ─────────────
+//
+// Same server-side pattern: the Opportunity Engine page recalculates
+// client-side, serializes the live scenario/score/snapshot into this payload,
+// and POSTs it (type: "opportunity").
+
+export interface OpportunityReportPayload {
+  scenario: {
+    division: string
+    facility: string
+    /** Fractions (0.05 = 5%). */
+    priceChangePct: number
+    targetShare: number
+    expectedVolumeGrowthPct: number
+  }
+  engine: {
+    winProbability: number
+    incrementalRevenue: number
+    currentRevenue: number
+    targetRevenue: number
+    netUnitImpact: number
+    blendedMarketShare: number
+    territoryRecurringRevenue: number
+    capitalRoboticRevenue: number
+  }
+  score: {
+    overall: number
+    winProbability: {
+      probability: number
+      riskLevel: string
+      recommendedAction: string
+    }
+    recommendedOffer: { targetConversionPct: number; items: string[] }
+  }
+  /**
+   * Facility Current State — pre-formatted label/value rows built client-side
+   * by facilityCurrentStateRows (the ONE builder shared with the CSV export).
+   */
+  facility: { facilityName: string; rows: [string, string][] } | null
+  /** Per-construct deal rows (present when reached via the stepper). */
+  constructs: {
+    productName: string
+    current: number
+    floor: number
+    target: number
+    ask: number
+    annualVolume: number
+    rebatePercent: number
+  }[]
+}
+
+export function generateOpportunityReportPDF(
+  payload: OpportunityReportPayload,
+): Uint8Array {
+  const { scenario, engine, score } = payload
+  const pct = (n: number) => formatPercent(n * 100)
+  const usd = (n: number) => `$${Math.round(n).toLocaleString()}`
+
+  const doc = new jsPDF({ unit: "pt", format: "letter" })
+  const margin = 40
+  let y = margin
+
+  doc.setFontSize(18)
+  doc.text("Opportunity Engine — Deal Scenario", margin, y)
+  y += 18
+  doc.setFontSize(10)
+  doc.setTextColor(120)
+  doc.text(
+    `${scenario.division} · ${scenario.facility} · ${new Date().toLocaleDateString("en-US")}`,
+    margin,
+    y,
+  )
+  doc.setTextColor(0)
+  y += 16
+
+  const after = (fallback: number) => getFinalY(doc, fallback + 20)
+
+  // Facility Current State — the financial picture of the pitch target.
+  if (payload.facility) {
+    doc.setFontSize(12)
+    doc.text(
+      `Facility Current State — ${payload.facility.facilityName}`,
+      margin,
+      y + 6,
+    )
+    autoTable(doc, {
+      startY: y + 12,
+      head: [["Metric", "Value"]],
+      body: payload.facility.rows,
+      theme: "striped",
+      headStyles: { fillColor: [30, 41, 59] },
+      styles: { fontSize: 9 },
+    })
+    y = after(y)
+  }
+
+  autoTable(doc, {
+    startY: y,
+    head: [["Lever", "Value"]],
+    body: [
+      ["Division", scenario.division],
+      ["Facility", scenario.facility],
+      ["Price change vs ASP", pct(scenario.priceChangePct)],
+      ["Target market share", pct(scenario.targetShare)],
+      ["Expected volume growth", pct(scenario.expectedVolumeGrowthPct)],
+    ],
+    theme: "striped",
+    headStyles: { fillColor: [30, 41, 59] },
+    styles: { fontSize: 9 },
+  })
+  y = after(y)
+
+  autoTable(doc, {
+    startY: y + 6,
+    head: [["Outcome", "Value"]],
+    body: [
+      ["Win probability", pct(engine.winProbability)],
+      [
+        "Incremental revenue",
+        `+${formatCompactCurrency(engine.incrementalRevenue)} (${formatCompactCurrency(engine.currentRevenue)} → ${formatCompactCurrency(engine.targetRevenue)})`,
+      ],
+      ["Net unit impact", `+${Math.round(engine.netUnitImpact)}`],
+      ["Blended market share", pct(engine.blendedMarketShare)],
+      ["Territory recurring revenue", formatCompactCurrency(engine.territoryRecurringRevenue)],
+      ["Capital / robotic revenue", formatCompactCurrency(engine.capitalRoboticRevenue)],
+      ["Opportunity score", `${score.overall} / 100`],
+      [
+        "AI win probability",
+        `${pct(score.winProbability.probability)} (risk ${score.winProbability.riskLevel})`,
+      ],
+      ["Recommended action", score.winProbability.recommendedAction],
+    ],
+    theme: "striped",
+    headStyles: { fillColor: [30, 41, 59] },
+    styles: { fontSize: 9 },
+  })
+  y = after(y)
+
+  // Proposed Deal — by product (the per-construct breakdown of the deal built
+  // in step 1; present when the export was reached via the stepper).
+  if (payload.constructs.length > 0) {
+    doc.setFontSize(12)
+    doc.text("Proposed Deal — by product", margin, y + 6)
+    autoTable(doc, {
+      startY: y + 12,
+      head: [["Product", "Current", "Floor", "Target", "Ask", "Volume", "Rebate %"]],
+      body: payload.constructs.map((c) => [
+        c.productName,
+        usd(c.current),
+        usd(c.floor),
+        usd(c.target),
+        usd(c.ask),
+        c.annualVolume.toLocaleString(),
+        `${c.rebatePercent}%`,
+      ]),
+      theme: "striped",
+      headStyles: { fillColor: [30, 41, 59] },
+      styles: { fontSize: 8 },
+    })
+    y = after(y)
+  }
+
+  doc.setFontSize(12)
+  doc.text(
+    `Recommended Offer — ${score.recommendedOffer.targetConversionPct}% conversion`,
+    margin,
+    y + 6,
+  )
+  autoTable(doc, {
+    startY: y + 12,
+    head: [["Offer lever"]],
+    body: score.recommendedOffer.items.map((i) => [i]),
+    theme: "striped",
+    headStyles: { fillColor: [30, 41, 59] },
+    styles: { fontSize: 9 },
+  })
+
+  return toBytes(doc)
 }

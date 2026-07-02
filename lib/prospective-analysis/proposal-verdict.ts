@@ -38,6 +38,18 @@ export interface VerdictLegalSignal {
   criticalFlagCount: number
 }
 
+/**
+ * The three side-channel signals bundled for persistence: a saved evaluation
+ * carries what the user SAW at score time (lookback / price-file / legal
+ * summaries), so the verdict can be re-synthesized identically after a
+ * reload and the detail dialog shows the full picture (bug-bash F-C3).
+ */
+export interface ProposalVerdictSignals {
+  pricing: VerdictPricingSignal | null
+  lookback: VerdictLookbackSignal | null
+  legal: VerdictLegalSignal | null
+}
+
 export interface ProposalVerdictInput {
   /** 0-10 overall from the scoring engine; null when scoring didn't run. */
   scoreOverall: number | null

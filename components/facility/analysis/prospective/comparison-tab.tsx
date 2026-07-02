@@ -128,14 +128,18 @@ export function ComparisonTab({ proposals, onClear }: ComparisonTabProps) {
     (p) => p.id === result.recommendedProposalId,
   )
 
+  // Series keys must be unique — two proposals from the SAME vendor (a normal
+  // comparison: two offers from one rep) would otherwise collapse into a
+  // single chart series, silently dropping one proposal's scores (F-C6).
+  const seriesNames =
+    comparable[0]!.vendorName === comparable[1]!.vendorName
+      ? comparable.map((p, i) => `${p.vendorName} — proposal ${i + 1}`)
+      : comparable.map((p) => p.vendorName)
+
   const chartData = SCORE_KEYS.map(({ key, label }) => ({
     dimension: label,
-    [comparable[0]!.vendorName]: Number(
-      comparable[0]!.scores[key].toFixed(2),
-    ),
-    [comparable[1]!.vendorName]: Number(
-      comparable[1]!.scores[key].toFixed(2),
-    ),
+    [seriesNames[0]!]: Number(comparable[0]!.scores[key].toFixed(2)),
+    [seriesNames[1]!]: Number(comparable[1]!.scores[key].toFixed(2)),
   }))
 
   return (
@@ -179,12 +183,12 @@ export function ComparisonTab({ proposals, onClear }: ComparisonTabProps) {
                 <Tooltip />
                 <Legend />
                 <Bar
-                  dataKey={comparable[0]!.vendorName}
+                  dataKey={seriesNames[0]!}
                   fill="var(--chart-2)"
                   radius={[4, 4, 0, 0]}
                 />
                 <Bar
-                  dataKey={comparable[1]!.vendorName}
+                  dataKey={seriesNames[1]!}
                   fill="var(--chart-5)"
                   radius={[4, 4, 0, 0]}
                 />
@@ -195,13 +199,13 @@ export function ComparisonTab({ proposals, onClear }: ComparisonTabProps) {
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {comparable.map((p) => {
+        {comparable.map((p, i) => {
           const isWinner = p.id === result.recommendedProposalId
           return (
             <Card key={p.id} className={isWinner ? "border-emerald-400" : ""}>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">{p.vendorName}</CardTitle>
+                  <CardTitle className="text-base">{seriesNames[i]}</CardTitle>
                   {isWinner ? (
                     <Badge
                       variant="outline"

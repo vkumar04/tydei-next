@@ -313,7 +313,10 @@ export function computeDealScenarioSavings(input: DealScenarioInput): number {
 export const DEFAULT_FACILITY_ASSUMPTIONS: FacilityModelAssumptions = {
   netRevenue: 41_700_000,
   currentVendorSpend: 12_500_000,
-  annualCaseVolume: 5,
+  // Coherent with the $41.7M revenue default: ~$8.3K avg reimbursement/case,
+  // in the typical ASC range (and the managed-care volumeAnchor of 5,000).
+  // Was 5 — which read as $125K "impact per case" for a no-data facility.
+  annualCaseVolume: 5_000,
   supplyCostPctOfRevenue: 0.3,
   ebitdaMarginPct: 0.3,
   dcfPctOfEbitda: 0.8,

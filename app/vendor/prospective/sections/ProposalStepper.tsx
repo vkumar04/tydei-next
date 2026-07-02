@@ -63,6 +63,17 @@ export function ProposalStepper({
     }
   }, [preselectedProposalId])
 
+  // A card "Opportunity Engine" handoff arrives → jump to Step 2. Needed as
+  // an effect (not only the useState initial) because the stepper now stays
+  // MOUNTED across tab switches (forceMount) and never re-initializes.
+  const lastDealRef = useRef<string | null>(initialDeal?.proposalId ?? null)
+  useEffect(() => {
+    if (initialDeal && lastDealRef.current !== initialDeal.proposalId) {
+      lastDealRef.current = initialDeal.proposalId
+      setStep(1)
+    }
+  }, [initialDeal])
+
   return (
     <div className="space-y-5">
       {/* Step indicator */}
@@ -105,8 +116,12 @@ export function ProposalStepper({
         })}
       </ol>
 
-      {/* Step body */}
-      {step === 0 ? (
+      {/* Step body — both steps stay MOUNTED (CSS-hidden) so stepping
+          Back/Next never discards unsaved Deal-Scorer work or Step-2 slider
+          tweaks (bug-bash V-C2). Re-analyze still re-seeds Step 2: the
+          Opportunity Engine's one-shot guard keys on the deal's proposalId,
+          which changes per Analyze. */}
+      <div className={step === 0 ? undefined : "hidden"}>
         <DealScorerSection
           vendorId={vendorId}
           facilities={facilities}
@@ -114,13 +129,14 @@ export function ProposalStepper({
           onDealAnalyzed={setStepDeal}
           preselectedProposalId={preselectedProposalId}
         />
-      ) : (
+      </div>
+      <div className={step === 1 ? undefined : "hidden"}>
         <OpportunityEngineSection
           vendorId={vendorId}
           facilities={facilities}
           initialDeal={opportunityDeal}
         />
-      )}
+      </div>
 
       {/* Nav */}
       <div className="flex items-center justify-between">

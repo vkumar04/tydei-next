@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { clamp } from "@/lib/math/clamp"
 import {
   Card,
   CardContent,
@@ -183,9 +184,15 @@ export function OpportunityEngineSection({
       const f = facilities.find((x) => x.id === initialDeal.facilityId)
       if (f) setFacility(f.name)
     }
-    setPriceChangePctInt(Math.round(initialDeal.priceChangePct * 100))
+    // Clamp to the slider's domain — a handoff outside it (deep discount)
+    // would otherwise set state the control can't represent (V-C6).
+    setPriceChangePctInt(
+      clamp(Math.round(initialDeal.priceChangePct * 100), -20, 20),
+    )
     if (initialDeal.targetSharePct != null) {
-      setTargetSharePctInt(Math.round(initialDeal.targetSharePct))
+      setTargetSharePctInt(
+        clamp(Math.round(initialDeal.targetSharePct), 0, 100),
+      )
     }
   }, [initialDeal, facilities])
 
@@ -368,10 +375,16 @@ export function OpportunityEngineSection({
         </DropdownMenu>
       </div>
 
-      {/* Facility Current State — the financial picture of the pitch target */}
+      {/* Facility Current State — the financial picture of the pitch target.
+          Follows the Deal Scenario facility when it names a known facility, so
+          the export never pairs one facility's current state with another's
+          scenario (V-B1). */}
       <FacilityCurrentStatePanel
         vendorId={vendorId}
         facilities={facilities}
+        syncFacilityId={
+          facilities.find((f) => f.name === facility.trim())?.id ?? null
+        }
         onSnapshotChange={setFacilitySnapshot}
       />
 
