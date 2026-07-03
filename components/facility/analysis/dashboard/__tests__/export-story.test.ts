@@ -269,6 +269,30 @@ describe("buildOpportunityPdfPayload (server-side PDF payload)", () => {
     expect(payload.score.recommendedOffer.items).toEqual(["Bundle rebate"])
   })
 
+  it("leads with the narrative story (section 1 of the PDF + CSV)", () => {
+    expect(payload.narrative.length).toBeGreaterThan(0)
+    expect(payload.narrative[0]).toMatch(
+      /Ortho is pitching Lighthouse Surgical Center/,
+    )
+    const story = payload.narrative.join(" ")
+    // Honest attribution + the full arc: facility → deal → win → offer.
+    expect(story).toMatch(/deterministic model/)
+    expect(story).toMatch(/net revenue/i)
+    expect(story).toMatch(/proposed deal covers 1 product/)
+    expect(story).toMatch(/Bundle rebate/)
+  })
+
+  it("is honest when no facility snapshot rode along (modeled from defaults)", () => {
+    const bare = buildOpportunityPdfPayload(
+      engine,
+      score,
+      payload.scenario,
+      null,
+      undefined,
+    )
+    expect(bare.narrative.join(" ")).toMatch(/modeled from default assumptions/)
+  })
+
   it("pre-formats the Facility Current State rows via the ONE shared builder", () => {
     expect(payload.facility?.facilityName).toBe("Lighthouse Surgical Center")
     expect(payload.facility?.rows).toEqual(facilityCurrentStateRows(snapshot))

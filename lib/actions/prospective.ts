@@ -74,7 +74,18 @@ export interface ProposalTermSummary {
   name?: string
   targetType?: string
   targetValue?: number
+  /** Flat rebate value — a PERCENT when rebateType is "percent" or absent
+   *  (historic rows), flat DOLLARS when "fixed", DOLLARS-per-unit when
+   *  "per_unit" (mirrors ContractTier.rebateValue per-type semantics). */
   rebatePercent?: number
+  /** How the rebate value is denominated. Absent = "percent" (all
+   *  pre-2026-07 proposals). Additive/optional so historic rows load
+   *  unchanged (Wave 1.C contract-term parity). */
+  rebateType?: "percent" | "fixed" | "per_unit"
+  /** Tier ladder. min/max are in the targetType's units (spend $, volume
+   *  UNITS, market-share PERCENT 0–100); value per rebateType. Persisted
+   *  without the builder's UI-only `_uid`. */
+  tiers?: { min: number; max?: number; value: number }[]
 }
 
 export interface VendorProposal {

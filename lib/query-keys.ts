@@ -515,8 +515,22 @@ export const queryKeys = {
         facilityId,
         snapshotHash,
       ] as const,
-    vendorOpportunityData: (vendorId: string) =>
+    // Vendor Opportunity Engine DB seed. Family key: the base (no facility)
+    // form is a PREFIX of every facility-scoped key, so existing prefix
+    // invalidations (e.g. the benchmark-import invalidation in
+    // hooks/use-prospective.ts, which calls `vendorOpportunityData(vendorId)`)
+    // refresh the scoped variants too.
+    vendorOpportunityDataBase: (vendorId: string) =>
       ["prospectiveAnalysis", "vendorOpportunityData", vendorId] as const,
+    vendorOpportunityData: (vendorId: string, facilityId?: string) =>
+      facilityId
+        ? ([
+            "prospectiveAnalysis",
+            "vendorOpportunityData",
+            vendorId,
+            facilityId,
+          ] as const)
+        : (["prospectiveAnalysis", "vendorOpportunityData", vendorId] as const),
     // Per-facility Current State for the vendor pitch view (Opportunity Engine).
     vendorFacilityCurrentState: (vendorId: string, facilityId: string) =>
       [

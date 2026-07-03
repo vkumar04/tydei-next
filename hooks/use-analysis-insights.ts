@@ -31,11 +31,20 @@ export function useVendorOpportunityInsights() {
   })
 }
 
-/** Vendor Opportunity Engine DB seed (addressable spend, current share, ASP). */
-export function useVendorOpportunityData(vendorId: string) {
+/**
+ * Vendor Opportunity Engine DB seed (addressable spend, current share, ASP).
+ * `facilityId` (optional) scopes the seed to ONE facility — the Deal Scenario
+ * facility — instead of the vendor's whole book of business. The key gains
+ * the param (prefix-compatible with the `vendorOpportunityDataBase` family,
+ * so existing prefix invalidations refresh scoped variants too).
+ */
+export function useVendorOpportunityData(vendorId: string, facilityId?: string) {
   return useQuery({
-    queryKey: queryKeys.prospectiveAnalysis.vendorOpportunityData(vendorId),
-    queryFn: () => getVendorOpportunityData(),
+    queryKey: queryKeys.prospectiveAnalysis.vendorOpportunityData(
+      vendorId,
+      facilityId,
+    ),
+    queryFn: () => getVendorOpportunityData(facilityId),
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   })

@@ -10,6 +10,7 @@ import { toast } from "sonner"
 import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
 import { formatPercent, formatCompactCurrency } from "@/lib/formatting"
 import type { OpportunityReportPayload } from "@/lib/pdf"
+import { buildOpportunityNarrative } from "@/lib/prospective-analysis/opportunity-narrative"
 import type { OpportunityEngineResult } from "@/lib/prospective-analysis/opportunity-engine"
 import type { VendorOpportunityScore } from "@/lib/prospective-analysis/vendor-opportunity-score"
 import type { FacilityCurrentStateSnapshot } from "@/components/vendor/prospective/facility-current-state"
@@ -76,6 +77,17 @@ export function downloadOpportunityCsv(
   facility?: FacilityCurrentStateSnapshot | null,
   constructs?: ExportDealConstruct[],
 ): void {
+  const narrativeCsv = toCSV({
+    columns: [{ key: "narrative", label: "Narrative" }],
+    rows: buildOpportunityNarrative({
+      scenario,
+      engine,
+      score,
+      facility,
+      constructs,
+    }).map((paragraph) => ({ narrative: paragraph })),
+  })
+
   const outputs = toCSV({
     columns: [
       { key: "metric", label: "Metric" },
@@ -150,6 +162,9 @@ export function downloadOpportunityCsv(
       : []
 
   const csv = [
+    "Narrative",
+    narrativeCsv,
+    "",
     ...facilityBlock,
     ...constructBlock,
     "Opportunity Engine — Deal Scenario",
@@ -201,6 +216,13 @@ export function buildOpportunityPdfPayload(
   constructs?: ExportDealConstruct[],
 ): OpportunityReportPayload {
   return {
+    narrative: buildOpportunityNarrative({
+      scenario,
+      engine,
+      score,
+      facility,
+      constructs,
+    }),
     scenario: {
       division: scenario.division,
       facility: scenario.facility,
