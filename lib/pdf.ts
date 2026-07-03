@@ -1182,6 +1182,11 @@ export function generateAnalysisReportPDF(
 // and POSTs it (type: "opportunity").
 
 export interface OpportunityReportPayload {
+  /**
+   * Plain-English story paragraphs (buildOpportunityNarrative, client-side) —
+   * rendered as section 1, before the Facility Current State table.
+   */
+  narrative: string[]
   scenario: {
     division: string
     facility: string
@@ -1249,6 +1254,16 @@ export function generateOpportunityReportPDF(
   )
   doc.setTextColor(0)
   y += 16
+
+  // Narrative — tell the story before the tables (mirrors the Analysis
+  // export). `?? []` guards payloads posted by an older client.
+  doc.setFontSize(10)
+  for (const paragraph of payload.narrative ?? []) {
+    const lines = doc.splitTextToSize(paragraph, 515) as string[]
+    doc.text(lines, margin, y)
+    y += lines.length * 13 + 6
+  }
+  y += 2
 
   const after = (fallback: number) => getFinalY(doc, fallback + 20)
 

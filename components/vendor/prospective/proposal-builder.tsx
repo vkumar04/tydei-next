@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import {
@@ -35,6 +35,7 @@ import {
   generateTermsFromNotes,
 } from "./builder/file-handlers"
 import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
+import { estimateProposalTerms } from "@/lib/prospective-analysis/proposal-term-estimate"
 import type {
   NewProposalState,
   ProspectiveFacility,
@@ -163,19 +164,29 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
         targetType: (t.targetType as ProspectiveTerm["targetType"]) ?? "spend",
         targetValue: t.targetValue ?? 0,
         rebatePercent: t.rebatePercent ?? 0,
-        tiers: [],
+        // Round-trip survival (Wave 1.C): rebateType + tiers used to be reset
+        // here — a saved tier ladder vanished on every edit. Historic rows
+        // (no rebateType) are percent; tier rows re-mint their UI-only _uid.
+        rebateType: t.rebateType ?? "percent",
+        tiers: (t.tiers ?? []).map((tier) => ({
+          _uid: crypto.randomUUID(),
+          min: tier.min ?? 0,
+          max: tier.max,
+          value: tier.value ?? 0,
+        })),
       })),
     }))
   }, [editingProposalId, editDetail])
 
   const addTerm = () => {
     const newTerm: ProspectiveTerm = {
-      id: `term-${Date.now()}`,
+      id: crypto.randomUUID(),
       termType: "spend_rebate",
       name: "",
       targetType: "spend",
       targetValue: 0,
       rebatePercent: 0,
+      rebateType: "percent",
       tiers: [],
     }
     setNewProposal(prev => ({ ...prev, terms: [...prev.terms, newTerm] }))
@@ -254,17 +265,26 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     setTermSuggestions({ data: suggestions })
   }, [newProposal])
 
-  const calculateEstimatedRebate = () => {
-    let total = 0
-    newProposal.terms.forEach(term => {
-      if (term.termType === "spend_rebate" && newProposal.projectedSpend >= term.targetValue) {
-        total += newProposal.projectedSpend * (term.rebatePercent / 100)
-      } else if (term.termType === "volume_rebate" && newProposal.projectedVolume >= term.targetValue) {
-        total += newProposal.projectedSpend * (term.rebatePercent / 100)
-      }
-    })
-    return total
-  }
+  // Per-term rebate/savings estimate through the ONE tested module (Wave 1.C
+  // — replaced the inline calculateEstimatedRebate that paid volume terms
+  // spend×%, paid $0 for market_share/price_reduction, and ignored tiers).
+  const termEstimate = useMemo(
+    () =>
+      estimateProposalTerms(
+        newProposal.terms.map((t) => ({
+          termType: t.termType,
+          name: t.name,
+          targetType: t.targetType,
+          targetValue: t.targetValue,
+          rebatePercent: t.rebatePercent,
+          rebateType: t.rebateType,
+          tiers: t.tiers.map(({ min, max, value }) => ({ min, max, value })),
+        })),
+        newProposal.projectedSpend,
+        newProposal.projectedVolume,
+      ),
+    [newProposal.terms, newProposal.projectedSpend, newProposal.projectedVolume],
+  )
 
   const resetForm = () => {
     setNewProposal({
@@ -367,6 +387,14 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
                 targetType: t.targetType,
                 targetValue: t.targetValue,
                 rebatePercent: t.rebatePercent,
+                // Wave 1.C: rebateType + tiers used to be STRIPPED here, so a
+                // built ladder never persisted. The UI-only _uid stays out of
+                // the payload (persist boundary — CLAUDE.md list-key rule).
+                rebateType: t.rebateType,
+                tiers:
+                  t.tiers.length > 0
+                    ? t.tiers.map(({ min, max, value }) => ({ min, max, value }))
+                    : undefined,
               }))
             : undefined,
       }
@@ -471,7 +499,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
           addTerm={addTerm}
           removeTerm={removeTerm}
           updateTerm={updateTerm}
-          estimatedRebate={calculateEstimatedRebate()}
+          estimate={termEstimate}
         />
 
         {score && <DealScoreView score={score} />}

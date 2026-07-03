@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import type { Dispatch, SetStateAction } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -34,13 +35,16 @@ import {
 import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
 import {
+  getFacilityActualsForVendor,
   getVendorProspectiveAnalysis,
   type VendorProspectiveAnalysisInput,
+  type VendorProspectiveAnalysisResult,
 } from "@/lib/actions/vendor-prospective"
 import type {
   VendorContractVariant,
   VendorProspectiveResult,
 } from "@/lib/prospective-analysis/vendor-prospective-analyzer"
+import { DealScoreLegend } from "@/components/vendor/prospective/deal-score-view"
 import {
   getVendorProposalDetail,
   type VendorProposal,
@@ -201,6 +205,49 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
           setCurrentPriceBySku(priceMap)
           setPriceLoadedCount(priceMap.size)
         }
+        // Wave-2 D (consolidation round-trip): restore the saved Step-1
+        // assumptions so a saved deal re-opens with ZERO re-entry. Typed
+        // string states are only filled while still at their PRISTINE seed
+        // (margins "40"/"25", capital "60"/"5"/"10", everything else "") so
+        // a value the user already typed is never clobbered; the selects
+        // (contract variant / spend category) restore via their setters.
+        // Stored in UI units (whole percents) — plain String(), no ×100
+        // (see lib/prospective/deal-assumptions.ts). Runs BEFORE the
+        // cost-basis seed below so the analyzed internal unit cost wins.
+        const fillAtPristine = (
+          set: Dispatch<SetStateAction<string>>,
+          pristine: string,
+          value: number | string | null | undefined,
+        ) => {
+          if (value == null || value === "") return
+          set((prev) => (prev === pristine ? String(value) : prev))
+        }
+        const a = detail.dealAssumptions
+        if (a) {
+          fillAtPristine(setTargetMargin, "40", a.targetMarginPct)
+          fillAtPristine(setFloorMargin, "25", a.floorMarginPct)
+          fillAtPristine(setCurrentShare, "", a.currentSharePct)
+          fillAtPristine(setEstimatedSpend, "", a.estimatedSpend)
+          fillAtPristine(setEstimatedSpendCategory, "", a.estimatedSpendCategory)
+          fillAtPristine(setInternalUnitCost, "", a.internalUnitCost)
+          setContractVariant(a.contractVariant)
+          if (a.capital) {
+            fillAtPristine(setEquipmentCost, "", a.capital.equipmentCost)
+            if (a.capital.annualMaintenanceCost > 0) {
+              fillAtPristine(
+                setMaintenanceCost,
+                "",
+                a.capital.annualMaintenanceCost,
+              )
+            }
+            fillAtPristine(setTermMonths, "60", a.capital.termMonths)
+            fillAtPristine(setInterestRate, "5", a.capital.interestRatePct)
+            fillAtPristine(setDiscountRate, "10", a.capital.discountRatePct)
+          }
+        }
+        // Target share already rides the persisted dealHandoff
+        // (dealTargetSharePct) — restore it from there, same guard.
+        fillAtPristine(setTargetShare, "", detail.dealHandoff?.targetSharePct)
         // Seed internal unit cost from the builder upload's cost-basis column
         // (quantity-weighted average) — only when the field is still blank,
         // so a typed value is never clobbered.
@@ -272,6 +319,61 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       contractVariant === "CAPITAL_TIE_IN",
     [contractVariant],
   )
+
+  // Wave-2 E: two-way sync auto-pull. When a facility is selected and the
+  // vendor has an accepted TWO-WAY connection with it, pull the facility's
+  // trailing-12mo actuals for this vendor and use them as the reference —
+  // fill the price/volume maps ONLY while they are still empty (uploads and
+  // proposal data always win), and seed Current share / Estimated spend only
+  // while blank. One-shot per facility (ref-guarded like appliedProposalRef);
+  // waits for the benchmark list (the construct source) so the SKU set is
+  // complete. One-way / no connection keeps manual mode + shows the badge.
+  const appliedFacilityActualsRef = useRef<string | null>(null)
+  const [actualsSyncMode, setActualsSyncMode] = useState<
+    "two_way" | "one_way" | null
+  >(null)
+  useEffect(() => {
+    if (!facilityId || benchmarks === undefined) return
+    if (appliedFacilityActualsRef.current === facilityId) return
+    appliedFacilityActualsRef.current = facilityId
+    setActualsSyncMode(null)
+    void getFacilityActualsForVendor(
+      facilityId,
+      benchmarks.map((b) => b.itemNumber),
+    )
+      .then((res) => {
+        setActualsSyncMode(res.mode)
+        if (res.mode !== "two_way") return
+        const priceMap = new Map<string, number>()
+        const volMap = new Map<string, number>()
+        for (const it of res.items) {
+          if (it.avgUnitPrice > 0) priceMap.set(it.sku, it.avgUnitPrice)
+          if (it.annualQty > 0) volMap.set(it.sku, it.annualQty)
+        }
+        if (priceMap.size > 0) {
+          setCurrentPriceBySku((prev) => (prev.size > 0 ? prev : priceMap))
+          setPriceLoadedCount((prev) => (prev > 0 ? prev : priceMap.size))
+        }
+        if (volMap.size > 0) {
+          setUsageVolumeBySku((prev) => (prev.size > 0 ? prev : volMap))
+          setUsageLoadedCount((prev) => (prev > 0 ? prev : volMap.size))
+        }
+        // Blank-field backfill on already-picked constructs (never clobbers
+        // an entered Volume / Current).
+        backfillFromReference({ volume: volMap, price: priceMap })
+        const share = res.currentSharePct
+        if (share != null) {
+          setCurrentShare((prev) => (prev ? prev : String(share)))
+        }
+        const spend = res.categorySpend
+        if (spend != null && spend > 0) {
+          setEstimatedSpend((prev) => (prev ? prev : String(Math.round(spend))))
+        }
+      })
+      .catch(() => {
+        /* non-fatal: stay in manual mode, no badge */
+      })
+  }, [facilityId, benchmarks])
 
   const mutation = useMutation({
     mutationFn: (input: VendorProspectiveAnalysisInput) =>
@@ -560,6 +662,22 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                   appear here once you have a contract, sales history, or
                   submitted proposal with them.
                 </p>
+              )}
+              {actualsSyncMode === "two_way" && (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-normal text-emerald-600 dark:text-emerald-400"
+                >
+                  Synced from facility actuals (two-way)
+                </Badge>
+              )}
+              {actualsSyncMode === "one_way" && (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-normal text-muted-foreground"
+                >
+                  Manual mode (one-way)
+                </Badge>
               )}
             </div>
             <div className="space-y-2">
@@ -974,7 +1092,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
 
 // ─── Results ───────────────────────────────────────────────────
 
-function ResultsView({ result }: { result: VendorProspectiveResult }) {
+function ResultsView({ result }: { result: VendorProspectiveAnalysisResult }) {
   // Audit M6: no caller supplies a proposedRebateConfig today, so the
   // tier-optimization result is the "No tiered rebate config supplied"
   // sentinel (all three numeric fields null). Hide the card rather than
@@ -987,6 +1105,10 @@ function ResultsView({ result }: { result: VendorProspectiveResult }) {
 
   return (
     <div className="space-y-4">
+      {/* Wave-3 F: the weighted deal score + "what moves it" legend (incl.
+          the amber 55%-GM-assumed flag) leads the results. */}
+      <DealScoreLegend breakdown={result.dealScore} />
+
       {result.warnings.length > 0 && (
         <Card className="border-amber-300 bg-amber-50/50 dark:bg-amber-900/10">
           <CardContent className="flex gap-3 py-4">

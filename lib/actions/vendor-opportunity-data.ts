@@ -65,8 +65,20 @@ export interface VendorCategoryBenchmark {
   benchmarkAvg: number | null
 }
 
-export async function getVendorOpportunityData(): Promise<VendorOpportunityData> {
+/**
+ * @param facilityId — optional facility scope. When provided (non-empty), the
+ * vendor-rows query, the addressable/competitor market query, and the facility
+ * set are all restricted to that ONE facility, so the Opportunity Engine
+ * models "this facility" instead of the vendor's whole book of business.
+ * Tenant-safe narrowing (mirrors `scopeContractWhereToFacility`'s philosophy):
+ * every query stays vendor-scoped first, so a bad/foreign facilityId simply
+ * returns empty — never another vendor's data. Division scoping is unchanged.
+ */
+export async function getVendorOpportunityData(
+  facilityId?: string,
+): Promise<VendorOpportunityData> {
   const { vendor, user } = await requireVendor()
+  const scopedFacilityId = facilityId?.trim() || undefined
   // Division isolation: contract-derived inputs scope by vendorDivisionId;
   // facility COGRecord rows carry no division column, so the revenue/ASP
   // figures scope by the caller's division CATEGORIES instead
@@ -81,7 +93,12 @@ export async function getVendorOpportunityData(): Promise<VendorOpportunityData>
   // contract mix + earned rebates that drive the real strategic-score inputs.
   const [vendorRows, vendorContracts, vendorRebates] = await Promise.all([
     prisma.cOGRecord.findMany({
-      where: { vendorId: vendor.id, transactionDate: { gte: windowStart, lte: windowEnd } },
+      where: {
+        vendorId: vendor.id,
+        transactionDate: { gte: windowStart, lte: windowEnd },
+        // Facility narrowing — vendor-scoped first, so this only NARROWS.
+        ...(scopedFacilityId ? { facilityId: scopedFacilityId } : {}),
+      },
       select: {
         extendedPrice: true,
         quantity: true,
@@ -163,7 +180,12 @@ export async function getVendorOpportunityData(): Promise<VendorOpportunityData>
   if (canonicalCats.size > 0 && facilityIds.size > 0) {
     const marketRows = await prisma.cOGRecord.findMany({
       where: {
-        facilityId: { in: [...facilityIds] },
+        // When facility-scoped, facilityIds ⊆ {scopedFacilityId} already (the
+        // vendor-rows query was narrowed) — pin it explicitly regardless so
+        // the addressable/competitor market can never widen past the scope.
+        facilityId: scopedFacilityId
+          ? scopedFacilityId
+          : { in: [...facilityIds] },
         transactionDate: { gte: windowStart, lte: windowEnd },
         category: { not: null },
       },

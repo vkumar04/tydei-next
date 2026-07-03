@@ -3,14 +3,35 @@ export interface ProspectiveFacility {
   name: string
 }
 
+/** Tier-ladder row in the builder. `min`/`max` are in the term's targetType
+ *  units — DOLLARS for spend, UNITS for volume, PERCENT (0–100) for market
+ *  share (never mix; see the CLAUDE.md market-share type-confusion memory).
+ *  `value` is denominated per the term's rebateType. */
+export interface ProspectiveTermTier {
+  /** UI-only stable row id (CLAUDE.md list-key rule) — minted via
+   *  crypto.randomUUID(), STRIPPED at the persist boundary. */
+  _uid: string
+  min: number
+  max?: number
+  value: number
+}
+
 export interface ProspectiveTerm {
   id: string
   termType: "spend_rebate" | "volume_rebate" | "market_share_rebate" | "price_reduction"
   name: string
   targetType: "spend" | "volume" | "market_share"
   targetValue: number
+  /** Flat rebate value, denominated per rebateType (mirrors
+   *  ContractTier.rebateValue's per-type semantics): percent of spend when
+   *  "percent" (3 = 3%), flat dollars when "fixed", dollars per unit when
+   *  "per_unit". Ignored when tiers are present. Field name kept for
+   *  persistence round-trip with historic proposals (absent rebateType =
+   *  percent). */
   rebatePercent: number
-  tiers: { threshold: number; rebatePercent: number }[]
+  /** How rebate values (flat + tier) are denominated. */
+  rebateType: "percent" | "fixed" | "per_unit"
+  tiers: ProspectiveTermTier[]
 }
 
 export interface MonthlyUsage {

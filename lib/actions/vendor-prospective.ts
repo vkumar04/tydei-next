@@ -21,6 +21,13 @@ import {
 } from "@/lib/case-costing/cpt-rate-map"
 import { expandCategoriesToCogVariants } from "@/lib/contracts/cog-category-filter"
 import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import {
+  dealAssumptionsSchema,
+  fractionToWholePct,
+  type DealAssumptions,
+} from "@/lib/prospective/deal-assumptions"
 import {
   analyzeVendorProspective,
   type BenchmarkDataPoint,
@@ -31,6 +38,11 @@ import {
   type VendorProspectiveInput,
   type VendorProspectiveResult,
 } from "@/lib/prospective-analysis/vendor-prospective-analyzer"
+import {
+  computeDealScore,
+  dealScoreComponentsSchema,
+  type DealScoreBreakdown,
+} from "@/lib/prospective-analysis/deal-score"
 import { z } from "zod"
 
 // ─── Input shape ───────────────────────────────────────────────
@@ -117,6 +129,18 @@ export interface VendorProspectiveAnalysisInput {
    *     (2026-06-10 audit H2 — dealScore was permanently null before).
    */
   proposalRowId?: string
+}
+
+/**
+ * What `getVendorProspectiveAnalysis` returns: the pure analyzer result
+ * plus the weighted deal-quality score (Wave-3 F). `dealScore.overall`
+ * keeps the 0–100 scale + the 80/65/40 recommendation thresholds
+ * (`recommendationForScore` in lib/actions/prospective.ts); the
+ * `components` legend lets the UI explain what moves the score.
+ */
+export interface VendorProspectiveAnalysisResult
+  extends VendorProspectiveResult {
+  dealScore: DealScoreBreakdown
 }
 
 // ─── Vendor↔facility relationship scope (audit M5) ─────────────
@@ -278,11 +302,190 @@ export async function getFacilityCurrentStateForVendor(
   })
 }
 
+// ─── Two-way sync auto-pull (Wave-2 E) ─────────────────────────
+
+/** One SKU's trailing-12mo facility actuals for this vendor. */
+export interface FacilityActualsItem {
+  /** `normalizeSku` key of the REQUESTED item number — callers match their
+   *  own side with `normalizeSku(itemNumber)` (SKU-class rule: never raw
+   *  `===`). */
+  sku: string
+  /** Trailing-12mo spend ÷ quantity (rows with qty ≤ 0 are excluded). */
+  avgUnitPrice: number
+  /** Trailing-12mo purchased quantity (estimated annual qty). */
+  annualQty: number
+}
+
+/**
+ * Discriminated on `mode`: `one_way` is deliberately bare — the UI keeps
+ * manual entry / uploads and shows the "Manual mode (one-way)" badge.
+ */
+export type FacilityActualsForVendor =
+  | { mode: "one_way" }
+  | {
+      mode: "two_way"
+      items: FacilityActualsItem[]
+      /** Vendor spend ÷ facility spend in the vendor's categories, as a
+       *  WHOLE percent (0–100, rounded 0.1) — UI-state units. Null when no
+       *  denominator exists. */
+      currentSharePct: number | null
+      /** The share denominator: trailing-12mo facility spend (all vendors)
+       *  within the vendor's canonical categories — seeds the Deal Scorer's
+       *  "Facility estimated annual category spend". */
+      categorySpend: number | null
+    }
+
+/**
+ * Facility actuals for the Deal Scorer's two-way sync (Vick's item 4):
+ * when the vendor has an ACCEPTED `two_way` connection with the facility,
+ * return per-SKU trailing-12mo actuals (avg unit price + annual qty) from
+ * the facility's COGRecord rows for THIS vendor, plus the vendor's current
+ * category market share and the category-spend denominator. Anything else —
+ * no connection, pending/declined, or `one_way` — returns `{mode:"one_way"}`
+ * and the UI stays manual.
+ *
+ * THE one mode gate in the codebase: data flows ONLY over a real
+ * `status: "accepted"`, `mode: "two_way"` Connection row. (The facility-side
+ * `vendorContractsVisibleToFacility` gate was removed as dead code
+ * 2026-07-03 — it was never enforced anywhere; re-derive from this where
+ * clause if facility-side gating is ever wanted.)
+ * `Vendor.defaultMode` never substitutes — it is the STANDALONE vendor's
+ * own operating mode (own contracts + own VendorCogRecord COGs), not a
+ * facility-data grant, so a vendor with `defaultMode: "two_way"` but no
+ * Connection row still gets `one_way` here — exactly like the contract-flow
+ * gate, which also requires the actual accepted two-way row.
+ *
+ * Tenant/IDOR: the facility must pass `vendorRelatedFacilityWhere` (throws
+ * otherwise), and every COG read is scoped `{facilityId, vendorId}` except
+ * the share denominator, which aggregates the facility's own category
+ * totals — a market-share denominator, same disclosure surface as
+ * `computeCategoryMarketShare` on the vendor dashboard. Division-restricted
+ * callers only see rows in their divisions' categories
+ * (`divisionCategoryKeySet`, like the sibling benchmark read).
+ *
+ * Share math mirrors `getVendorCOGPatterns` post-#129 (bug-bash E-C3): the
+ * denominator is facility spend in the VENDOR'S categories (canonicalized
+ * via `canonicalizeCategoryName`, never raw `===`); vendors with only
+ * uncategorized rows fall back to total facility spend.
+ */
+export async function getFacilityActualsForVendor(
+  facilityId: string,
+  itemNumbers: string[],
+): Promise<FacilityActualsForVendor> {
+  const { vendor, user } = await requireVendor()
+
+  const facility = await prisma.facility.findFirst({
+    where: { id: facilityId, ...vendorRelatedFacilityWhere(vendor.id) },
+    select: { id: true },
+  })
+  if (!facility) {
+    throw new Error("Facility not found or not related to your organization")
+  }
+
+  // The two-way gate — presence of an accepted two_way connection row.
+  const connection = await prisma.connection.findFirst({
+    where: {
+      facilityId,
+      vendorId: vendor.id,
+      status: "accepted",
+      mode: "two_way",
+    },
+    select: { id: true },
+  })
+  if (!connection) return { mode: "one_way" }
+
+  const divisionIds = await callerVendorDivisionIds(user.id, vendor.id)
+  const divisionCategoryKeys = await divisionCategoryKeySet(divisionIds)
+
+  const wanted = new Set(
+    itemNumbers.map((s) => normalizeSku(s)).filter((s) => s.length > 0),
+  )
+  const { start, end } = getTrailing12MonthWindow()
+
+  const [vendorRows, facilityCategoryGroups] = await Promise.all([
+    prisma.cOGRecord.findMany({
+      where: {
+        facilityId,
+        vendorId: vendor.id,
+        transactionDate: { gte: start, lte: end },
+      },
+      select: {
+        vendorItemNo: true,
+        extendedPrice: true,
+        quantity: true,
+        category: true,
+      },
+    }),
+    prisma.cOGRecord.groupBy({
+      by: ["category"],
+      where: { facilityId, transactionDate: { gte: start, lte: end } },
+      _sum: { extendedPrice: true },
+    }),
+  ])
+
+  // Division isolation by category (COGRecord has no division column) —
+  // same predicate the benchmark read uses.
+  const scopedRows = vendorRows.filter((r) =>
+    categoryInDivisionScope(r.category, divisionCategoryKeys),
+  )
+
+  let vendorSpend = 0
+  const vendorCategories = new Set<string>()
+  const bySku = new Map<string, { spend: number; qty: number }>()
+  for (const r of scopedRows) {
+    const spend = Number(r.extendedPrice ?? 0)
+    vendorSpend += spend
+    const canon = canonicalizeCategoryName(r.category ?? "")
+    if (canon !== "") vendorCategories.add(canon)
+    const key = normalizeSku(r.vendorItemNo)
+    if (!key || !wanted.has(key)) continue
+    const cur = bySku.get(key) ?? { spend: 0, qty: 0 }
+    cur.spend += spend
+    cur.qty += r.quantity ?? 0
+    bySku.set(key, cur)
+  }
+
+  const items: FacilityActualsItem[] = [...bySku.entries()]
+    .filter(([, v]) => v.qty > 0)
+    .map(([sku, v]) => ({
+      sku,
+      avgUnitPrice: v.spend / v.qty,
+      annualQty: v.qty,
+    }))
+
+  // Denominator (E-C3 mirror): facility spend in the vendor's canonical
+  // categories; uncategorized-only vendors fall back to total facility spend.
+  let categorySpend: number | null = null
+  if (scopedRows.length > 0) {
+    categorySpend = facilityCategoryGroups
+      .filter(
+        (g) =>
+          vendorCategories.size === 0 ||
+          vendorCategories.has(canonicalizeCategoryName(g.category ?? "")),
+      )
+      .reduce((s, g) => s + Number(g._sum?.extendedPrice ?? 0), 0)
+    if (!(categorySpend > 0)) categorySpend = null
+  }
+
+  const currentSharePct =
+    categorySpend != null
+      ? Math.round((vendorSpend / categorySpend) * 1000) / 10
+      : null
+
+  const result: FacilityActualsForVendor = {
+    mode: "two_way",
+    items,
+    currentSharePct,
+    categorySpend,
+  }
+  return serialize(result)
+}
+
 // ─── Action ────────────────────────────────────────────────────
 
 export async function getVendorProspectiveAnalysis(
   input: VendorProspectiveAnalysisInput,
-): Promise<VendorProspectiveResult> {
+): Promise<VendorProspectiveAnalysisResult> {
   const { vendor, user } = await requireVendor()
   await requireCanMutate()
   // Division isolation: a restricted member can only attach a score to a
@@ -312,7 +515,7 @@ async function runAnalysis(
   input: VendorProspectiveAnalysisInput,
   divisionScope: { vendorDivisionId?: { in: string[] } } = {},
   divisionCategoryKeys: Set<string> | null = null,
-): Promise<VendorProspectiveResult> {
+): Promise<VendorProspectiveAnalysisResult> {
   // Audit M5: scope the facility lookup to vendor-related facilities,
   // and fail with a clear message instead of a bare findUniqueOrThrow
   // digest (audit L11).
@@ -481,19 +684,72 @@ async function runAnalysis(
   const result = analyzeVendorProspective(analyzerInput)
   if (backfillWarning) result.warnings.push(backfillWarning)
 
+  // Wave-3 F: the weighted deal-quality score. Resolve the constructs'
+  // picked-benchmark medians first (percentile50, fallback nationalAvgPrice)
+  // — the vendor's OWN uploaded rows only (prospective-benchmarks
+  // invariant: never the seeded vendorId-null rows), division-scoped by
+  // category like every other vendor benchmark read.
+  const benchmarkMedianById = await resolveConstructBenchmarkMedians(
+    vendor.id,
+    input.constructs ?? [],
+    divisionCategoryKeys,
+  )
+  const dealScore = deriveOverallScore(result, input, benchmarkMedianById)
+
   // Audit H2: persist the overall score onto the selected draft
   // proposal so the proposals list can display a REAL score.
   if (input.proposalRowId) {
     if (proposalRow) {
-      const score = deriveOverallScore(result, {
-        target: input.targetGrossMarginPercent,
-        floor: input.minimumAcceptableGrossMarginPercent,
-      })
+      const score = dealScore.overall
+      // Wave-3 F: validate the (server-built) legend rows before the JSON-
+      // column write, like dealAssumptions — a failure drops the legend,
+      // never the score itself.
+      const safeScoreComponents = dealScoreComponentsSchema.safeParse(
+        dealScore.components,
+      )
       // Validate constructs before persisting; drop silently to [] on a bad
       // shape so a malformed payload never blocks the score write.
       const safeConstructs = z
         .array(dealConstructSchema)
         .safeParse(input.constructs ?? [])
+      // Wave-2 D (consolidation round-trip): persist EVERY Step-1 assumption
+      // so re-opening the proposal restores the Deal Scorer with zero
+      // re-entry. UNITS: `*Pct` fields are WHOLE percents (40 = 40%) — the
+      // UI string-state units — converted here, once, from the analyzer
+      // input's fractions (see lib/prospective/deal-assumptions.ts). Zod-
+      // validated JSON-column write (CLAUDE.md); a bad shape drops the
+      // assumptions (keeping any previously saved ones via the meta spread)
+      // rather than blocking the score write.
+      const safeAssumptions = dealAssumptionsSchema.safeParse({
+        targetMarginPct: fractionToWholePct(input.targetGrossMarginPercent),
+        floorMarginPct: fractionToWholePct(
+          input.minimumAcceptableGrossMarginPercent,
+        ),
+        currentSharePct:
+          input.facilityCurrentVendorShare != null
+            ? fractionToWholePct(input.facilityCurrentVendorShare)
+            : null,
+        estimatedSpend: input.facilityEstimatedAnnualSpend ?? null,
+        estimatedSpendCategory: input.estimatedSpendCategory ?? null,
+        internalUnitCost: input.internalUnitCost ?? null,
+        contractVariant: input.contractVariant,
+        capital: input.capitalDetails
+          ? {
+              equipmentCost: input.capitalDetails.equipmentCost,
+              // Optional analyzer fields default to the analyzer's own
+              // fallbacks (same values the Deal Scorer form seeds).
+              annualMaintenanceCost:
+                input.capitalDetails.annualMaintenanceCost ?? 0,
+              termMonths: input.capitalDetails.termMonths ?? 60,
+              interestRatePct: fractionToWholePct(
+                input.capitalDetails.interestRate ?? 0.05,
+              ),
+              discountRatePct: fractionToWholePct(
+                input.capitalDetails.discountRate ?? 0.1,
+              ),
+            }
+          : null,
+      } satisfies DealAssumptions)
       // auth-scope-scanner-skip: row authorized via vendor-scoped findFirst above
       await prisma.pendingContract.update({
         where: { id: proposalRow.id },
@@ -502,6 +758,13 @@ async function runAnalysis(
             JSON.stringify({
               ...proposalMeta,
               dealScore: { score, scoredAt: new Date().toISOString() },
+              // Wave-3 F: the per-component legend, so My-Proposals / the
+              // detail dialog can explain the score later. Zod-validated
+              // like dealAssumptions (CLAUDE.md: validate JSON-column
+              // writes); additive/optional on read.
+              ...(safeScoreComponents.success
+                ? { scoreComponents: safeScoreComponents.data }
+                : {}),
               // Deal-Scorer handoff payload for the Opportunity Engine.
               dealConstructs: safeConstructs.success ? safeConstructs.data : [],
               dealCurrentAnnualSpend: input.currentAnnualSpend ?? 0,
@@ -517,6 +780,11 @@ async function runAnalysis(
               // Capital in the deal (equipment cost) — so the persisted
               // handoff's Capital/Robotic figure matches the live one.
               dealCapitalRevenue: input.capitalDetails?.equipmentCost ?? null,
+              // Step-1 assumptions round-trip (Wave-2 D) — only overwrite
+              // when the fresh payload validated.
+              ...(safeAssumptions.success
+                ? { dealAssumptions: safeAssumptions.data }
+                : {}),
             }),
           ) as Prisma.InputJsonValue,
         },
@@ -528,32 +796,97 @@ async function runAnalysis(
     }
   }
 
-  return serialize(result)
+  const analysisResult: VendorProspectiveAnalysisResult = {
+    ...result,
+    dealScore,
+  }
+  return serialize(analysisResult)
 }
 
 // ─── Helpers ───────────────────────────────────────────────────
 
 /**
- * Map the analyzer result to a 0–100 deal score for the proposals list
- * (audit H2). Anchors: no scenario clears the floor → 20; margin at the
- * floor → 50; margin at target → 80; above target climbs 1 point per
- * margin point, capped at 100. Recommendation thresholds at read time
- * mirror the legacy scorer (80 / 65 / 40 — see
- * `recommendationForScore` in lib/actions/prospective.ts).
+ * Resolve the constructs' picked-benchmark ids to a median price
+ * (`percentile50`, fallback `nationalAvgPrice`) for the deal score's
+ * price-vs-benchmark component. UPLOADED rows only (`vendorId: vendor.id`
+ * — the prospective-benchmarks invariant), division-scoped by category
+ * like the sibling benchmark reads. Ids that don't resolve to a usable
+ * price are simply absent from the map (the construct scores as
+ * un-benchmarked).
+ */
+async function resolveConstructBenchmarkMedians(
+  vendorId: string,
+  constructs: PersistedDealConstruct[],
+  divisionCategoryKeys: Set<string> | null,
+): Promise<Map<string, number>> {
+  const ids = [
+    ...new Set(
+      constructs
+        .map((c) => c.benchmarkId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ]
+  const medianById = new Map<string, number>()
+  if (ids.length === 0) return medianById
+
+  const rows = await prisma.productBenchmark.findMany({
+    where: { id: { in: ids }, vendorId },
+    select: {
+      id: true,
+      category: true,
+      percentile50: true,
+      nationalAvgPrice: true,
+    },
+  })
+  for (const b of rows) {
+    if (!categoryInDivisionScope(b.category, divisionCategoryKeys)) continue
+    const p50 = Number(b.percentile50 ?? 0)
+    const median = p50 > 0 ? p50 : Number(b.nationalAvgPrice ?? 0)
+    if (median > 0) medianById.set(b.id, median)
+  }
+  return medianById
+}
+
+/**
+ * Thin adapter over the canonical `computeDealScore`
+ * (lib/prospective-analysis/deal-score.ts — Wave-3 F). The old
+ * implementation here was margin-vs-own-target anchors ONLY
+ * (20/50/80 + 1pt per point above target), which scored a blank form
+ * ~95 "strong_accept" off the 55% GM assumption; the weighted blend
+ * (margin 35 / price-vs-benchmark 25 / rebate 15 / share-ask 10 /
+ * data-confidence 15) lives in the pure module — never re-derive it
+ * inline. Recommendation thresholds at read time stay 80/65/40
+ * (`recommendationForScore` in lib/actions/prospective.ts).
  */
 function deriveOverallScore(
   result: VendorProspectiveResult,
-  margins: { target: number; floor: number },
-): number {
-  const rec = result.recommendedScenario
-  if (!rec) return 20
-  const m = rec.grossMarginPercent
-  if (m >= margins.target) {
-    return Math.min(100, Math.round(80 + (m - margins.target) * 100))
-  }
-  const span = margins.target - margins.floor
-  if (span <= 0) return 80
-  return Math.round(50 + 30 * ((m - margins.floor) / span))
+  input: VendorProspectiveAnalysisInput,
+  benchmarkMedianById: Map<string, number>,
+): DealScoreBreakdown {
+  return computeDealScore({
+    recommendedGrossMargin:
+      result.recommendedScenario?.grossMarginPercent ?? null,
+    targetGrossMargin: input.targetGrossMarginPercent,
+    floorGrossMargin: input.minimumAcceptableGrossMarginPercent,
+    internalCostProvided:
+      input.internalUnitCost != null && input.internalUnitCost > 0,
+    constructs: (input.constructs ?? []).map((c) => ({
+      targetUnitPrice: c.target,
+      annualVolume: c.annualVolume,
+      rebatePercent: c.rebatePercent,
+      benchmarkMedian: c.benchmarkId
+        ? (benchmarkMedianById.get(c.benchmarkId) ?? null)
+        : null,
+    })),
+    currentShareFraction: input.facilityCurrentVendorShare ?? null,
+    targetShareFraction: input.targetVendorShare ?? null,
+    // "Actuals present" = a real current-revenue figure fed the analysis
+    // (Σ currentPrice × volume from uploads / proposal items / the two-way
+    // facility-actuals sync) — the strongest signal the baseline is real.
+    actualsPresent:
+      input.facilityCurrentVendorRevenue != null &&
+      input.facilityCurrentVendorRevenue > 0,
+  })
 }
 
 function mapFacilityType(t: string): VendorFacilityType {

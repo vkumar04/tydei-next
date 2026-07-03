@@ -28,7 +28,13 @@ import {
   Cpu,
   Sparkles,
   Target,
+  Info,
 } from "lucide-react"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -50,7 +56,14 @@ import { updateProposalOpportunity } from "@/lib/actions/prospective"
 import {
   computeOpportunityEngine,
   DEFAULT_OPPORTUNITY_SCENARIO,
+  type OpportunityScenarioInput,
 } from "@/lib/prospective-analysis/opportunity-engine"
+import {
+  explainOpportunityEngine,
+  type OpportunityExplainSources,
+  type OpportunityLeverSource,
+  type OpportunityOutputExplanation,
+} from "@/lib/prospective-analysis/opportunity-explain"
 import {
   computeVendorOpportunityScore,
   type ScoreDimension,
@@ -206,41 +219,115 @@ export function OpportunityEngineSection({
   const targetShare = targetSharePctInt / 100
   const expectedVolumeGrowthPct = volumeGrowthPctInt / 100
 
-  // Real DB seed: the vendor's trailing-12mo ASP, addressable market, share.
-  const { data: dbData } = useVendorOpportunityData(vendorId)
+  // The Deal Scenario facility, resolved name→id (same resolution the
+  // Facility Current State sync uses). When it names a known facility, the
+  // DB seed below is SCOPED to it — the engine models "this facility"
+  // instead of the vendor's whole book of business.
+  const scopedFacilityId =
+    facilities.find((f) => f.name === facility.trim())?.id ?? null
+
+  // Real DB seed: the vendor's trailing-12mo ASP, addressable market, share —
+  // facility-scoped when the Deal Scenario names a known facility.
+  const { data: dbData } = useVendorOpportunityData(
+    vendorId,
+    scopedFacilityId ?? undefined,
+  )
   const aiInsights = useVendorOpportunityInsights()
 
-  const engine = useMemo(
-    () =>
-      computeOpportunityEngine({
-        ...DEFAULT_OPPORTUNITY_SCENARIO,
-        // DB-seeded measurables (fall back to defaults when the vendor has no
-        // sales yet).
-        currentAsp:
-          dbData?.hasData && dbData.currentAsp > 0
-            ? dbData.currentAsp
-            : DEFAULT_OPPORTUNITY_SCENARIO.currentAsp,
-        addressableSpend:
-          dbData?.hasData && dbData.addressableSpend > 0
-            ? dbData.addressableSpend
-            : DEFAULT_OPPORTUNITY_SCENARIO.addressableSpend,
-        currentShare: dbData?.hasData
-          ? dbData.currentShare
-          : DEFAULT_OPPORTUNITY_SCENARIO.currentShare,
-        // Real incumbent signal: the top competitor's spend share (0–1
-        // fraction) at the vendor's facilities, not the hardcoded default.
-        incumbentStrength:
-          dbData?.hasData && dbData.topCompetitorSharePct != null
-            ? dbData.topCompetitorSharePct
-            : DEFAULT_OPPORTUNITY_SCENARIO.incumbentStrength,
-        // Capital rides in from the deal handoff — 0 when the deal has none.
-        capitalRoboticRevenue: capitalRevenue,
-        priceChangePct,
-        targetShare,
-        expectedVolumeGrowthPct,
-      }),
+  const scenario = useMemo<OpportunityScenarioInput>(
+    () => ({
+      ...DEFAULT_OPPORTUNITY_SCENARIO,
+      // DB-seeded measurables (fall back to defaults when the vendor has no
+      // sales yet).
+      currentAsp:
+        dbData?.hasData && dbData.currentAsp > 0
+          ? dbData.currentAsp
+          : DEFAULT_OPPORTUNITY_SCENARIO.currentAsp,
+      addressableSpend:
+        dbData?.hasData && dbData.addressableSpend > 0
+          ? dbData.addressableSpend
+          : DEFAULT_OPPORTUNITY_SCENARIO.addressableSpend,
+      currentShare: dbData?.hasData
+        ? dbData.currentShare
+        : DEFAULT_OPPORTUNITY_SCENARIO.currentShare,
+      // Real incumbent signal: the top competitor's spend share (0–1
+      // fraction) at the vendor's facilities, not the hardcoded default.
+      incumbentStrength:
+        dbData?.hasData && dbData.topCompetitorSharePct != null
+          ? dbData.topCompetitorSharePct
+          : DEFAULT_OPPORTUNITY_SCENARIO.incumbentStrength,
+      // Capital rides in from the deal handoff — 0 when the deal has none.
+      capitalRoboticRevenue: capitalRevenue,
+      priceChangePct,
+      targetShare,
+      expectedVolumeGrowthPct,
+    }),
     [dbData, capitalRevenue, priceChangePct, targetShare, expectedVolumeGrowthPct],
   )
+
+  const engine = useMemo(() => computeOpportunityEngine(scenario), [scenario])
+
+  // Calculation transparency: per-output explain tables (formula + levers +
+  // where each lever came from). The section knows the provenance — whether
+  // the DB seed applied (dbData.hasData), whether a deal handoff set a
+  // slider, or whether a slider still sits at its default seed.
+  const explains = useMemo(() => {
+    const handoffApplied =
+      initialDeal != null && appliedDealRef.current === initialDeal.proposalId
+    const priceFromHandoff =
+      handoffApplied &&
+      priceChangePctInt ===
+        clamp(Math.round((initialDeal?.priceChangePct ?? 0) * 100), -20, 20)
+    const shareFromHandoff =
+      handoffApplied &&
+      initialDeal?.targetSharePct != null &&
+      targetSharePctInt === clamp(Math.round(initialDeal.targetSharePct), 0, 100)
+    const sliderSource = (
+      atDefault: boolean,
+      fromHandoff: boolean,
+    ): OpportunityLeverSource =>
+      fromHandoff ? "deal handoff" : atDefault ? "default" : "slider"
+    const dataSource = (isReal: boolean): OpportunityLeverSource =>
+      isReal ? "your data" : "default"
+
+    const sources: OpportunityExplainSources = {
+      priceChangePct: sliderSource(
+        priceChangePctInt ===
+          Math.round(DEFAULT_OPPORTUNITY_SCENARIO.priceChangePct * 100),
+        priceFromHandoff,
+      ),
+      targetShare: sliderSource(
+        targetSharePctInt ===
+          Math.round(DEFAULT_OPPORTUNITY_SCENARIO.targetShare * 100),
+        shareFromHandoff,
+      ),
+      expectedVolumeGrowthPct: sliderSource(
+        volumeGrowthPctInt ===
+          Math.round(
+            DEFAULT_OPPORTUNITY_SCENARIO.expectedVolumeGrowthPct * 100,
+          ),
+        false,
+      ),
+      currentShare: dataSource(dbData?.hasData === true),
+      incumbentStrength: dataSource(
+        dbData?.hasData === true && dbData.topCompetitorSharePct != null,
+      ),
+      addressableSpend: dataSource(
+        dbData?.hasData === true && dbData.addressableSpend > 0,
+      ),
+      currentAsp: dataSource(dbData?.hasData === true && dbData.currentAsp > 0),
+    }
+    return explainOpportunityEngine(scenario, sources)
+  }, [
+    scenario,
+    dbData,
+    initialDeal,
+    priceChangePctInt,
+    targetSharePctInt,
+    volumeGrowthPctInt,
+  ])
+  const explainFor = (key: OpportunityOutputExplanation["key"]) =>
+    explains.filter((e) => e.key === key)
 
   const score = useMemo(
     () =>
@@ -396,9 +483,7 @@ export function OpportunityEngineSection({
       <FacilityCurrentStatePanel
         vendorId={vendorId}
         facilities={facilities}
-        syncFacilityId={
-          facilities.find((f) => f.name === facility.trim())?.id ?? null
-        }
+        syncFacilityId={scopedFacilityId}
         onSnapshotChange={setFacilitySnapshot}
       />
 
@@ -507,6 +592,11 @@ export function OpportunityEngineSection({
       )}
 
       {/* Six output stat cards */}
+      <p className="text-xs text-muted-foreground">
+        {scopedFacilityId
+          ? `Modeled for this facility (${facility.trim()})`
+          : "Modeled across your book of business"}
+      </p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           icon={Target}
@@ -514,6 +604,7 @@ export function OpportunityEngineSection({
           value={formatPercent(engine.winProbability * 100)}
           valueClassName={winColor}
           sublabel={`${BAND_SUBLABEL[engine.winProbabilityBand]} — deterministic model`}
+          explains={explainFor("winProbability")}
         />
         <StatCard
           icon={TrendingUp}
@@ -521,6 +612,10 @@ export function OpportunityEngineSection({
           value={`${engine.incrementalRevenue > 0 ? "+" : ""}${usd(engine.incrementalRevenue)}`}
           valueClassName="text-emerald-600"
           sublabel={`${usd(engine.currentRevenue)} → ${usd(engine.targetRevenue)}`}
+          explains={[
+            ...explainFor("incrementalRevenue"),
+            ...explainFor("currentRevenue"),
+          ]}
         />
         <StatCard
           icon={Boxes}
@@ -528,6 +623,7 @@ export function OpportunityEngineSection({
           value={`${engine.netUnitImpact > 0 ? "+" : ""}${Math.round(engine.netUnitImpact)}`}
           valueClassName="text-emerald-600"
           sublabel="units vs current run-rate"
+          explains={explainFor("netUnitImpact")}
         />
         <StatCard
           icon={PieChart}
@@ -730,12 +826,15 @@ function StatCard({
   value,
   valueClassName,
   sublabel,
+  explains,
 }: {
   icon: React.ComponentType<{ className?: string }>
   label: string
   value: string
   valueClassName?: string
   sublabel: string
+  /** Optional calculation-transparency tables → Info popover beside the label. */
+  explains?: OpportunityOutputExplanation[]
 }) {
   return (
     <Card>
@@ -743,11 +842,92 @@ function StatCard({
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Icon className="h-4 w-4" />
           {label}
+          {explains && explains.length > 0 && (
+            <ExplainPopover explains={explains} />
+          )}
         </div>
         <p className={cn("text-2xl font-bold", valueClassName)}>{value}</p>
         <p className="text-xs text-muted-foreground">{sublabel}</p>
       </CardContent>
     </Card>
+  )
+}
+
+/** "How is this calculated?" — formula + lever rows with source badges. */
+function ExplainPopover({
+  explains,
+}: {
+  explains: OpportunityOutputExplanation[]
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="How this number is calculated"
+          className="ml-auto shrink-0 text-muted-foreground/70 transition-colors hover:text-foreground"
+        >
+          <Info className="h-3.5 w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 space-y-4 p-3 text-xs">
+        {explains.map((ex) => (
+          <div key={ex.key} className="space-y-1.5">
+            <p className="font-medium">{ex.title}</p>
+            <p className="rounded bg-muted/50 px-1.5 py-1 font-mono text-[10px] text-muted-foreground">
+              {ex.formula}
+            </p>
+            <div className="space-y-1">
+              {ex.levers.map((lever) => (
+                <div
+                  key={lever.label}
+                  className="flex items-start justify-between gap-2"
+                >
+                  <span className="text-muted-foreground">{lever.label}</span>
+                  <span className="flex shrink-0 items-center gap-1.5 text-right tabular-nums">
+                    <span>
+                      {lever.value}
+                      {lever.detail && (
+                        <span className="text-muted-foreground">
+                          {" "}
+                          {lever.detail}
+                        </span>
+                      )}
+                    </span>
+                    <SourceBadge source={lever.source} />
+                  </span>
+                </div>
+              ))}
+            </div>
+            {ex.note && (
+              <p className="text-[10px] italic leading-snug text-muted-foreground">
+                {ex.note}
+              </p>
+            )}
+          </div>
+        ))}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+const SOURCE_BADGE_CLASS: Record<OpportunityLeverSource, string> = {
+  slider: "border-primary/30 text-primary",
+  "your data": "border-emerald-300 text-emerald-700 dark:text-emerald-400",
+  default: "border-border text-muted-foreground",
+  "deal handoff": "border-amber-300 text-amber-700 dark:text-amber-400",
+}
+
+function SourceBadge({ source }: { source: OpportunityLeverSource }) {
+  return (
+    <span
+      className={cn(
+        "rounded border px-1 py-px text-[9px] font-medium uppercase leading-none tracking-wide",
+        SOURCE_BADGE_CLASS[source],
+      )}
+    >
+      {source}
+    </span>
   )
 }
 

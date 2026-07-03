@@ -960,6 +960,7 @@ export function generateTermsFromNotes(
       targetType: "spend",
       targetValue,
       rebatePercent: rebatePct,
+      rebateType: "percent",
       tiers: [],
     })
     suggestedTerms.push({
@@ -981,6 +982,7 @@ export function generateTermsFromNotes(
       targetType: "market_share",
       targetValue: sharePercent,
       rebatePercent: sharePercent >= 60 ? 2.5 : 2,
+      rebateType: "percent",
       tiers: [],
     })
     setNewProposal(prev => ({ ...prev, marketShareCommitment: sharePercent }))
@@ -1035,6 +1037,7 @@ export function generateTermsFromNotes(
       targetType: "volume",
       targetValue: 10,
       rebatePercent: 2,
+      rebateType: "percent",
       tiers: [],
     })
     suggestedTerms.push({
@@ -1056,10 +1059,12 @@ export function generateTermsFromNotes(
       targetType: "volume",
       targetValue: newProposal.projectedVolume || 100,
       rebatePercent: 0,
+      rebateType: "percent",
+      // Tier mins are UNITS (volume targetType); values are percent-of-spend.
       tiers: [
-        { threshold: 100, rebatePercent: 1 },
-        { threshold: 250, rebatePercent: 2 },
-        { threshold: 500, rebatePercent: 3 },
+        { _uid: crypto.randomUUID(), min: 100, value: 1 },
+        { _uid: crypto.randomUUID(), min: 250, value: 2 },
+        { _uid: crypto.randomUUID(), min: 500, value: 3 },
       ],
     })
     suggestedTerms.push({
@@ -1141,6 +1146,7 @@ export function generateTermsFromNotes(
         targetType: "spend" as const,
         targetValue: prev.projectedSpend || 500000,
         rebatePercent: 2.5,
+        rebateType: "percent" as const,
         tiers: [],
       }],
     }))
