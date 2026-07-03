@@ -98,6 +98,8 @@ export interface OppEngineHandoff {
   priceChangePct: number
   /** Deal's market-share commitment, 0–100, or null. */
   targetSharePct: number | null
+  /** Capital/equipment revenue in the deal (equipment cost), or null. */
+  capitalRevenue?: number | null
   /** Per-construct deal rows — feeds the export's by-product breakdown. */
   constructs?: OppDealConstructRow[]
 }
@@ -161,6 +163,9 @@ export function OpportunityEngineSection({
   // Per-construct deal rows from the handoff — included in the export's
   // by-product breakdown (the unified report).
   const [dealConstructs, setDealConstructs] = useState<OppDealConstructRow[]>([])
+  // Capital/equipment revenue from the deal — 0 when the deal has no capital
+  // block (was a hardcoded $1.3M default for every deal).
+  const [capitalRevenue, setCapitalRevenue] = useState(0)
   // The real proposal id (when reached from a saved proposal) — enables
   // saving this Opportunity run back onto the proposal so View shows it.
   const [savedProposalId, setSavedProposalId] = useState<string | null>(null)
@@ -180,6 +185,7 @@ export function OpportunityEngineSection({
     appliedDealRef.current = initialDeal.proposalId
     setDealConstructs(initialDeal.constructs ?? [])
     setSavedProposalId(initialDeal.savedProposalId ?? null)
+    setCapitalRevenue(initialDeal.capitalRevenue ?? 0)
     if (initialDeal.facilityId) {
       const f = facilities.find((x) => x.id === initialDeal.facilityId)
       if (f) setFacility(f.name)
@@ -221,11 +227,19 @@ export function OpportunityEngineSection({
         currentShare: dbData?.hasData
           ? dbData.currentShare
           : DEFAULT_OPPORTUNITY_SCENARIO.currentShare,
+        // Real incumbent signal: the top competitor's spend share (0–1
+        // fraction) at the vendor's facilities, not the hardcoded default.
+        incumbentStrength:
+          dbData?.hasData && dbData.topCompetitorSharePct != null
+            ? dbData.topCompetitorSharePct
+            : DEFAULT_OPPORTUNITY_SCENARIO.incumbentStrength,
+        // Capital rides in from the deal handoff — 0 when the deal has none.
+        capitalRoboticRevenue: capitalRevenue,
         priceChangePct,
         targetShare,
         expectedVolumeGrowthPct,
       }),
-    [dbData, priceChangePct, targetShare, expectedVolumeGrowthPct],
+    [dbData, capitalRevenue, priceChangePct, targetShare, expectedVolumeGrowthPct],
   )
 
   const score = useMemo(
@@ -496,22 +510,22 @@ export function OpportunityEngineSection({
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           icon={Target}
-          label="Win Probability"
+          label="Win Probability (model)"
           value={formatPercent(engine.winProbability * 100)}
           valueClassName={winColor}
-          sublabel={BAND_SUBLABEL[engine.winProbabilityBand]}
+          sublabel={`${BAND_SUBLABEL[engine.winProbabilityBand]} — deterministic model`}
         />
         <StatCard
           icon={TrendingUp}
           label="Incremental Revenue"
-          value={`+${usd(engine.incrementalRevenue)}`}
+          value={`${engine.incrementalRevenue > 0 ? "+" : ""}${usd(engine.incrementalRevenue)}`}
           valueClassName="text-emerald-600"
           sublabel={`${usd(engine.currentRevenue)} → ${usd(engine.targetRevenue)}`}
         />
         <StatCard
           icon={Boxes}
           label="Net Unit Impact"
-          value={`+${Math.round(engine.netUnitImpact)}`}
+          value={`${engine.netUnitImpact > 0 ? "+" : ""}${Math.round(engine.netUnitImpact)}`}
           valueClassName="text-emerald-600"
           sublabel="units vs current run-rate"
         />
@@ -528,12 +542,14 @@ export function OpportunityEngineSection({
           valueClassName="text-emerald-600"
           sublabel="Counts toward the rep's territory number"
         />
-        <StatCard
-          icon={Cpu}
-          label="Capital / Robotic Revenue"
-          value={usd(engine.capitalRoboticRevenue)}
-          sublabel="Does not hit territory number"
-        />
+        {engine.capitalRoboticRevenue > 0 && (
+          <StatCard
+            icon={Cpu}
+            label="Capital / Robotic Revenue"
+            value={usd(engine.capitalRoboticRevenue)}
+            sublabel="Does not hit territory number"
+          />
+        )}
       </div>
 
       {/* AI Win Probability & Recommended Offer */}

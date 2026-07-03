@@ -45,6 +45,20 @@ function findContains(normHeaders: string[], needles: string[]): number {
 const NAME_ALIASES = [...DESCRIPTION_ALIASES, "product_name", "name", "product"]
 const QTY_ALIASES = ["quantity", "qty", "volume", "units", "quantity_ordered"]
 const COST_BASIS_ALIASES = ["cost_basis", "cog", "cost_of_goods", "vendor_cost"]
+// What the facility pays TODAY — feeds the Deal Scorer's Current-column
+// prefill (ProposalProduct.currentPrice). There is no canonical
+// current-price list in lib/utils/parse-pricing-file.ts (the analyzer
+// keeps its own too), so these are builder-local. Deliberately NOT
+// including bare "cost"/"unit_cost": in a builder pricing file those
+// mean the proposed price (UNIT_PRICE_ALIASES).
+const CURRENT_PRICE_ALIASES = [
+  "current_price",
+  "current price",
+  "current unit price",
+  "current cost",
+  "today's price",
+  "existing price",
+]
 
 function findCategoryIdx(normHeaders: string[]): number {
   const exact = findExact(normHeaders, CATEGORY_ALIASES)
@@ -62,6 +76,16 @@ function findCategoryIdx(normHeaders: string[]): number {
 export const BUILDER_PRICING_UPLOAD_SPECS: UploadFieldSpec[] = [
   { key: "name", label: "Product name", aliases: NAME_ALIASES, kind: "text" },
   { key: "ref", label: "Reference number", aliases: ITEM_NUMBER_ALIASES, kind: "text" },
+  // Order matters: currentPrice resolves BEFORE the proposed price so
+  // resolveMapping's claimed-header exclusion keeps the broad price
+  // aliases / contains-"price" fallback from stealing a "Current Price"
+  // column (mirrors ANALYZER_PRICE_FILE_SPECS).
+  {
+    key: "currentPrice",
+    label: "Current price (what the facility pays today)",
+    aliases: CURRENT_PRICE_ALIASES,
+    kind: "number",
+  },
   {
     key: "price",
     label: "Proposed price",
@@ -195,6 +219,7 @@ export function mapPricingRows(
 
   let nameIdx: number
   let refIdx: number
+  let currentPriceIdx: number
   let priceIdx: number
   let qtyIdx: number
   let costIdx: number
@@ -202,6 +227,7 @@ export function mapPricingRows(
   if (mappingOverride) {
     nameIdx = overrideIndex(headers, mappingOverride, "name")
     refIdx = overrideIndex(headers, mappingOverride, "ref")
+    currentPriceIdx = overrideIndex(headers, mappingOverride, "currentPrice")
     priceIdx = overrideIndex(headers, mappingOverride, "price")
     qtyIdx = overrideIndex(headers, mappingOverride, "qty")
     costIdx = overrideIndex(headers, mappingOverride, "costBasis")
@@ -209,6 +235,9 @@ export function mapPricingRows(
   } else {
     nameIdx = findExact(normHeaders, NAME_ALIASES)
     refIdx = findExact(normHeaders, ITEM_NUMBER_ALIASES)
+    // Current price resolves first so the contains-"price" fallback
+    // below can't claim a "Current Price" column as the proposed price.
+    currentPriceIdx = findExact(normHeaders, CURRENT_PRICE_ALIASES)
     // proposed_price first (a proposal file's own column), then the
     // canonical price list, then the legacy contains-"price" fallback so
     // headers like "List Price" still resolve as they did before.
@@ -217,7 +246,11 @@ export function mapPricingRows(
       "proposedprice",
       ...UNIT_PRICE_ALIASES,
     ])
-    if (priceIdx === -1) priceIdx = findContains(normHeaders, ["price"])
+    if (priceIdx === -1) {
+      priceIdx = normHeaders.findIndex(
+        (h, i) => i !== currentPriceIdx && h.includes("price"),
+      )
+    }
     qtyIdx = findExact(normHeaders, QTY_ALIASES)
     costIdx = findExact(normHeaders, COST_BASIS_ALIASES)
     categoryIdx = findCategoryIdx(normHeaders)
@@ -240,6 +273,8 @@ export function mapPricingRows(
     if (!productName) continue
 
     const refNumber = refIdx !== -1 ? get(row, refIdx).trim() || undefined : undefined
+    const currentPrice =
+      currentPriceIdx !== -1 ? parseMoney(get(row, currentPriceIdx)) || undefined : undefined
     const price = priceIdx !== -1 ? parseMoney(get(row, priceIdx)) : 0
     const qty = qtyIdx !== -1 ? parseInt(get(row, qtyIdx).replace(/,/g, "")) || 0 : 0
     const costBasis = costIdx !== -1 ? parseMoney(get(row, costIdx)) || undefined : undefined
@@ -254,6 +289,7 @@ export function mapPricingRows(
       productName,
       refNumber,
       proposedPrice: price,
+      currentPrice,
       projectedVolume: qty,
       costBasis,
       fromPricingFile: true,
@@ -373,7 +409,10 @@ export async function handlePricingRowsImport(
         return {
           ...prev,
           products: products,
-          projectedSpend: totalSpend,
+          // projectedSpend is a USER-OWNED assumption (Vick: "list ≠
+          // entered value") — files only SEED it when it's still 0,
+          // never overwrite a typed value.
+          projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : totalSpend,
           projectedVolume: totalVolume,
           productCategory:
             prev.productCategory ||
@@ -731,7 +770,9 @@ export async function handleUsageRowsImport(
           return {
             ...prev,
             products: updatedProducts,
-            projectedSpend: prev.projectedSpend + totalRevenue,
+            // Seed-only (user-owned assumption): a usage upload used to
+            // ADD to projectedSpend, so a re-upload double-counted.
+            projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : totalRevenue,
             projectedVolume: prev.projectedVolume + totalVolume,
             totalOpportunity: prev.totalOpportunity + totalRevenue,
             productCategory: prev.productCategory || detectedCategory || prev.productCategory,
@@ -741,7 +782,8 @@ export async function handleUsageRowsImport(
           return {
             ...prev,
             products: [...prev.products, ...products],
-            projectedSpend: prev.projectedSpend + totalRevenue,
+            // Seed-only (user-owned assumption) — same rule as above.
+            projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : totalRevenue,
             projectedVolume: prev.projectedVolume + totalVolume,
             totalOpportunity: prev.totalOpportunity + totalRevenue,
             productCategory: prev.productCategory || detectedCategory || prev.productCategory,
@@ -856,7 +898,9 @@ export function parseProductsFromDescription(
   setNewProposal(prev => ({
     ...prev,
     products: [...prev.products, ...products],
-    projectedSpend: prev.projectedSpend + totalSpend,
+    // Seed-only: projectedSpend is a user-owned assumption — parsing a
+    // description never overwrites (or adds to) a typed value.
+    projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : totalSpend,
     projectedVolume: prev.projectedVolume + totalVolume,
     productCategory: prev.productCategory || detectedCategory || prev.productCategory,
   }))

@@ -165,9 +165,17 @@ export function ProposalCards({
                         <Calendar className="h-3.5 w-3.5" />
                         {formatDate(p.createdAt)}
                       </span>
+                      {/* Projected annual spend (the user-owned assumption),
+                          falling back to the catalog cost (Σ price × qty)
+                          for proposals without one — keeps this card in
+                          agreement with the hero + detail dialog. */}
                       <span className="flex items-center gap-1 font-medium text-foreground">
                         <DollarSign className="h-3.5 w-3.5" />
-                        {formatCurrency(p.totalProposedCost)}
+                        {formatCurrency(p.projectedSpend ?? p.totalProposedCost)}
+                        <span className="font-normal text-muted-foreground">
+                          projected annual spend
+                          {p.projectedSpend == null && " (catalog cost)"}
+                        </span>
                       </span>
                     </div>
                   </div>
@@ -189,6 +197,7 @@ export function ProposalCards({
                             facilityId: p.dealHandoff!.facilityId,
                             priceChangePct: p.dealHandoff!.priceChangePct,
                             targetSharePct: p.dealHandoff!.targetSharePct,
+                            capitalRevenue: p.dealHandoff!.capitalRevenue,
                             constructs: p.dealHandoff!.constructs,
                           })
                         }

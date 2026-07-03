@@ -198,7 +198,9 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
       return {
         ...prev,
         products: prev.products.filter(p => p.benchmarkId !== benchmarkId),
-        projectedSpend: prev.projectedSpend - (product ? product.proposedPrice * product.projectedVolume : 0),
+        // projectedSpend is a USER-OWNED assumption that uploads only
+        // seed — removing a product must not silently mutate it (Vick:
+        // "list ≠ entered value"). Volume stays derived.
         projectedVolume: prev.projectedVolume - (product?.projectedVolume || 0),
       }
     })
@@ -317,6 +319,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
         description: p.productName,
         proposedPrice: p.proposedPrice,
         currentPrice: p.currentPrice,
+        costBasis: p.costBasis,
         quantity: p.projectedVolume || 1,
       }))
 

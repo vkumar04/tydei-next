@@ -76,6 +76,26 @@ describe("computeOpportunityEngine", () => {
     expect(softAmbitious.winProbability).toBeLessThan(0.4)
   })
 
+  it("a stronger incumbent lowers win probability, all else equal", () => {
+    const weak = computeOpportunityEngine({
+      ...DEFAULT_OPPORTUNITY_SCENARIO,
+      incumbentStrength: 0.2,
+    })
+    const strong = computeOpportunityEngine({
+      ...DEFAULT_OPPORTUNITY_SCENARIO,
+      incumbentStrength: 0.9,
+    })
+    expect(strong.winProbability).toBeLessThan(weak.winProbability)
+  })
+
+  it("capital/robotic revenue is 0 when the deal carries none", () => {
+    const r = computeOpportunityEngine({
+      ...DEFAULT_OPPORTUNITY_SCENARIO,
+      capitalRoboticRevenue: 0,
+    })
+    expect(r.capitalRoboticRevenue).toBe(0)
+  })
+
   it("win probability stays within [0,1]", () => {
     const extreme = computeOpportunityEngine({
       ...DEFAULT_OPPORTUNITY_SCENARIO,

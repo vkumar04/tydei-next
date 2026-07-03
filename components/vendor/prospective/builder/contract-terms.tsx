@@ -35,6 +35,9 @@ const TERM_TYPES = [
   { value: "price_reduction", label: "Price Reduction", description: "Once spend/volume threshold is met, future purchases receive discounted unit prices.", icon: Percent },
 ]
 
+const labelForType = (value: ProspectiveTerm["termType"]): string =>
+  TERM_TYPES.find((t) => t.value === value)?.label ?? value
+
 export interface ContractTermsProps {
   newProposal: NewProposalState
   addTerm: () => void
@@ -77,7 +80,7 @@ export function ContractTerms({
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-3 [&>*]:min-w-0">
                   <div className="space-y-1">
                     <Label className="text-xs flex items-center gap-1">
                       Term Type
@@ -95,8 +98,15 @@ export function ContractTerms({
                       value={term.termType}
                       onValueChange={(v) => updateTerm(term.id, { termType: v as ProspectiveTerm["termType"] })}
                     >
-                      <SelectTrigger>
-                        <SelectValue />
+                      {/* Radix clones the selected SelectItem's children into
+                          the trigger — with the rich two-line item content
+                          below, that rendered the whole description sentence
+                          in the (w-fit) trigger and blew up the grid row.
+                          Passing plain-label children to <SelectValue> pins
+                          what the trigger displays (Radix: "Controlling the
+                          value displayed in the trigger"). */}
+                      <SelectTrigger className="w-full">
+                        <SelectValue>{labelForType(term.termType)}</SelectValue>
                       </SelectTrigger>
                       <SelectContent className="max-h-[350px]">
                         {TERM_TYPES.map(t => (
