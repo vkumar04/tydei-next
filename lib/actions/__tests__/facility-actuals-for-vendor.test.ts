@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  *
  *  E — `getFacilityActualsForVendor` (two-way sync auto-pull):
  *   - two_way gate: data flows ONLY over an accepted `mode: "two_way"`
- *     Connection row (mirrors `vendorContractsVisibleToFacility`);
+ *     Connection row (the ONE mode gate in the codebase);
  *     anything else → bare `{ mode: "one_way" }` with NO COG reads.
  *   - tenant/IDOR: an unrelated facility throws (vendorRelatedFacilityWhere).
  *   - SKU matching goes through `normalizeSku` on BOTH sides (case +

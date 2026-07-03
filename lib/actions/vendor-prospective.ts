@@ -344,9 +344,11 @@ export type FacilityActualsForVendor =
  * no connection, pending/declined, or `one_way` — returns `{mode:"one_way"}`
  * and the UI stays manual.
  *
- * Gate semantics mirror `vendorContractsVisibleToFacility`
- * (lib/actions/connection-mode.ts): data flows ONLY over a real
- * `status: "accepted"`, `mode: "two_way"` Connection row.
+ * THE one mode gate in the codebase: data flows ONLY over a real
+ * `status: "accepted"`, `mode: "two_way"` Connection row. (The facility-side
+ * `vendorContractsVisibleToFacility` gate was removed as dead code
+ * 2026-07-03 — it was never enforced anywhere; re-derive from this where
+ * clause if facility-side gating is ever wanted.)
  * `Vendor.defaultMode` never substitutes — it is the STANDALONE vendor's
  * own operating mode (own contracts + own VendorCogRecord COGs), not a
  * facility-data grant, so a vendor with `defaultMode: "two_way"` but no
