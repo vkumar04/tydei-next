@@ -364,6 +364,57 @@ grouped/pricing_only).
   time (pricing-then-PDF). The manual-entry "Discount vs market %" field is
   **positive = cheaper** to match. Regression: `__tests__/spend-dollar-term.test.ts`.
 
+### Prospective structural six (2026-07-03, plan `2026-07-03-prospective-structural-six.md`)
+
+- **Opportunity report leads with a NARRATIVE.** `buildOpportunityNarrative`
+  (`lib/prospective-analysis/opportunity-narrative.ts`, tested) is section 1 of
+  both the PDF payload (`OpportunityReportPayload.narrative`) and the CSV —
+  same story-first rule as the facility Analysis export. New figures on the
+  Opportunity Engine must reach the narrative/exporters too.
+- **Every engine output is EXPLAINABLE.** `explainOpportunityEngine`
+  (`lib/prospective-analysis/opportunity-explain.ts`, parity-tested against
+  `computeOpportunityEngine`) produces formula + lever tables with source tags
+  (`slider | your data | default | deal handoff`) rendered as Info popovers on
+  the StatCards. If you change the engine math, update the explain module in
+  the SAME change (the parity test enforces it). The engine is a dollar-share
+  model — price change deliberately does not move revenue; the popover says so.
+- **The engine scopes to the Deal-Scenario facility.**
+  `getVendorOpportunityData(facilityId?)` narrows revenue/ASP/competitor/
+  addressable to the chosen facility (tenant-safe narrowing; unscoped key is a
+  prefix of scoped keys so benchmark-import invalidation still covers both).
+  The section labels "Modeled for this facility" vs "across your book of
+  business".
+- **Proposal terms have real semantics.** `estimateProposalTerms`
+  (`lib/prospective-analysis/proposal-term-estimate.ts`, tested) is the ONE
+  term-payout calculator: payout by `rebateType` (percent/fixed/per_unit),
+  ladder metric by `targetType` (spend=DOLLARS, volume=UNITS,
+  market_share=PERCENT — the recurring type-confusion rule), price_reduction =
+  SAVINGS not rebate, market_share labeled "assumes commitment met". The
+  builder's tier rows use `_uid` (crypto.randomUUID) stripped at submit; tiers
+  + rebateType round-trip create/edit (additive on `ProposalTermSummary`).
+- **Step-1 inputs persist as `dealAssumptions`** (`lib/prospective/
+  deal-assumptions.ts` — ONE zod schema for write AND read; every `*Pct` field
+  is a WHOLE percent (40 = 40%), converted from analyzer fractions exactly
+  once at the persist boundary). The Deal Scorer restores them
+  fill-at-pristine-only, so reopening a saved deal requires ZERO re-entry.
+- **Two-way sync auto-pull:** `getFacilityActualsForVendor(facilityId,
+  itemNumbers)` returns per-SKU trailing-12mo actuals + current share +
+  category spend ONLY when an `accepted` + `mode: two_way` Connection exists
+  (`Vendor.defaultMode` NEVER substitutes — it's the standalone vendor's
+  own-COG mode, not a facility-data grant). Uploads/proposal data always win
+  over synced values (fill-only-when-empty). `vendorContractsVisibleToFacility`
+  is still enforced NOWHERE — a deliberate open decision, do not wire it in
+  casually (it changes facility-side contract visibility).
+- **Deal score = 5-component weighted blend** — `computeDealScore`
+  (`lib/prospective-analysis/deal-score.ts`, tested): marginVsTarget 35,
+  priceVsBenchmark 25, rebateCompetitiveness (2–5% band) 15, shareAskRealism
+  10, dataConfidence 15. A blank form lands ~51 "negotiate" (was 95
+  "strong_accept" off the 55%-GM assumption — the amber flag names it).
+  `deriveOverallScore` is a thin adapter; `scoreComponents` persist next to
+  `dealScore` for the legend. Recommendation thresholds (80/65/40) live in
+  `lib/actions/prospective.ts` and must not drift from
+  `recommendationForDealScore`.
+
 ## Key surfaces added recently (2026-06)
 
 - **Vendor Reports Hub** (`components/vendor/reports/hub/` + `lib/actions/vendor-reports/`)

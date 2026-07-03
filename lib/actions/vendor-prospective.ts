@@ -38,6 +38,11 @@ import {
   type VendorProspectiveInput,
   type VendorProspectiveResult,
 } from "@/lib/prospective-analysis/vendor-prospective-analyzer"
+import {
+  computeDealScore,
+  dealScoreComponentsSchema,
+  type DealScoreBreakdown,
+} from "@/lib/prospective-analysis/deal-score"
 import { z } from "zod"
 
 // ─── Input shape ───────────────────────────────────────────────
@@ -124,6 +129,18 @@ export interface VendorProspectiveAnalysisInput {
    *     (2026-06-10 audit H2 — dealScore was permanently null before).
    */
   proposalRowId?: string
+}
+
+/**
+ * What `getVendorProspectiveAnalysis` returns: the pure analyzer result
+ * plus the weighted deal-quality score (Wave-3 F). `dealScore.overall`
+ * keeps the 0–100 scale + the 80/65/40 recommendation thresholds
+ * (`recommendationForScore` in lib/actions/prospective.ts); the
+ * `components` legend lets the UI explain what moves the score.
+ */
+export interface VendorProspectiveAnalysisResult
+  extends VendorProspectiveResult {
+  dealScore: DealScoreBreakdown
 }
 
 // ─── Vendor↔facility relationship scope (audit M5) ─────────────
@@ -466,7 +483,7 @@ export async function getFacilityActualsForVendor(
 
 export async function getVendorProspectiveAnalysis(
   input: VendorProspectiveAnalysisInput,
-): Promise<VendorProspectiveResult> {
+): Promise<VendorProspectiveAnalysisResult> {
   const { vendor, user } = await requireVendor()
   await requireCanMutate()
   // Division isolation: a restricted member can only attach a score to a
@@ -496,7 +513,7 @@ async function runAnalysis(
   input: VendorProspectiveAnalysisInput,
   divisionScope: { vendorDivisionId?: { in: string[] } } = {},
   divisionCategoryKeys: Set<string> | null = null,
-): Promise<VendorProspectiveResult> {
+): Promise<VendorProspectiveAnalysisResult> {
   // Audit M5: scope the facility lookup to vendor-related facilities,
   // and fail with a clear message instead of a bare findUniqueOrThrow
   // digest (audit L11).
@@ -665,14 +682,29 @@ async function runAnalysis(
   const result = analyzeVendorProspective(analyzerInput)
   if (backfillWarning) result.warnings.push(backfillWarning)
 
+  // Wave-3 F: the weighted deal-quality score. Resolve the constructs'
+  // picked-benchmark medians first (percentile50, fallback nationalAvgPrice)
+  // — the vendor's OWN uploaded rows only (prospective-benchmarks
+  // invariant: never the seeded vendorId-null rows), division-scoped by
+  // category like every other vendor benchmark read.
+  const benchmarkMedianById = await resolveConstructBenchmarkMedians(
+    vendor.id,
+    input.constructs ?? [],
+    divisionCategoryKeys,
+  )
+  const dealScore = deriveOverallScore(result, input, benchmarkMedianById)
+
   // Audit H2: persist the overall score onto the selected draft
   // proposal so the proposals list can display a REAL score.
   if (input.proposalRowId) {
     if (proposalRow) {
-      const score = deriveOverallScore(result, {
-        target: input.targetGrossMarginPercent,
-        floor: input.minimumAcceptableGrossMarginPercent,
-      })
+      const score = dealScore.overall
+      // Wave-3 F: validate the (server-built) legend rows before the JSON-
+      // column write, like dealAssumptions — a failure drops the legend,
+      // never the score itself.
+      const safeScoreComponents = dealScoreComponentsSchema.safeParse(
+        dealScore.components,
+      )
       // Validate constructs before persisting; drop silently to [] on a bad
       // shape so a malformed payload never blocks the score write.
       const safeConstructs = z
@@ -724,6 +756,13 @@ async function runAnalysis(
             JSON.stringify({
               ...proposalMeta,
               dealScore: { score, scoredAt: new Date().toISOString() },
+              // Wave-3 F: the per-component legend, so My-Proposals / the
+              // detail dialog can explain the score later. Zod-validated
+              // like dealAssumptions (CLAUDE.md: validate JSON-column
+              // writes); additive/optional on read.
+              ...(safeScoreComponents.success
+                ? { scoreComponents: safeScoreComponents.data }
+                : {}),
               // Deal-Scorer handoff payload for the Opportunity Engine.
               dealConstructs: safeConstructs.success ? safeConstructs.data : [],
               dealCurrentAnnualSpend: input.currentAnnualSpend ?? 0,
@@ -755,32 +794,97 @@ async function runAnalysis(
     }
   }
 
-  return serialize(result)
+  const analysisResult: VendorProspectiveAnalysisResult = {
+    ...result,
+    dealScore,
+  }
+  return serialize(analysisResult)
 }
 
 // ─── Helpers ───────────────────────────────────────────────────
 
 /**
- * Map the analyzer result to a 0–100 deal score for the proposals list
- * (audit H2). Anchors: no scenario clears the floor → 20; margin at the
- * floor → 50; margin at target → 80; above target climbs 1 point per
- * margin point, capped at 100. Recommendation thresholds at read time
- * mirror the legacy scorer (80 / 65 / 40 — see
- * `recommendationForScore` in lib/actions/prospective.ts).
+ * Resolve the constructs' picked-benchmark ids to a median price
+ * (`percentile50`, fallback `nationalAvgPrice`) for the deal score's
+ * price-vs-benchmark component. UPLOADED rows only (`vendorId: vendor.id`
+ * — the prospective-benchmarks invariant), division-scoped by category
+ * like the sibling benchmark reads. Ids that don't resolve to a usable
+ * price are simply absent from the map (the construct scores as
+ * un-benchmarked).
+ */
+async function resolveConstructBenchmarkMedians(
+  vendorId: string,
+  constructs: PersistedDealConstruct[],
+  divisionCategoryKeys: Set<string> | null,
+): Promise<Map<string, number>> {
+  const ids = [
+    ...new Set(
+      constructs
+        .map((c) => c.benchmarkId)
+        .filter((id): id is string => typeof id === "string" && id.length > 0),
+    ),
+  ]
+  const medianById = new Map<string, number>()
+  if (ids.length === 0) return medianById
+
+  const rows = await prisma.productBenchmark.findMany({
+    where: { id: { in: ids }, vendorId },
+    select: {
+      id: true,
+      category: true,
+      percentile50: true,
+      nationalAvgPrice: true,
+    },
+  })
+  for (const b of rows) {
+    if (!categoryInDivisionScope(b.category, divisionCategoryKeys)) continue
+    const p50 = Number(b.percentile50 ?? 0)
+    const median = p50 > 0 ? p50 : Number(b.nationalAvgPrice ?? 0)
+    if (median > 0) medianById.set(b.id, median)
+  }
+  return medianById
+}
+
+/**
+ * Thin adapter over the canonical `computeDealScore`
+ * (lib/prospective-analysis/deal-score.ts — Wave-3 F). The old
+ * implementation here was margin-vs-own-target anchors ONLY
+ * (20/50/80 + 1pt per point above target), which scored a blank form
+ * ~95 "strong_accept" off the 55% GM assumption; the weighted blend
+ * (margin 35 / price-vs-benchmark 25 / rebate 15 / share-ask 10 /
+ * data-confidence 15) lives in the pure module — never re-derive it
+ * inline. Recommendation thresholds at read time stay 80/65/40
+ * (`recommendationForScore` in lib/actions/prospective.ts).
  */
 function deriveOverallScore(
   result: VendorProspectiveResult,
-  margins: { target: number; floor: number },
-): number {
-  const rec = result.recommendedScenario
-  if (!rec) return 20
-  const m = rec.grossMarginPercent
-  if (m >= margins.target) {
-    return Math.min(100, Math.round(80 + (m - margins.target) * 100))
-  }
-  const span = margins.target - margins.floor
-  if (span <= 0) return 80
-  return Math.round(50 + 30 * ((m - margins.floor) / span))
+  input: VendorProspectiveAnalysisInput,
+  benchmarkMedianById: Map<string, number>,
+): DealScoreBreakdown {
+  return computeDealScore({
+    recommendedGrossMargin:
+      result.recommendedScenario?.grossMarginPercent ?? null,
+    targetGrossMargin: input.targetGrossMarginPercent,
+    floorGrossMargin: input.minimumAcceptableGrossMarginPercent,
+    internalCostProvided:
+      input.internalUnitCost != null && input.internalUnitCost > 0,
+    constructs: (input.constructs ?? []).map((c) => ({
+      targetUnitPrice: c.target,
+      annualVolume: c.annualVolume,
+      rebatePercent: c.rebatePercent,
+      benchmarkMedian: c.benchmarkId
+        ? (benchmarkMedianById.get(c.benchmarkId) ?? null)
+        : null,
+    })),
+    currentShareFraction: input.facilityCurrentVendorShare ?? null,
+    targetShareFraction: input.targetVendorShare ?? null,
+    // "Actuals present" = a real current-revenue figure fed the analysis
+    // (Σ currentPrice × volume from uploads / proposal items / the two-way
+    // facility-actuals sync) — the strongest signal the baseline is real.
+    actualsPresent:
+      input.facilityCurrentVendorRevenue != null &&
+      input.facilityCurrentVendorRevenue > 0,
+  })
 }
 
 function mapFacilityType(t: string): VendorFacilityType {

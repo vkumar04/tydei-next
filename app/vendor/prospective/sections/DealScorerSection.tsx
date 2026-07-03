@@ -38,11 +38,13 @@ import {
   getFacilityActualsForVendor,
   getVendorProspectiveAnalysis,
   type VendorProspectiveAnalysisInput,
+  type VendorProspectiveAnalysisResult,
 } from "@/lib/actions/vendor-prospective"
 import type {
   VendorContractVariant,
   VendorProspectiveResult,
 } from "@/lib/prospective-analysis/vendor-prospective-analyzer"
+import { DealScoreLegend } from "@/components/vendor/prospective/deal-score-view"
 import {
   getVendorProposalDetail,
   type VendorProposal,
@@ -1090,7 +1092,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
 
 // ─── Results ───────────────────────────────────────────────────
 
-function ResultsView({ result }: { result: VendorProspectiveResult }) {
+function ResultsView({ result }: { result: VendorProspectiveAnalysisResult }) {
   // Audit M6: no caller supplies a proposedRebateConfig today, so the
   // tier-optimization result is the "No tiered rebate config supplied"
   // sentinel (all three numeric fields null). Hide the card rather than
@@ -1103,6 +1105,10 @@ function ResultsView({ result }: { result: VendorProspectiveResult }) {
 
   return (
     <div className="space-y-4">
+      {/* Wave-3 F: the weighted deal score + "what moves it" legend (incl.
+          the amber 55%-GM-assumed flag) leads the results. */}
+      <DealScoreLegend breakdown={result.dealScore} />
+
       {result.warnings.length > 0 && (
         <Card className="border-amber-300 bg-amber-50/50 dark:bg-amber-900/10">
           <CardContent className="flex gap-3 py-4">
