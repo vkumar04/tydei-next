@@ -21,6 +21,13 @@ import {
 } from "@/lib/case-costing/cpt-rate-map"
 import { expandCategoriesToCogVariants } from "@/lib/contracts/cog-category-filter"
 import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import {
+  dealAssumptionsSchema,
+  fractionToWholePct,
+  type DealAssumptions,
+} from "@/lib/prospective/deal-assumptions"
 import {
   analyzeVendorProspective,
   type BenchmarkDataPoint,
@@ -278,6 +285,183 @@ export async function getFacilityCurrentStateForVendor(
   })
 }
 
+// ─── Two-way sync auto-pull (Wave-2 E) ─────────────────────────
+
+/** One SKU's trailing-12mo facility actuals for this vendor. */
+export interface FacilityActualsItem {
+  /** `normalizeSku` key of the REQUESTED item number — callers match their
+   *  own side with `normalizeSku(itemNumber)` (SKU-class rule: never raw
+   *  `===`). */
+  sku: string
+  /** Trailing-12mo spend ÷ quantity (rows with qty ≤ 0 are excluded). */
+  avgUnitPrice: number
+  /** Trailing-12mo purchased quantity (estimated annual qty). */
+  annualQty: number
+}
+
+/**
+ * Discriminated on `mode`: `one_way` is deliberately bare — the UI keeps
+ * manual entry / uploads and shows the "Manual mode (one-way)" badge.
+ */
+export type FacilityActualsForVendor =
+  | { mode: "one_way" }
+  | {
+      mode: "two_way"
+      items: FacilityActualsItem[]
+      /** Vendor spend ÷ facility spend in the vendor's categories, as a
+       *  WHOLE percent (0–100, rounded 0.1) — UI-state units. Null when no
+       *  denominator exists. */
+      currentSharePct: number | null
+      /** The share denominator: trailing-12mo facility spend (all vendors)
+       *  within the vendor's canonical categories — seeds the Deal Scorer's
+       *  "Facility estimated annual category spend". */
+      categorySpend: number | null
+    }
+
+/**
+ * Facility actuals for the Deal Scorer's two-way sync (Vick's item 4):
+ * when the vendor has an ACCEPTED `two_way` connection with the facility,
+ * return per-SKU trailing-12mo actuals (avg unit price + annual qty) from
+ * the facility's COGRecord rows for THIS vendor, plus the vendor's current
+ * category market share and the category-spend denominator. Anything else —
+ * no connection, pending/declined, or `one_way` — returns `{mode:"one_way"}`
+ * and the UI stays manual.
+ *
+ * Gate semantics mirror `vendorContractsVisibleToFacility`
+ * (lib/actions/connection-mode.ts): data flows ONLY over a real
+ * `status: "accepted"`, `mode: "two_way"` Connection row.
+ * `Vendor.defaultMode` never substitutes — it is the STANDALONE vendor's
+ * own operating mode (own contracts + own VendorCogRecord COGs), not a
+ * facility-data grant, so a vendor with `defaultMode: "two_way"` but no
+ * Connection row still gets `one_way` here — exactly like the contract-flow
+ * gate, which also requires the actual accepted two-way row.
+ *
+ * Tenant/IDOR: the facility must pass `vendorRelatedFacilityWhere` (throws
+ * otherwise), and every COG read is scoped `{facilityId, vendorId}` except
+ * the share denominator, which aggregates the facility's own category
+ * totals — a market-share denominator, same disclosure surface as
+ * `computeCategoryMarketShare` on the vendor dashboard. Division-restricted
+ * callers only see rows in their divisions' categories
+ * (`divisionCategoryKeySet`, like the sibling benchmark read).
+ *
+ * Share math mirrors `getVendorCOGPatterns` post-#129 (bug-bash E-C3): the
+ * denominator is facility spend in the VENDOR'S categories (canonicalized
+ * via `canonicalizeCategoryName`, never raw `===`); vendors with only
+ * uncategorized rows fall back to total facility spend.
+ */
+export async function getFacilityActualsForVendor(
+  facilityId: string,
+  itemNumbers: string[],
+): Promise<FacilityActualsForVendor> {
+  const { vendor, user } = await requireVendor()
+
+  const facility = await prisma.facility.findFirst({
+    where: { id: facilityId, ...vendorRelatedFacilityWhere(vendor.id) },
+    select: { id: true },
+  })
+  if (!facility) {
+    throw new Error("Facility not found or not related to your organization")
+  }
+
+  // The two-way gate — presence of an accepted two_way connection row.
+  const connection = await prisma.connection.findFirst({
+    where: {
+      facilityId,
+      vendorId: vendor.id,
+      status: "accepted",
+      mode: "two_way",
+    },
+    select: { id: true },
+  })
+  if (!connection) return { mode: "one_way" }
+
+  const divisionIds = await callerVendorDivisionIds(user.id, vendor.id)
+  const divisionCategoryKeys = await divisionCategoryKeySet(divisionIds)
+
+  const wanted = new Set(
+    itemNumbers.map((s) => normalizeSku(s)).filter((s) => s.length > 0),
+  )
+  const { start, end } = getTrailing12MonthWindow()
+
+  const [vendorRows, facilityCategoryGroups] = await Promise.all([
+    prisma.cOGRecord.findMany({
+      where: {
+        facilityId,
+        vendorId: vendor.id,
+        transactionDate: { gte: start, lte: end },
+      },
+      select: {
+        vendorItemNo: true,
+        extendedPrice: true,
+        quantity: true,
+        category: true,
+      },
+    }),
+    prisma.cOGRecord.groupBy({
+      by: ["category"],
+      where: { facilityId, transactionDate: { gte: start, lte: end } },
+      _sum: { extendedPrice: true },
+    }),
+  ])
+
+  // Division isolation by category (COGRecord has no division column) —
+  // same predicate the benchmark read uses.
+  const scopedRows = vendorRows.filter((r) =>
+    categoryInDivisionScope(r.category, divisionCategoryKeys),
+  )
+
+  let vendorSpend = 0
+  const vendorCategories = new Set<string>()
+  const bySku = new Map<string, { spend: number; qty: number }>()
+  for (const r of scopedRows) {
+    const spend = Number(r.extendedPrice ?? 0)
+    vendorSpend += spend
+    const canon = canonicalizeCategoryName(r.category ?? "")
+    if (canon !== "") vendorCategories.add(canon)
+    const key = normalizeSku(r.vendorItemNo)
+    if (!key || !wanted.has(key)) continue
+    const cur = bySku.get(key) ?? { spend: 0, qty: 0 }
+    cur.spend += spend
+    cur.qty += r.quantity ?? 0
+    bySku.set(key, cur)
+  }
+
+  const items: FacilityActualsItem[] = [...bySku.entries()]
+    .filter(([, v]) => v.qty > 0)
+    .map(([sku, v]) => ({
+      sku,
+      avgUnitPrice: v.spend / v.qty,
+      annualQty: v.qty,
+    }))
+
+  // Denominator (E-C3 mirror): facility spend in the vendor's canonical
+  // categories; uncategorized-only vendors fall back to total facility spend.
+  let categorySpend: number | null = null
+  if (scopedRows.length > 0) {
+    categorySpend = facilityCategoryGroups
+      .filter(
+        (g) =>
+          vendorCategories.size === 0 ||
+          vendorCategories.has(canonicalizeCategoryName(g.category ?? "")),
+      )
+      .reduce((s, g) => s + Number(g._sum?.extendedPrice ?? 0), 0)
+    if (!(categorySpend > 0)) categorySpend = null
+  }
+
+  const currentSharePct =
+    categorySpend != null
+      ? Math.round((vendorSpend / categorySpend) * 1000) / 10
+      : null
+
+  const result: FacilityActualsForVendor = {
+    mode: "two_way",
+    items,
+    currentSharePct,
+    categorySpend,
+  }
+  return serialize(result)
+}
+
 // ─── Action ────────────────────────────────────────────────────
 
 export async function getVendorProspectiveAnalysis(
@@ -494,6 +678,44 @@ async function runAnalysis(
       const safeConstructs = z
         .array(dealConstructSchema)
         .safeParse(input.constructs ?? [])
+      // Wave-2 D (consolidation round-trip): persist EVERY Step-1 assumption
+      // so re-opening the proposal restores the Deal Scorer with zero
+      // re-entry. UNITS: `*Pct` fields are WHOLE percents (40 = 40%) — the
+      // UI string-state units — converted here, once, from the analyzer
+      // input's fractions (see lib/prospective/deal-assumptions.ts). Zod-
+      // validated JSON-column write (CLAUDE.md); a bad shape drops the
+      // assumptions (keeping any previously saved ones via the meta spread)
+      // rather than blocking the score write.
+      const safeAssumptions = dealAssumptionsSchema.safeParse({
+        targetMarginPct: fractionToWholePct(input.targetGrossMarginPercent),
+        floorMarginPct: fractionToWholePct(
+          input.minimumAcceptableGrossMarginPercent,
+        ),
+        currentSharePct:
+          input.facilityCurrentVendorShare != null
+            ? fractionToWholePct(input.facilityCurrentVendorShare)
+            : null,
+        estimatedSpend: input.facilityEstimatedAnnualSpend ?? null,
+        estimatedSpendCategory: input.estimatedSpendCategory ?? null,
+        internalUnitCost: input.internalUnitCost ?? null,
+        contractVariant: input.contractVariant,
+        capital: input.capitalDetails
+          ? {
+              equipmentCost: input.capitalDetails.equipmentCost,
+              // Optional analyzer fields default to the analyzer's own
+              // fallbacks (same values the Deal Scorer form seeds).
+              annualMaintenanceCost:
+                input.capitalDetails.annualMaintenanceCost ?? 0,
+              termMonths: input.capitalDetails.termMonths ?? 60,
+              interestRatePct: fractionToWholePct(
+                input.capitalDetails.interestRate ?? 0.05,
+              ),
+              discountRatePct: fractionToWholePct(
+                input.capitalDetails.discountRate ?? 0.1,
+              ),
+            }
+          : null,
+      } satisfies DealAssumptions)
       // auth-scope-scanner-skip: row authorized via vendor-scoped findFirst above
       await prisma.pendingContract.update({
         where: { id: proposalRow.id },
@@ -517,6 +739,11 @@ async function runAnalysis(
               // Capital in the deal (equipment cost) — so the persisted
               // handoff's Capital/Robotic figure matches the live one.
               dealCapitalRevenue: input.capitalDetails?.equipmentCost ?? null,
+              // Step-1 assumptions round-trip (Wave-2 D) — only overwrite
+              // when the fresh payload validated.
+              ...(safeAssumptions.success
+                ? { dealAssumptions: safeAssumptions.data }
+                : {}),
             }),
           ) as Prisma.InputJsonValue,
         },

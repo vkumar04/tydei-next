@@ -22,6 +22,10 @@ import {
   divisionCategoryKeySet,
   categoryInDivisionScope,
 } from "@/lib/divisions/category-scope"
+import {
+  dealAssumptionsSchema,
+  type DealAssumptions,
+} from "@/lib/prospective/deal-assumptions"
 import { z } from "zod"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
@@ -187,6 +191,14 @@ export interface VendorProposalDetail extends VendorProposal {
   }[]
   /** Last Opportunity Engine run saved onto the proposal (View → Opportunity). */
   opportunityScenario?: ProposalOpportunityScenario
+  /**
+   * Step-1 Deal-Scorer assumptions persisted on Analyze (Wave-2 D,
+   * consolidation round-trip) — margins/share/spend/cost/variant/capital in
+   * UI units (whole percents; see lib/prospective/deal-assumptions.ts).
+   * Tolerant read: proposals scored before 2026-07-03 have no
+   * `dealAssumptions` key and read back as `undefined`.
+   */
+  dealAssumptions?: DealAssumptions
 }
 
 /** A saved Opportunity Engine run (inputs + key outputs). */
@@ -999,6 +1011,14 @@ export async function getVendorProposalDetail(
     : undefined
   const oppParsed = opportunityScenarioSchema.safeParse(meta.opportunityScenario)
   const opportunityScenario = oppParsed.success ? oppParsed.data : undefined
+  // Step-1 assumptions round-trip (Wave-2 D) — tolerant read: older
+  // proposals (no key / drifted shape) simply come back undefined.
+  const assumptionsParsed = dealAssumptionsSchema.safeParse(
+    meta.dealAssumptions,
+  )
+  const dealAssumptions = assumptionsParsed.success
+    ? assumptionsParsed.data
+    : undefined
 
   // Resolve targeted facilities to names. The builder writes ["none"]
   // when no facility was picked (audit M7) — drop that placeholder.
@@ -1025,6 +1045,7 @@ export async function getVendorProposalDetail(
     facilities,
     dealConstructs: dealConstructs && dealConstructs.length ? dealConstructs : undefined,
     opportunityScenario,
+    dealAssumptions,
   })
 }
 
