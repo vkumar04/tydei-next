@@ -148,14 +148,15 @@ export function ProposalStepper({
         >
           <ChevronLeft className="mr-1 h-4 w-4" /> Back
         </Button>
-        <Button
-          type="button"
-          onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
-          disabled={step === STEPS.length - 1}
-        >
-          {step === 0 ? "Next: Opportunity Engine" : "Next"}
-          <ChevronRight className="ml-1 h-4 w-4" />
-        </Button>
+        {step < STEPS.length - 1 && (
+          <Button
+            type="button"
+            onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
+          >
+            Next: Opportunity Engine
+            <ChevronRight className="ml-1 h-4 w-4" />
+          </Button>
+        )}
       </div>
     </div>
   )

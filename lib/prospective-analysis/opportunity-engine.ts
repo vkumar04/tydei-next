@@ -87,7 +87,6 @@ export interface OpportunityEngineResult {
   capitalRoboticRevenue: number
 }
 
-const DEFAULT_GROSS_MARGIN = 0.55
 const DEFAULT_INCUMBENT_STRENGTH = 0.5
 
 // ─── Engine ────────────────────────────────────────────────────
@@ -95,7 +94,6 @@ const DEFAULT_INCUMBENT_STRENGTH = 0.5
 export function computeOpportunityEngine(
   input: OpportunityScenarioInput,
 ): OpportunityEngineResult {
-  const grossMargin = input.grossMarginPct ?? DEFAULT_GROSS_MARGIN
   const incumbent = clamp01(input.incumbentStrength ?? DEFAULT_INCUMBENT_STRENGTH)
 
   const currentShare = clamp01(input.currentShare)
@@ -139,7 +137,6 @@ export function computeOpportunityEngine(
     priceChangePct: input.priceChangePct,
     shareGap: targetShare - currentShare,
     expectedVolumeGrowthPct: input.expectedVolumeGrowthPct,
-    grossMargin,
     incumbent,
   })
 
@@ -173,7 +170,6 @@ function computeWinProbability(args: {
   priceChangePct: number
   shareGap: number
   expectedVolumeGrowthPct: number
-  grossMargin: number
   incumbent: number
 }): number {
   const { priceChangePct, shareGap, expectedVolumeGrowthPct, incumbent } = args

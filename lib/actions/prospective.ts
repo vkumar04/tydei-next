@@ -32,6 +32,9 @@ export interface ProposedPricingItem {
   description?: string
   proposedPrice: number
   currentPrice?: number
+  /** Vendor's internal cost per unit (from the builder upload's cost-basis
+   *  column) — seeds the Deal Scorer's internal-unit-cost input. */
+  costBasis?: number
   quantity?: number
 }
 
@@ -120,6 +123,8 @@ export interface ProposalDealHandoff {
   priceChangePct: number
   /** Deal's market-share commitment, 0–100, or null. */
   targetSharePct: number | null
+  /** Capital/equipment revenue the deal was analyzed with, or null. */
+  capitalRevenue: number | null
   constructCount: number
   /** The per-construct rows — feed the Opportunity Engine's by-product export
    *  (structurally matches OppEngineHandoff/OppDealConstructRow). */
@@ -785,6 +790,10 @@ function payloadToProposal(
           : meta.marketShareCommitment != null
             ? Number(meta.marketShareCommitment)
             : null,
+      capitalRevenue:
+        meta.dealCapitalRevenue != null
+          ? Number(meta.dealCapitalRevenue)
+          : null,
       constructCount: rawConstructs.length,
       // Carry the per-construct rows so the Opportunity Engine's by-product
       // export works from a saved proposal (was computed-then-discarded).

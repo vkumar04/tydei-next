@@ -75,6 +75,7 @@ interface DealScorerSectionProps {
 }
 
 const NO_PROPOSAL = "__none__"
+const ALL_CATEGORIES = "__all__"
 
 // One "construct" per product line: pick a benchmark (or free-text), then enter
 // the Current / Floor / Target / Ask unit prices, annual volume and rebate %.
@@ -118,6 +119,13 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     makeConstruct(),
   ])
   const { data: benchmarks } = useVendorBenchmarks(vendorId)
+  const benchmarkCategories = useMemo(
+    () =>
+      [...new Set((benchmarks ?? []).map((b) => b.category))]
+        .filter((c) => c && c !== "Uncategorized")
+        .sort(),
+    [benchmarks],
+  )
   const benchmarkById = useMemo(
     () => new Map((benchmarks ?? []).map((b) => [b.id, b])),
     [benchmarks],
@@ -193,6 +201,23 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
           setCurrentPriceBySku(priceMap)
           setPriceLoadedCount(priceMap.size)
         }
+        // Seed internal unit cost from the builder upload's cost-basis column
+        // (quantity-weighted average) — only when the field is still blank,
+        // so a typed value is never clobbered.
+        const costed = items.filter(
+          (it) => it.costBasis != null && it.costBasis > 0,
+        )
+        if (costed.length > 0) {
+          const totalQty = costed.reduce((s, it) => s + (it.quantity ?? 1), 0)
+          const weighted =
+            costed.reduce(
+              (s, it) => s + it.costBasis! * (it.quantity ?? 1),
+              0,
+            ) / Math.max(1, totalQty)
+          setInternalUnitCost((prev) =>
+            prev ? prev : String(Math.round(weighted * 100) / 100),
+          )
+        }
         // Restore prior benchmark picks (the saved deal) — constructs only.
         const saved = detail.dealConstructs ?? []
         if (saved.length > 0) {
@@ -229,6 +254,9 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
   const [currentShare, setCurrentShare] = useState("")
   const [targetShare, setTargetShare] = useState("")
   const [estimatedSpend, setEstimatedSpend] = useState("")
+  // Which category the estimated facility spend refers to ("" = all) — feeds
+  // the server backfill's canonical category filter.
+  const [estimatedSpendCategory, setEstimatedSpendCategory] = useState("")
   const [internalUnitCost, setInternalUnitCost] = useState("")
   const [equipmentCost, setEquipmentCost] = useState("")
   const [maintenanceCost, setMaintenanceCost] = useState("")
@@ -308,6 +336,10 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
         facilityId,
         priceChangePct,
         targetSharePct: targetShare ? Number(targetShare) : null,
+        // Capital component of THIS deal — Step 2's Capital/Robotic revenue
+        // shows real deal capital or nothing (was a hardcoded $1.3M default).
+        capitalRevenue:
+          isCapital && equipmentCost ? Number(equipmentCost) : null,
         constructs: constructs.map((c) => ({
           productName: c.productName.trim() || "(unnamed)",
           ...constructToDeal(c),
@@ -332,6 +364,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       facilityEstimatedAnnualSpend: estimatedSpend
         ? Number(estimatedSpend)
         : undefined,
+      estimatedSpendCategory: estimatedSpendCategory || undefined,
       internalUnitCost:
         internalUnitCost && Number(internalUnitCost) > 0
           ? Number(internalUnitCost)
@@ -455,10 +488,16 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     if (!b) return
     const productName = `${b.itemNumber} — ${b.productName}`.slice(0, 90)
     // Auto-fill Current (price file) + Volume (usage) by matching the
-    // benchmark's SKU; the vendor fills Floor / Target / Ask.
+    // benchmark's SKU, and seed Floor/Target FROM THE BENCHMARK itself
+    // (floor = min/"floor" price, else P25; target = median, else national
+    // avg) — the vendor refines instead of typing from scratch. Ask stays
+    // manual (it's the vendor's opening position, not a market number).
     const sku = normalizeSku(b.itemNumber)
     const current = currentPriceBySku.get(sku)
     const volume = usageVolumeBySku.get(sku)
+    const benchFloor = b.minPrice > 0 ? b.minPrice : b.percentile25
+    const benchTarget =
+      b.percentile50 > 0 ? b.percentile50 : b.nationalAvgPrice
     setConstructs((prev) => {
       const blankIdx = prev.findIndex(
         (c) =>
@@ -474,6 +513,8 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
         benchmarkId: b.id,
         productName,
         current: current != null ? String(current) : "",
+        floor: benchFloor > 0 ? String(benchFloor) : "",
+        target: benchTarget > 0 ? String(benchTarget) : "",
         annualVolume: volume != null ? String(volume) : "",
       })
       if (blankIdx >= 0) {
@@ -809,13 +850,36 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
             <Label htmlFor="estimated-spend">
               Facility estimated annual category spend ($)
             </Label>
-            <Input
-              id="estimated-spend"
-              type="number"
-              placeholder="leave blank to estimate from your own sales"
-              value={estimatedSpend}
-              onChange={(e) => setEstimatedSpend(e.target.value)}
-            />
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                id="estimated-spend"
+                type="number"
+                placeholder="leave blank to estimate from your own sales"
+                value={estimatedSpend}
+                onChange={(e) => setEstimatedSpend(e.target.value)}
+                className="flex-1 min-w-0"
+              />
+              <Select
+                value={estimatedSpendCategory || ALL_CATEGORIES}
+                onValueChange={(v) =>
+                  setEstimatedSpendCategory(v === ALL_CATEGORIES ? "" : v)
+                }
+              >
+                <SelectTrigger className="w-full sm:w-[220px]">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ALL_CATEGORIES}>
+                    All categories
+                  </SelectItem>
+                  {benchmarkCategories.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <p className="text-xs text-muted-foreground">
               The facility&apos;s TOTAL category spend across all vendors.
               Left blank, it&apos;s estimated from your own trailing-12mo

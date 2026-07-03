@@ -19,6 +19,8 @@ import {
   buildCptRateSchedule,
   resolveCaseReimbursement,
 } from "@/lib/case-costing/cpt-rate-map"
+import { expandCategoriesToCogVariants } from "@/lib/contracts/cog-category-filter"
+import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import {
   analyzeVendorProspective,
   type BenchmarkDataPoint,
@@ -87,6 +89,12 @@ export interface VendorProspectiveAnalysisInput {
    * 2026-06-25 "current revenue should come from the usage file").
    */
   facilityCurrentVendorRevenue?: number
+  /**
+   * When set, the facility-spend backfill (the vendor-COG-at-facility
+   * aggregate) is scoped to this category — matched canonically via
+   * `expandCategoriesToCogVariants`, never a raw `in` (CLAUDE.md invariant).
+   */
+  estimatedSpendCategory?: string
   targetVendorShare?: number
   capitalDetails?: CapitalDealDetails
   /**
@@ -181,6 +189,7 @@ export interface VendorFacilityCurrentState {
   facilityName: string
   /** Total facility supply spend, trailing 12 months (the addressable prize). */
   currentVendorSpend: number
+  /** Case count annualized over the years the case data spans (all-time ÷ span). */
   annualCaseVolume: number
   /** Summed case-costing reimbursement (the "Actuals" revenue figure). */
   measuredReimbursement: number
@@ -227,10 +236,19 @@ export async function getFacilityCurrentStateForVendor(
   let totalSpend = 0
   for (const r of cogRows) totalSpend += Number(r.extendedPrice ?? 0)
 
+  // Annualize the case count: all Case rows are counted (no date window —
+  // prod demo cases cluster in one past month, so a trailing-12mo window
+  // would zero it), divided by the years the data spans. Data spanning ≤1
+  // year divides by 1, so the count is unchanged.
+  let minSurgeryMs = Number.POSITIVE_INFINITY
+  let maxSurgeryMs = Number.NEGATIVE_INFINITY
   const cptRateSchedule = buildCptRateSchedule(payorContracts)
   let measuredReimbursement = 0
   let casesWithRate = 0
   for (const c of cases) {
+    const t = c.dateOfSurgery.getTime()
+    if (t < minSurgeryMs) minSurgeryMs = t
+    if (t > maxSurgeryMs) maxSurgeryMs = t
     const v = resolveCaseReimbursement(
       {
         storedReimbursement: Number(c.totalReimbursement),
@@ -244,11 +262,16 @@ export async function getFacilityCurrentStateForVendor(
     if (v > 0) casesWithRate += 1
   }
 
+  const spanYears =
+    cases.length > 0
+      ? Math.max(1, (maxSurgeryMs - minSurgeryMs) / (365.25 * 86_400_000))
+      : 1
+
   return serialize({
     facilityId: facility.id,
     facilityName: facility.name,
     currentVendorSpend: totalSpend,
-    annualCaseVolume: cases.length,
+    annualCaseVolume: Math.round(cases.length / spanYears),
     measuredReimbursement,
     reimbursementCoverage: { withRate: casesWithRate, totalCases: cases.length },
     hasData: cogRows.length > 0,
@@ -400,11 +423,25 @@ async function runAnalysis(
     // vendor-side helper for "all vendor ids in my group" (COGRecord has
     // a single vendorId and the session resolves one vendor). Smallest
     // correct change: keep the bare id and flag the class.
+    // Optional category scope — expand to every drifted COG category variant
+    // (case/word-order/plural insensitive); a raw `in` would drop rows.
+    const spendCategory = input.estimatedSpendCategory?.trim()
+    const categoryFilter: Prisma.COGRecordWhereInput = spendCategory
+      ? {
+          category: {
+            in: expandCategoriesToCogVariants(
+              [spendCategory],
+              await facilityCogCategoryUniverse(facility.id),
+            ),
+          },
+        }
+      : {}
     const agg = await prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
         vendorId: vendor.id,
         transactionDate: { gte: oneYearAgo },
+        ...categoryFilter,
       },
       _sum: { extendedPrice: true },
     })
@@ -477,6 +514,9 @@ async function runAnalysis(
                 input.targetVendorShare != null
                   ? input.targetVendorShare * 100
                   : null,
+              // Capital in the deal (equipment cost) — so the persisted
+              // handoff's Capital/Robotic figure matches the live one.
+              dealCapitalRevenue: input.capitalDetails?.equipmentCost ?? null,
             }),
           ) as Prisma.InputJsonValue,
         },

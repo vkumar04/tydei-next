@@ -14,7 +14,14 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { mapPricingRows, mapUsageRows, MAX_USAGE_ROWS } from "../file-handlers"
+import {
+  mapPricingRows,
+  mapUsageRows,
+  MAX_USAGE_ROWS,
+  handlePricingRowsImport,
+  handleUsageRowsImport,
+} from "../file-handlers"
+import type { NewProposalState } from "../types"
 import { readPricingRows } from "@/components/facility/analysis/prospective/pricing-file-reader"
 
 function rowsFor(
@@ -97,6 +104,64 @@ describe("mapPricingRows — canonical header detection", () => {
     const headers = ["Col A", "Col B"]
     const result = mapPricingRows(headers, rowsFor(headers, [["x", "y"]]))
     expect(result).toEqual({ ok: false, reason: "missing-name-and-ref" })
+  })
+
+  it("maps a Current Price column into ProposalProduct.currentPrice (Deal Scorer prefill)", () => {
+    const headers = ["Product Name", "Current Price", "Proposed Price", "Qty"]
+    const result = mapPricingRows(
+      headers,
+      rowsFor(headers, [["Hip Stem", "$1,500.00", "1,200", "10"]]),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.products[0]).toMatchObject({
+      productName: "Hip Stem",
+      currentPrice: 1500,
+      proposedPrice: 1200,
+      projectedVolume: 10,
+    })
+    // Spend is priced off the PROPOSED price, never the current one.
+    expect(result.totalSpend).toBe(12_000)
+  })
+
+  it("does not let the contains-'price' fallback claim a Current Price column as the proposed price", () => {
+    // No proposed-price column at all — the legacy contains-"price"
+    // fallback must skip the column already resolved as current price.
+    const headers = ["Product Name", "Current Price", "Qty"]
+    const result = mapPricingRows(
+      headers,
+      rowsFor(headers, [["Hip Stem", "1500", "10"]]),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.products[0]).toMatchObject({
+      currentPrice: 1500,
+      proposedPrice: 0,
+    })
+  })
+
+  it("mappingOverride routes currentPrice like every other field", () => {
+    const headers = ["Product Name", "Facility $", "Quote $", "Qty"]
+    const result = mapPricingRows(
+      headers,
+      rowsFor(headers, [["Widget", "50", "40", "2"]]),
+      {
+        name: "Product Name",
+        ref: null,
+        currentPrice: "Facility $",
+        price: "Quote $",
+        qty: "Qty",
+        costBasis: null,
+        category: null,
+      },
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.products[0]).toMatchObject({
+      currentPrice: 50,
+      proposedPrice: 40,
+      projectedVolume: 2,
+    })
   })
 })
 
@@ -272,5 +337,123 @@ describe("mapPricingRows / mapUsageRows — mappingOverride (uploader improvemen
       { name: null, ref: null, vendor: null, date: null, qty: "Qty", unitCost: null, extendedCost: null, category: null },
     )
     expect(result).toEqual({ ok: false, reason: "missing-name" })
+  })
+})
+
+describe("projectedSpend is a USER-OWNED assumption — files only SEED it", () => {
+  // Vick: the proposals list showed a different number than the value he
+  // typed into "Projected Annual Spend". Uploads used to overwrite (pricing)
+  // or add to (usage / text-parse) the typed value; the rule is now
+  // seed-when-0, never mutate.
+
+  function makeState(overrides: Partial<NewProposalState> = {}): NewProposalState {
+    return {
+      facilityId: "",
+      facilityName: "",
+      isMultiFacility: false,
+      facilities: [],
+      productCategory: "",
+      productCategories: [],
+      isGrouped: false,
+      groupName: "",
+      contractLength: 24,
+      projectedSpend: 0,
+      projectedVolume: 0,
+      totalOpportunity: 0,
+      terms: [],
+      products: [],
+      marketShareCommitment: 50,
+      gpoFee: 3,
+      aiNotes: "",
+      ...overrides,
+    }
+  }
+
+  /** Captures functional setState updates the handlers dispatch. */
+  function stateHarness(initial: NewProposalState) {
+    let state = initial
+    const setState: React.Dispatch<React.SetStateAction<NewProposalState>> = (
+      action,
+    ) => {
+      state =
+        typeof action === "function"
+          ? (action as (p: NewProposalState) => NewProposalState)(state)
+          : action
+    }
+    return { get state() { return state }, setState }
+  }
+
+  const noopProgress = () => {}
+
+  const pricingHeaders = ["Product Name", "Price", "Qty"]
+  const pricingMapping = {
+    name: "Product Name",
+    ref: null,
+    currentPrice: null,
+    price: "Price",
+    qty: "Qty",
+    costBasis: null,
+    category: null,
+  }
+
+  it("typed value survives a pricing upload", async () => {
+    const harness = stateHarness(makeState({ projectedSpend: 250_000 }))
+    await handlePricingRowsImport(
+      pricingHeaders,
+      rowsFor(pricingHeaders, [["Widget", "100", "5"]]), // catalog total 500
+      pricingMapping,
+      noopProgress,
+      harness.setState,
+    )
+    expect(harness.state.products).toHaveLength(1)
+    expect(harness.state.projectedSpend).toBe(250_000)
+    // Volume is still derived from the file.
+    expect(harness.state.projectedVolume).toBe(5)
+  })
+
+  it("pricing upload seeds projectedSpend when it is still 0", async () => {
+    const harness = stateHarness(makeState())
+    await handlePricingRowsImport(
+      pricingHeaders,
+      rowsFor(pricingHeaders, [["Widget", "100", "5"]]),
+      pricingMapping,
+      noopProgress,
+      harness.setState,
+    )
+    expect(harness.state.projectedSpend).toBe(500)
+  })
+
+  const usageHeaders = ["Product Name", "Qty", "Unit Cost"]
+  const usageMapping = {
+    name: "Product Name",
+    ref: null,
+    vendor: null,
+    date: null,
+    qty: "Qty",
+    unitCost: "Unit Cost",
+    extendedCost: null,
+    category: null,
+  }
+
+  it("typed value survives a usage upload (no more additive drift)", async () => {
+    const harness = stateHarness(makeState({ projectedSpend: 250_000 }))
+    await handleUsageRowsImport(
+      usageHeaders,
+      rowsFor(usageHeaders, [["Widget", "4", "10"]]), // revenue 40
+      usageMapping,
+      noopProgress,
+      harness.setState,
+    )
+    expect(harness.state.projectedSpend).toBe(250_000)
+  })
+
+  it("usage upload seeds when 0, and a RE-upload no longer double-counts", async () => {
+    const harness = stateHarness(makeState())
+    const rows = rowsFor(usageHeaders, [["Widget", "4", "10"]])
+    await handleUsageRowsImport(usageHeaders, rows, usageMapping, noopProgress, harness.setState)
+    expect(harness.state.projectedSpend).toBe(40)
+    // Re-upload the same file: used to become 80 (prev + totalRevenue).
+    await handleUsageRowsImport(usageHeaders, rows, usageMapping, noopProgress, harness.setState)
+    expect(harness.state.projectedSpend).toBe(40)
   })
 })
