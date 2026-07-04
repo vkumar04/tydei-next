@@ -11,6 +11,7 @@ import {
   type ResolvedMapping,
   type UploadFieldSpec,
 } from "@/components/shared/uploads/field-spec"
+import { normalizeSku } from "@/lib/contracts/normalize-sku"
 import type { NewProposalState, ProposalProduct, FileUploadProgressState, TermSuggestionsState } from "./types"
 
 // ─── File parsing + column resolution ─────────────────────────────
@@ -191,6 +192,15 @@ function headerPreview(headers: string[]): string {
 
 const parseMoney = (v: string): number => parseFloat(v.replace(/[$,]/g, "")) || 0
 
+/**
+ * Aggregation key for a file row: the normalized SKU when a reference
+ * number exists (canonical `normalizeSku` — SKUs must never be compared
+ * raw, CLAUDE.md), else the lowercased product name. One key = one
+ * proposal product, no matter how many invoice LINES the file has.
+ */
+const productKey = (refNumber: string | undefined, productName: string): string =>
+  normalizeSku(refNumber) || productName.trim().toLowerCase()
+
 // ─── Pricing rows → proposal products (pure; unit-tested) ─────────
 
 export interface MappedPricing {
@@ -263,7 +273,29 @@ export function mapPricingRows(
   const get = (row: Record<string, string>, idx: number): string =>
     idx >= 0 ? (row[headers[idx]] ?? "") : ""
 
-  const products: ProposalProduct[] = []
+  // Per-SKU aggregation (Charles 2026-06-30, "SYK Usage ONLY.xlsx"):
+  // real facility exports are raw INVOICE-LINE dumps — the same SKU
+  // repeats across dates. Emitting one product per ROW turned a 601-SKU
+  // book into thousands of "items", and the usage merge then assigned
+  // each duplicate row the SKU's TOTAL 12-month volume, inflating
+  // totalProposedCost by the duplicate count (measured $111M from a
+  // $3.9M book). One SKU = one product: Σ qty, spend-weighted unit
+  // price. Genuine pricing files (unique SKUs) behave exactly as before.
+  interface PricingAgg {
+    productName: string
+    refNumber?: string
+    currentPrice?: number
+    costBasis?: number
+    sumQty: number
+    /** Σ price×qty over rows with price>0 AND qty>0 (weighted numerator). */
+    sumPriceTimesQty: number
+    /** Σ qty over rows with price>0 AND qty>0 (weighted denominator). */
+    qtyWithPrice: number
+    /** Simple-average fallback for files without a qty column. */
+    sumPrice: number
+    priceCount: number
+  }
+  const grouped = new Map<string, PricingAgg>()
   let totalSpend = 0
   let totalVolume = 0
   const categoryCounts: Record<string, number> = {}
@@ -284,19 +316,61 @@ export function mapPricingRows(
       categoryCounts[category] = (categoryCounts[category] || 0) + 1
     }
 
-    products.push({
-      benchmarkId: `pricing-${Date.now()}-${products.length}`,
-      productName,
-      refNumber,
-      proposedPrice: price,
-      currentPrice,
-      projectedVolume: qty,
-      costBasis,
-      fromPricingFile: true,
-    })
+    const key = productKey(refNumber, productName)
+    let agg = grouped.get(key)
+    if (!agg) {
+      agg = {
+        productName,
+        refNumber,
+        currentPrice,
+        costBasis,
+        sumQty: 0,
+        sumPriceTimesQty: 0,
+        qtyWithPrice: 0,
+        sumPrice: 0,
+        priceCount: 0,
+      }
+      grouped.set(key, agg)
+    } else {
+      // First positive value wins for the optional per-product fields.
+      if (agg.currentPrice == null && currentPrice != null) agg.currentPrice = currentPrice
+      if (agg.costBasis == null && costBasis != null) agg.costBasis = costBasis
+      if (!agg.refNumber && refNumber) agg.refNumber = refNumber
+    }
+    agg.sumQty += qty
+    if (price > 0) {
+      agg.sumPrice += price
+      agg.priceCount++
+      if (qty > 0) {
+        agg.sumPriceTimesQty += price * qty
+        agg.qtyWithPrice += qty
+      }
+    }
 
     totalSpend += price * qty
     totalVolume += qty
+  }
+
+  const products: ProposalProduct[] = []
+  for (const agg of grouped.values()) {
+    // Unit price: spend-weighted (Σ price×qty ÷ Σ qty) when quantities
+    // exist, else the simple average of the SKU's listed prices.
+    const proposedPrice =
+      agg.qtyWithPrice > 0
+        ? agg.sumPriceTimesQty / agg.qtyWithPrice
+        : agg.priceCount > 0
+          ? agg.sumPrice / agg.priceCount
+          : 0
+    products.push({
+      benchmarkId: `pricing-${Date.now()}-${products.length}`,
+      productName: agg.productName,
+      refNumber: agg.refNumber,
+      proposedPrice,
+      currentPrice: agg.currentPrice,
+      projectedVolume: agg.sumQty,
+      costBasis: agg.costBasis,
+      fromPricingFile: true,
+    })
   }
 
   const distinctCategories = Object.keys(categoryCounts).filter(Boolean)
@@ -566,7 +640,9 @@ export function mapUsageRows(
     if (!productName) continue
 
     const refNumber = refIdx !== -1 ? get(row, refIdx).trim() || undefined : undefined
-    const key = (refNumber || productName).toLowerCase()
+    // normalizeSku key (was raw .toLowerCase()): SKU case/whitespace
+    // variants across invoice lines must land in the SAME product.
+    const key = productKey(refNumber, productName)
 
     if (!productUsageMap[key]) {
       productUsageMap[key] = {
@@ -643,9 +719,15 @@ export function mapUsageRows(
 
     const totalVol = monthlyUsage.reduce((sum, m) => sum + m.volume, 0)
     const totalRev = monthlyUsage.reduce((sum, m) => sum + m.revenue, 0)
-    const avgPrice = monthlyUsage.length > 0
-      ? monthlyUsage.reduce((sum, m) => sum + m.avgPrice, 0) / monthlyUsage.length
-      : 0
+    // Historical unit price = Σ extended ÷ Σ qty (spend-weighted). The
+    // old unweighted mean-of-monthly-means over- or under-stated the
+    // price whenever volume was uneven across months.
+    const avgPrice =
+      totalVol > 0
+        ? totalRev / totalVol
+        : monthlyUsage.length > 0
+          ? monthlyUsage.reduce((sum, m) => sum + m.avgPrice, 0) / monthlyUsage.length
+          : 0
 
     if (data.category) {
       categoryCounts[data.category] = (categoryCounts[data.category] || 0) + 1

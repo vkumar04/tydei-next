@@ -705,7 +705,10 @@ export function OpportunityEngineSection({
               value={
                 ai
                   ? ai.winProbability.competitiveThreat
-                  : score.winProbability.competitiveThreat
+                  : // No REAL named competitor (one-way connections gate off
+                    // facility-side competitor data) → show "—", never a
+                    // fabricated placeholder name.
+                    dbData?.competitiveThreat ?? "—"
               }
             />
             <MiniStat
@@ -870,7 +873,11 @@ function ExplainPopover({
           <Info className="h-3.5 w-3.5" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 space-y-4 p-3 text-xs">
+      <PopoverContent
+        align="end"
+        collisionPadding={12}
+        className="z-50 max-h-[60vh] w-80 max-w-[calc(100vw-2rem)] space-y-4 overflow-y-auto p-3 text-xs shadow-lg"
+      >
         {explains.map((ex) => (
           <div key={ex.key} className="space-y-1.5">
             <p className="font-medium">{ex.title}</p>

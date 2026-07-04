@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useRef } from "react"
+import { useCallback, useRef, useState } from "react"
 import {
   Card,
   CardAction,
@@ -10,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { PRODUCT_CATEGORIES } from "@/components/vendor/prospective/builder/types"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -34,6 +36,11 @@ interface Props {
 export function BenchmarksSection({ vendorId }: Props) {
   const { data: benchmarks, isLoading } = useVendorBenchmarks(vendorId)
   const importMutation = useImportVendorBenchmarks(vendorId)
+  // Charles 2026-07-04 ("This still needs to be fixed" — every imported row
+  // showed Uncategorized): real benchmark files often carry no category
+  // column, which strands the per-category surfaces (Benchmark Position,
+  // category picker). Applied only to rows WITHOUT their own category.
+  const [defaultCategory, setDefaultCategory] = useState("")
 
   // "Need to be able to add data for the benchmarks" (Vick 2026-06-12),
   // reworked onto the shared <PricingFileDropzone> (uploader improvements
@@ -63,12 +70,18 @@ export function BenchmarksSection({ vendorId }: Props) {
       // dialog stays open (and shows the progress bar) until every chunk
       // lands; rethrow on failure so the dialog keeps the file mapped for a
       // retry (importInChunks' message names how many rows already landed).
+      const fallback = defaultCategory.trim()
+      const items = fallback
+        ? parsed.items.map((it) =>
+            it.category ? it : { ...it, category: fallback },
+          )
+        : parsed.items
       await importMutation.mutateAsync({
-        items: parsed.items,
+        items,
         onProgress: reportProgress,
       })
     },
-    [importMutation],
+    [importMutation, defaultCategory],
   )
 
   // The existing confirm copy ("N rows parsed, M with a national average
@@ -94,6 +107,26 @@ export function BenchmarksSection({ vendorId }: Props) {
 
   const busy = importMutation.isPending
 
+  const importControls = (
+    <div className="flex flex-col gap-1">
+      <Input
+        className="h-8 w-[220px]"
+        placeholder="Default category (optional)"
+        value={defaultCategory}
+        onChange={(e) => setDefaultCategory(e.target.value)}
+        list="benchmark-default-categories"
+      />
+      <datalist id="benchmark-default-categories">
+        {PRODUCT_CATEGORIES.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+      <span className="text-[11px] text-muted-foreground">
+        Applied to imported rows without their own category
+      </span>
+    </div>
+  )
+
   const importButton = (
     <Button variant="outline" size="sm" disabled={busy}>
       {busy ? (
@@ -118,7 +151,9 @@ export function BenchmarksSection({ vendorId }: Props) {
           vendor) — seeded / national benchmarks are no longer mixed in.
         </CardDescription>
         <CardAction>
-          <PricingFileDropzone
+          <div className="flex items-start gap-3">
+            {importControls}
+            <PricingFileDropzone
             ref={dropzoneRef}
             specs={BENCHMARK_UPLOAD_SPECS}
             surface="vendor-benchmarks"
@@ -127,7 +162,8 @@ export function BenchmarksSection({ vendorId }: Props) {
             onImport={handleImport}
             confirmCopy={confirmCopy}
             disabled={busy}
-          />
+            />
+          </div>
         </CardAction>
       </CardHeader>
       <CardContent>

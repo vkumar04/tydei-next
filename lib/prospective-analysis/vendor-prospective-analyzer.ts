@@ -248,19 +248,49 @@ export function analyzeVendorProspective(
   }
 
   // ── 3. Revenue at risk ───────────────────────────────────────
-  const currentShare = input.facilityCurrentVendorShare ?? 0
-  const targetShare =
-    input.targetVendorShare ?? Math.max(currentShare, 0.5) // default: try for 50%
   // Prefer the directly-known vendor revenue (e.g. from the vendor's own
-  // COG sales) over the spend × share derivation. See input doc on
-  // `facilityCurrentVendorRevenue`.
+  // COG sales / uploaded usage×price files) over the spend × share
+  // derivation. See input doc on `facilityCurrentVendorRevenue`.
+  const enteredShare = input.facilityCurrentVendorShare
   const currentAnnualRevenue =
     input.facilityCurrentVendorRevenue ??
-    input.facilityEstimatedAnnualSpend * currentShare
+    input.facilityEstimatedAnnualSpend * (enteredShare ?? 0)
+
+  // Consistency floor (Charles 2026-06-30, Penetration card): the
+  // facility's TOTAL category spend can never be less than what it
+  // already buys from THIS vendor. When the spend estimate (often
+  // backfilled from thin COG history) is below a directly-known current
+  // revenue, every downstream number was nonsense — "Target revenue"
+  // far BELOW current revenue, incremental $0, and "revenue at risk =
+  // the entire book" with current share reading 0%. Floor the spend at
+  // the known revenue and say so.
+  let effectiveFacilitySpend = input.facilityEstimatedAnnualSpend
+  if (currentAnnualRevenue > effectiveFacilitySpend) {
+    effectiveFacilitySpend = currentAnnualRevenue
+    warnings.push(
+      `Facility estimated annual spend ($${fmt(input.facilityEstimatedAnnualSpend)}) is below your known current revenue ($${fmt(currentAnnualRevenue)}) — using your current revenue as the spend floor. Enter the facility's real total category spend for accurate penetration numbers.`,
+    )
+  }
+
+  // When no current share was entered but current revenue IS known,
+  // derive the share instead of displaying 0% next to a real revenue
+  // figure (0% share + $15M current revenue is self-contradictory).
+  const currentShare =
+    enteredShare ??
+    (input.facilityCurrentVendorRevenue != null && effectiveFacilitySpend > 0
+      ? Math.min(1, currentAnnualRevenue / effectiveFacilitySpend)
+      : 0)
+  const targetShare =
+    input.targetVendorShare ?? Math.max(currentShare, 0.5) // default: try for 50%
   const revenueAtRisk = currentAnnualRevenue
 
   // ── 4. Penetration analysis ──────────────────────────────────
-  const targetAnnualRevenue = input.facilityEstimatedAnnualSpend * targetShare
+  const targetAnnualRevenue = effectiveFacilitySpend * targetShare
+  if (targetAnnualRevenue < currentAnnualRevenue) {
+    warnings.push(
+      "Target share implies LESS revenue than you earn today — the modeled deal is a revenue loss. Check the Current share %, Target share %, and facility spend inputs.",
+    )
+  }
   const penetrationAnalysis: PenetrationAnalysis = {
     currentShare,
     targetShare,

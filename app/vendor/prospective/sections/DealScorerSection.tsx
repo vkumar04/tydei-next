@@ -737,9 +737,16 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                 </SelectItem>
                 {proposals.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    #{p.id.slice(0, 8)} — {p.itemCount} items,{" "}
+                    {/* Created date leads so near-identical proposals (Charles
+                        saved five copies while testing) stay tellable-apart. */}
+                    {new Date(p.createdAt).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                    })}{" "}
+                    · #{p.id.slice(0, 8)} — {p.itemCount} items,{" "}
                     {formatCurrency(p.totalProposedCost)}
                     {p.dealScore ? ` (scored ${p.dealScore.overall})` : ""}
+                    {p.stage === "analyzed" ? " · analyzed" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>

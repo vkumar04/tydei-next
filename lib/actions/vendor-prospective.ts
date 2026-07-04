@@ -207,11 +207,27 @@ export async function getVendorRelatedFacilities(): Promise<
  *
  * IDOR-safe: scoped through `vendorRelatedFacilityWhere`, so a vendor can
  * only pull a facility it actually has a relationship with.
+ *
+ * MODE-GATED: these are the facility's numbers, so they flow only over an
+ * accepted `two_way` Connection (same gate as `getFacilityActualsForVendor`);
+ * a one-way vendor gets the explicit zeroed `mode: "one_way"` variant.
  */
 export interface VendorFacilityCurrentState {
   facilityId: string
   facilityName: string
-  /** Total facility supply spend, trailing 12 months (the addressable prize). */
+  /**
+   * Connection-mode gate (mirrors `getFacilityActualsForVendor` — the one
+   * mode gate): facility actuals flow ONLY over an accepted `two_way`
+   * Connection row. `one_way` = every facility-derived figure below is
+   * zeroed and the panel renders the manual/assumption path.
+   * `Vendor.defaultMode` never substitutes for the real Connection row.
+   */
+  mode: "one_way" | "two_way"
+  /**
+   * TOTAL facility supply spend across ALL vendors, trailing 12 months (the
+   * addressable prize) — facility-side data, NOT the caller's own sales.
+   * Zero in `one_way` mode.
+   */
   currentVendorSpend: number
   /** Case count annualized over the years the case data spans (all-time ÷ span). */
   annualCaseVolume: number
@@ -234,6 +250,34 @@ export async function getFacilityCurrentStateForVendor(
     throw new Error(
       "Facility not found or not related to your organization",
     )
+  }
+
+  // The two-way gate — identical to `getFacilityActualsForVendor`'s: the
+  // facility's supply spend / case volume / reimbursement are FACILITY-side
+  // data and flow only over an accepted `mode: "two_way"` Connection row
+  // (Charles 2026-06-30: "it says '1 way' so it should not be pulling
+  // anything from the other side"). No connection, pending/declined, or
+  // `one_way` → an explicit zeroed one_way variant, with NO facility reads.
+  const connection = await prisma.connection.findFirst({
+    where: {
+      facilityId,
+      vendorId: vendor.id,
+      status: "accepted",
+      mode: "two_way",
+    },
+    select: { id: true },
+  })
+  if (!connection) {
+    return serialize({
+      facilityId: facility.id,
+      facilityName: facility.name,
+      mode: "one_way" as const,
+      currentVendorSpend: 0,
+      annualCaseVolume: 0,
+      measuredReimbursement: 0,
+      reimbursementCoverage: { withRate: 0, totalCases: 0 },
+      hasData: false,
+    })
   }
 
   const { start, end } = getTrailing12MonthWindow()
@@ -294,6 +338,7 @@ export async function getFacilityCurrentStateForVendor(
   return serialize({
     facilityId: facility.id,
     facilityName: facility.name,
+    mode: "two_way" as const,
     currentVendorSpend: totalSpend,
     annualCaseVolume: Math.round(cases.length / spanYears),
     measuredReimbursement,

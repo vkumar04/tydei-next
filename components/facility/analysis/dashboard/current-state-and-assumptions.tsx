@@ -47,16 +47,26 @@ function StatCard({
 
 export function CurrentStateCards({
   current,
+  spendLabel = "Current Vendor Spend",
+  spendSublabel = "Total annual supply spend",
 }: {
   current: CurrentFinancialState
+  /**
+   * Overridable ONLY so the vendor-side Facility Current State panel can
+   * label this figure honestly (it is the FACILITY'S total supply spend
+   * there, sourced via a two-way connection — not "your data"). Facility
+   * surfaces keep the defaults.
+   */
+  spendLabel?: string
+  spendSublabel?: string
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <StatCard
         icon={Building2}
-        label="Current Vendor Spend"
+        label={spendLabel}
         value={usdCompact(current.vendorSpend)}
-        sublabel="Total annual supply spend"
+        sublabel={spendSublabel}
       />
       <StatCard
         icon={TrendingUp}
@@ -182,10 +192,22 @@ export function FinancialAssumptionsCard({
   assumptions,
   onChange,
   revenue,
+  description = "Vendor spend comes from your tracked data; annual cases default from your case-costing data but can be overridden. Set the few figures only you know — every number on this page recalculates instantly.",
+  spendRowLabel = "Vendor spend",
+  spendSourceNote = "· from your data",
 }: {
   assumptions: FacilityModelAssumptions
   onChange: (next: FacilityModelAssumptions) => void
   revenue: RevenueControl
+  /**
+   * Overridable ONLY for the vendor-side Facility Current State panel, where
+   * the spend figure is the FACILITY'S data (two-way connection) or absent
+   * entirely (one-way) — "from your data" would be a lie there. Facility
+   * surfaces keep the defaults.
+   */
+  description?: string
+  spendRowLabel?: string
+  spendSourceNote?: string
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -200,22 +222,18 @@ export function FinancialAssumptionsCard({
     <Card>
       <CardHeader>
         <CardTitle>Financial Assumptions</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Vendor spend comes from your tracked data; annual cases default from
-          your case-costing data but can be overridden. Set the few figures only
-          you know — every number on this page recalculates instantly.
-        </p>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Vendor spend is tracked; annual cases seed from case-costing data
             but are editable so you can enter an actual / projected volume. */}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md bg-muted/40 px-3 py-2 text-sm">
           <span className="text-muted-foreground">
-            Vendor spend{" "}
+            {spendRowLabel}{" "}
             <span className="font-semibold tabular-nums text-foreground">
               {usdCompact(assumptions.currentVendorSpend)}
             </span>{" "}
-            <span className="text-xs">· from your data</span>
+            <span className="text-xs">{spendSourceNote}</span>
           </span>
           <label className="flex items-center gap-2 text-muted-foreground">
             Annual cases

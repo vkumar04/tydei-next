@@ -340,6 +340,164 @@ describe("mapPricingRows / mapUsageRows — mappingOverride (uploader improvemen
   })
 })
 
+describe("invoice-line exports aggregate per SKU (Charles 2026-06-30, SYK Usage ONLY.xlsx)", () => {
+  // The real facility export is a raw invoice-line dump: one row per
+  // invoice LINE, the same SKU repeating across dates, 43 columns
+  // (InvoicePrice / InvoiceQuantity / UnitCost / VoucheredTotal / …).
+  // Before the fix, mapPricingRows emitted one product PER ROW and the
+  // usage merge then stamped every duplicate row with the SKU's TOTAL
+  // 12-month volume — measured $111M totalProposedCost from a $3.9M
+  // book on the real file. Item count must equal DISTINCT SKUs, volume
+  // Σ qty, spend Σ extended.
+  const headers = [
+    "InvoiceNo", "InvoiceDate", "VendorName", "InventoryDescription",
+    "VendorItemNo", "InvoicePrice", "InvoiceQuantity", "UnitCost",
+    "VoucheredQty", "VoucheredPrice", "VoucheredTotal",
+  ]
+  // 4 lines, 2 distinct SKUs. Row 3 carries SKU whitespace drift
+  // ("5536 -B-500") that only normalizeSku folds.
+  const data = [
+    ["1001", "1/15/2025", "Stryker", "TRIATHLON BASEPLATE", "5536-B-500", "1400.00", "2", "1400.00", "2", "1400.00", "2800.00"],
+    ["1002", "2/03/2025", "Stryker", "TRIATHLON BASEPLATE", "5536-B-500", "1400.00", "3", "1400.00", "3", "1400.00", "4200.00"],
+    ["1003", "2/10/2025", "Stryker", "Triathlon Baseplate", "5536 -B-500", "1400.00", "1", "1400.00", "1", "1400.00", "1400.00"],
+    ["1004", "3/01/2025", "Stryker", "ACCOLADE II", "6721-0435", "2000.00", "2", "2000.00", "2", "2000.00", "4000.00"],
+  ]
+
+  it("mapUsageRows: item count = distinct SKUs, volume = Σ qty, spend = Σ extended", () => {
+    // Auto-detect path — the exact resolution the real file gets:
+    // name→InventoryDescription (contains "description"), ref→VendorItemNo
+    // (canonical exact), qty→InvoiceQuantity, unitCost→UnitCost.
+    const result = mapUsageRows(headers, rowsFor(headers, data))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.products).toHaveLength(2) // distinct SKUs, NOT 4 rows
+    expect(result.totalVolume).toBe(8) // Σ InvoiceQuantity
+    expect(result.totalRevenue).toBe(12_400) // Σ VoucheredTotal (= Σ unitCost×qty)
+    expect(result.processedRows).toBe(4)
+
+    const baseplate = result.products.find((p) => p.refNumber === "5536-B-500")
+    expect(baseplate).toBeDefined()
+    // All three baseplate lines (incl. the whitespace-drift SKU) fold
+    // into ONE product via normalizeSku.
+    expect(baseplate).toMatchObject({
+      projectedVolume: 6,
+      historicalAvgVolume: 6,
+      historicalAvgPrice: 1400, // Σ extended ÷ Σ qty (8400 / 6)
+    })
+    expect(baseplate?.monthlyUsage?.map((m) => m.month)).toEqual([
+      "2025-01",
+      "2025-02",
+    ])
+  })
+
+  it("mapPricingRows: aggregates duplicate SKU rows into one product (dialog-mapped qty)", () => {
+    const result = mapPricingRows(headers, rowsFor(headers, data), {
+      name: "InventoryDescription",
+      ref: "VendorItemNo",
+      currentPrice: null,
+      price: "InvoicePrice",
+      qty: "InvoiceQuantity",
+      costBasis: null,
+      category: null,
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.products).toHaveLength(2) // distinct SKUs, NOT 4 rows
+    const baseplate = result.products.find((p) => p.refNumber === "5536-B-500")
+    expect(baseplate).toMatchObject({
+      proposedPrice: 1400, // spend-weighted: Σ price×qty ÷ Σ qty
+      projectedVolume: 6, // Σ qty across the SKU's rows
+    })
+    expect(result.totalSpend).toBe(12_400) // Σ extended, file total
+    expect(result.totalVolume).toBe(8)
+  })
+
+  it("mapPricingRows: still dedupes when no qty column maps (auto-detect on the real headers)", () => {
+    // The real dropzone auto-resolution for this file leaves qty null
+    // (no exact QTY alias) — item count must STILL be distinct SKUs,
+    // with the unit price a simple average of the SKU's listed prices.
+    const result = mapPricingRows(headers, rowsFor(headers, data))
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.products).toHaveLength(2)
+    const baseplate = result.products.find((p) => p.refNumber === "5536-B-500")
+    expect(baseplate?.proposedPrice).toBe(1400)
+    expect(baseplate?.projectedVolume).toBe(0)
+  })
+
+  it("weights the unit price by quantity when duplicate rows priced differently", () => {
+    const h = ["Description", "SKU", "Price", "Quantity"]
+    const result = mapPricingRows(
+      h,
+      rowsFor(h, [
+        ["Widget", "W-1", "100", "3"], // 300
+        ["Widget", "W-1", "80", "1"], // 80
+      ]),
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.products).toHaveLength(1)
+    expect(result.products[0].proposedPrice).toBe(95) // 380 / 4
+    expect(result.products[0].projectedVolume).toBe(4)
+    expect(result.totalSpend).toBe(380)
+  })
+
+  it("end-to-end: usage upload then pricing upload of the SAME invoice export keeps the book at Σ extended (the $111M regression)", async () => {
+    let state = makeBuilderState()
+    const setState: React.Dispatch<React.SetStateAction<NewProposalState>> = (
+      action,
+    ) => {
+      state =
+        typeof action === "function"
+          ? (action as (p: NewProposalState) => NewProposalState)(state)
+          : action
+    }
+    const usageMapping = {
+      name: "InventoryDescription", ref: "VendorItemNo", vendor: "VendorName",
+      date: "InvoiceDate", qty: "InvoiceQuantity", unitCost: "UnitCost",
+      extendedCost: null, category: null,
+    }
+    const pricingMapping = {
+      name: "InventoryDescription", ref: "VendorItemNo", currentPrice: null,
+      price: "InvoicePrice", qty: "InvoiceQuantity", costBasis: null, category: null,
+    }
+    await handleUsageRowsImport(headers, rowsFor(headers, data), usageMapping, () => {}, setState)
+    await handlePricingRowsImport(headers, rowsFor(headers, data), pricingMapping, () => {}, setState)
+
+    // What createProposal would persist: itemCount + Σ price × qty.
+    const items = state.products.filter((p) => p.proposedPrice > 0)
+    const totalCost = items.reduce(
+      (s, p) => s + p.proposedPrice * (p.projectedVolume || 1),
+      0,
+    )
+    expect(items).toHaveLength(2) // distinct SKUs
+    expect(totalCost).toBe(12_400) // the true book — NOT duplicate-count × volume
+  })
+})
+
+function makeBuilderState(overrides: Partial<NewProposalState> = {}): NewProposalState {
+  return {
+    facilityId: "",
+    facilityName: "",
+    isMultiFacility: false,
+    facilities: [],
+    productCategory: "",
+    productCategories: [],
+    isGrouped: false,
+    groupName: "",
+    contractLength: 24,
+    projectedSpend: 0,
+    projectedVolume: 0,
+    totalOpportunity: 0,
+    terms: [],
+    products: [],
+    marketShareCommitment: 50,
+    gpoFee: 3,
+    aiNotes: "",
+    ...overrides,
+  }
+}
+
 describe("projectedSpend is a USER-OWNED assumption — files only SEED it", () => {
   // Vick: the proposals list showed a different number than the value he
   // typed into "Projected Annual Spend". Uploads used to overwrite (pricing)

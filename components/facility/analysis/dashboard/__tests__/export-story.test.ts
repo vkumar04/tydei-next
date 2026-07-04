@@ -136,7 +136,9 @@ describe("facilityCurrentStateRows (Opportunity Engine export)", () => {
 
   it("includes the facility name + the four headline figures", () => {
     expect(flat).toMatch(/Facility: Lighthouse Surgical Center/)
-    expect(flat).toMatch(/Current vendor spend/)
+    // Honest vendor-side label — the figure is the FACILITY'S total supply
+    // spend (two-way sourced), not the caller's own sales.
+    expect(flat).toMatch(/Facility supply spend/)
     expect(flat).toMatch(/Net revenue/)
     expect(flat).toMatch(/EBITDA/)
     expect(flat).toMatch(/DCF enterprise value/)
