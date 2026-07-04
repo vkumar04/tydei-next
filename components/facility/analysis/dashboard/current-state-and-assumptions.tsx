@@ -195,6 +195,7 @@ export function FinancialAssumptionsCard({
   description = "Vendor spend comes from your tracked data; annual cases default from your case-costing data but can be overridden. Set the few figures only you know — every number on this page recalculates instantly.",
   spendRowLabel = "Vendor spend",
   spendSourceNote = "· from your data",
+  spendEditable = false,
 }: {
   assumptions: FacilityModelAssumptions
   onChange: (next: FacilityModelAssumptions) => void
@@ -208,6 +209,11 @@ export function FinancialAssumptionsCard({
   description?: string
   spendRowLabel?: string
   spendSourceNote?: string
+  /** One-way vendor view (Vick 2026-07-04 "when it is a one way it should
+   *  be able to enter in the supply spend manually"): the spend figure has
+   *  no data source, so it becomes an editable manual assumption. Facility
+   *  surfaces and two-way keep the read-only default. */
+  spendEditable?: boolean
 }) {
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -228,13 +234,33 @@ export function FinancialAssumptionsCard({
         {/* Vendor spend is tracked; annual cases seed from case-costing data
             but are editable so you can enter an actual / projected volume. */}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md bg-muted/40 px-3 py-2 text-sm">
-          <span className="text-muted-foreground">
-            {spendRowLabel}{" "}
-            <span className="font-semibold tabular-nums text-foreground">
-              {usdCompact(assumptions.currentVendorSpend)}
-            </span>{" "}
-            <span className="text-xs">{spendSourceNote}</span>
-          </span>
+          {spendEditable ? (
+            <label className="flex items-center gap-2 text-muted-foreground">
+              {spendRowLabel}
+              <Input
+                type="number"
+                min={0}
+                step={1000}
+                value={assumptions.currentVendorSpend}
+                onChange={(e) =>
+                  set(
+                    "currentVendorSpend",
+                    Math.max(0, Number(e.target.value) || 0),
+                  )
+                }
+                className="h-7 w-32 font-semibold tabular-nums"
+              />
+              <span className="text-xs">{spendSourceNote}</span>
+            </label>
+          ) : (
+            <span className="text-muted-foreground">
+              {spendRowLabel}{" "}
+              <span className="font-semibold tabular-nums text-foreground">
+                {usdCompact(assumptions.currentVendorSpend)}
+              </span>{" "}
+              <span className="text-xs">{spendSourceNote}</span>
+            </span>
+          )}
           <label className="flex items-center gap-2 text-muted-foreground">
             Annual cases
             <Input

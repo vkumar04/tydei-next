@@ -288,10 +288,10 @@ function FacilityCurrentStateModel({
   const twoWay = data.mode === "two_way"
   const spendSublabel = twoWay
     ? "Facility total supply spend (two-way sync)"
-    : "Unavailable — requires a two-way connection"
+    : "Manual assumption — enter it under Financial Assumptions"
   const spendSourceNote = twoWay
     ? "· facility data (two-way sync)"
-    : "· unavailable (one-way connection)"
+    : "· your estimate (one-way connection)"
   const assumptionsDescription = twoWay
     ? "Facility supply spend and case volume come from the facility's shared data (two-way connection); annual cases can be overridden. Set the few figures only you know — every number recalculates instantly."
     : "One-way connection — facility actuals are not shared with your organization. Enter your own assumptions; every number recalculates instantly."
@@ -309,6 +309,7 @@ function FacilityCurrentStateModel({
         description={assumptionsDescription}
         spendRowLabel="Facility supply spend"
         spendSourceNote={spendSourceNote}
+        spendEditable={!twoWay}
         revenue={{
           mode: revenueMode,
           onModeChange: setRevenueMode,
