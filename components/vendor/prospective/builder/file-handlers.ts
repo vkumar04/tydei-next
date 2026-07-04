@@ -454,13 +454,21 @@ export async function handlePricingRowsImport(
 
           let matched = 0
           for (const product of products) {
+            // EXACT normalized matching only (2026-07-04 follow-up): the old
+            // mutual-substring match cross-matched near-identical SKUs
+            // (…500 vs …5000) and near-identical names, folding one
+            // product's volume onto another. When BOTH sides carry a ref,
+            // the refs decide — names are only consulted when a ref is
+            // missing on either side, and then only as exact (normalized)
+            // equality.
             const usageMatch = existingUsage.find(u => {
               const usageRef = normalizeRef(u.refNumber || "")
               const pricingRef = normalizeRef(product.refNumber || "")
-              if (usageRef && pricingRef && (usageRef === pricingRef || usageRef.includes(pricingRef) || pricingRef.includes(usageRef))) return true
-              const pNameLower = product.productName.toLowerCase()
-              const uNameLower = u.productName.toLowerCase()
-              return pNameLower === uNameLower || pNameLower.includes(uNameLower) || uNameLower.includes(pNameLower)
+              if (usageRef && pricingRef) return usageRef === pricingRef
+              return (
+                product.productName.trim().toLowerCase() ===
+                u.productName.trim().toLowerCase()
+              )
             })
             if (usageMatch) {
               product.projectedVolume = usageMatch.projectedVolume || product.projectedVolume
