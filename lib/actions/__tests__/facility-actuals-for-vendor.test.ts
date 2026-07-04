@@ -27,6 +27,8 @@ const {
   pendingFindFirstMock,
   pendingUpdateMock,
   benchmarkFindManyMock,
+  caseFindManyMock,
+  payorContractFindManyMock,
 } = vi.hoisted(() => ({
   facilityFindFirstMock: vi.fn(),
   connectionFindFirstMock: vi.fn(),
@@ -36,6 +38,8 @@ const {
   pendingFindFirstMock: vi.fn(),
   pendingUpdateMock: vi.fn(),
   benchmarkFindManyMock: vi.fn(),
+  caseFindManyMock: vi.fn(),
+  payorContractFindManyMock: vi.fn(),
 }))
 
 const { requireVendorMock, requireCanMutateMock } = vi.hoisted(() => ({
@@ -57,6 +61,8 @@ vi.mock("@/lib/db", () => ({
       update: pendingUpdateMock,
     },
     productBenchmark: { findMany: benchmarkFindManyMock },
+    case: { findMany: caseFindManyMock },
+    payorContract: { findMany: payorContractFindManyMock },
   },
 }))
 
@@ -77,6 +83,7 @@ vi.mock("@/lib/actions/division-auth", () => ({
 
 import {
   getFacilityActualsForVendor,
+  getFacilityCurrentStateForVendor,
   getVendorProspectiveAnalysis,
 } from "@/lib/actions/vendor-prospective"
 
@@ -220,6 +227,97 @@ describe("getFacilityActualsForVendor — two-way sync auto-pull (Wave-2 E)", ()
     ])
     // Share numerator still counts ALL vendor rows (1200 ÷ 2400 = 50%).
     expect(res.currentSharePct).toBe(50)
+  })
+})
+
+describe("getFacilityCurrentStateForVendor — mode gate (Charles round-3)", () => {
+  it("returns the zeroed one_way variant with NO facility reads when no two-way connection exists", async () => {
+    facilityFindFirstMock.mockResolvedValue({
+      id: "fac-1",
+      name: "Lighthouse Surgical Center",
+    })
+    // No accepted two_way row — covers no-connection, pending/declined, and
+    // mode one_way alike. Vendor.defaultMode never substitutes (same rule as
+    // the actuals gate).
+    connectionFindFirstMock.mockResolvedValue(null)
+
+    const res = await getFacilityCurrentStateForVendor("fac-1")
+
+    expect(res).toEqual({
+      facilityId: "fac-1",
+      facilityName: "Lighthouse Surgical Center",
+      mode: "one_way",
+      currentVendorSpend: 0,
+      annualCaseVolume: 0,
+      measuredReimbursement: 0,
+      reimbursementCoverage: { withRate: 0, totalCases: 0 },
+      hasData: false,
+    })
+    // The facility's COG / case-costing / payor data was never touched.
+    expect(cogFindManyMock).not.toHaveBeenCalled()
+    expect(caseFindManyMock).not.toHaveBeenCalled()
+    expect(payorContractFindManyMock).not.toHaveBeenCalled()
+  })
+
+  it("gates on the exact accepted+two_way where for the caller's own vendor", async () => {
+    facilityFindFirstMock.mockResolvedValue({ id: "fac-1", name: "F" })
+    connectionFindFirstMock.mockResolvedValue(null)
+
+    await getFacilityCurrentStateForVendor("fac-1")
+
+    expect(connectionFindFirstMock.mock.calls[0][0].where).toEqual({
+      facilityId: "fac-1",
+      vendorId: "vendor-1",
+      status: "accepted",
+      mode: "two_way",
+    })
+  })
+
+  it("returns the facility actuals (mode two_way) over an accepted two_way connection — path unchanged", async () => {
+    facilityFindFirstMock.mockResolvedValue({
+      id: "fac-1",
+      name: "Lighthouse Surgical Center",
+    })
+    connectionFindFirstMock.mockResolvedValue({ id: "conn-1" })
+    cogFindManyMock.mockResolvedValue([
+      { extendedPrice: 1000 },
+      { extendedPrice: 500 },
+    ])
+    caseFindManyMock.mockResolvedValue([
+      {
+        totalReimbursement: 12_000,
+        primaryCptCode: "27447",
+        dateOfSurgery: new Date("2025-06-01"),
+        procedures: [],
+      },
+      {
+        totalReimbursement: 0,
+        primaryCptCode: "27447",
+        dateOfSurgery: new Date("2025-09-01"),
+        procedures: [],
+      },
+    ])
+    payorContractFindManyMock.mockResolvedValue([])
+
+    const res = await getFacilityCurrentStateForVendor("fac-1")
+
+    expect(res.mode).toBe("two_way")
+    expect(res.currentVendorSpend).toBe(1500)
+    // 2 cases spanning <1yr → span clamps to 1 → annualized count = 2.
+    expect(res.annualCaseVolume).toBe(2)
+    // Stored reimbursement passes through; the $0 case has no payor CPT rate.
+    expect(res.measuredReimbursement).toBe(12_000)
+    expect(res.reimbursementCoverage).toEqual({ withRate: 1, totalCases: 2 })
+    expect(res.hasData).toBe(true)
+  })
+
+  it("throws for an unrelated facility (IDOR) before the connection read", async () => {
+    facilityFindFirstMock.mockResolvedValue(null)
+
+    await expect(
+      getFacilityCurrentStateForVendor("fac-foreign"),
+    ).rejects.toThrow(/not related to your organization/)
+    expect(connectionFindFirstMock).not.toHaveBeenCalled()
   })
 })
 

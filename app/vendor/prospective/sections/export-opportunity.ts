@@ -54,7 +54,9 @@ export function facilityCurrentStateRows(
       : `manual: ${formatCompactCurrency(f.avgReimbursementPerCase)}/case × ${f.annualCaseVolume.toLocaleString("en-US")} cases`
   return [
     ["Facility", f.facilityName],
-    ["Current vendor spend", formatCompactCurrency(f.currentVendorSpend)],
+    // Honest label: this is the FACILITY'S total supply spend (two-way
+    // sourced), not the caller's own sales — mirrors the panel's copy.
+    ["Facility supply spend", formatCompactCurrency(f.currentVendorSpend)],
     ["Net revenue", `${formatCompactCurrency(f.netRevenue)} (${revenueBasis})`],
     ["EBITDA", `${formatCompactCurrency(f.ebitda)} (${pct(f.ebitdaMarginPct)} margin)`],
     [

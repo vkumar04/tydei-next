@@ -156,7 +156,17 @@ export function FacilityCurrentStatePanel({
           <Skeleton className="h-[360px] rounded-xl" />
         ) : (
           <>
-            {!data.hasData && (
+            {data.mode === "one_way" ? (
+              <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  One-way connection — the facility&apos;s actuals (supply
+                  spend, case volume, reimbursement) only flow to you on a
+                  two-way connection. The figures below are manual
+                  assumptions; enter your own estimates.
+                </span>
+              </div>
+            ) : !data.hasData ? (
               <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>
@@ -164,7 +174,7 @@ export function FacilityCurrentStatePanel({
                   months — the figures below are zero until COG data loads.
                 </span>
               </div>
-            )}
+            ) : null}
             <FacilityCurrentStateModel
               key={facilityId}
               data={data}
@@ -269,12 +279,36 @@ function FacilityCurrentStateModel({
     avgReimbursementPerCase,
   ])
 
+  // Honest vendor-side copy: the spend figure is the FACILITY'S total supply
+  // spend, sourced from the facility's shared data over a two-way connection
+  // — never "your data", and never present at all on a one-way connection
+  // (Charles 2026-06-30 "this spend and revenue number are both wrong or
+  // hard coded … it says '1 way' so it should not be pulling anything from
+  // the other side").
+  const twoWay = data.mode === "two_way"
+  const spendSublabel = twoWay
+    ? "Facility total supply spend (two-way sync)"
+    : "Unavailable — requires a two-way connection"
+  const spendSourceNote = twoWay
+    ? "· facility data (two-way sync)"
+    : "· unavailable (one-way connection)"
+  const assumptionsDescription = twoWay
+    ? "Facility supply spend and case volume come from the facility's shared data (two-way connection); annual cases can be overridden. Set the few figures only you know — every number recalculates instantly."
+    : "One-way connection — facility actuals are not shared with your organization. Enter your own assumptions; every number recalculates instantly."
+
   return (
     <div className="space-y-4">
-      <CurrentStateCards current={model.current} />
+      <CurrentStateCards
+        current={model.current}
+        spendLabel="Facility Supply Spend"
+        spendSublabel={spendSublabel}
+      />
       <FinancialAssumptionsCard
         assumptions={effectiveAssumptions}
         onChange={setAssumptions}
+        description={assumptionsDescription}
+        spendRowLabel="Facility supply spend"
+        spendSourceNote={spendSourceNote}
         revenue={{
           mode: revenueMode,
           onModeChange: setRevenueMode,

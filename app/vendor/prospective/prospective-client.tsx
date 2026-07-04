@@ -9,6 +9,7 @@ import { ProspectiveHero } from "@/components/vendor/prospective/prospective-her
 import { useVendorProposals } from "@/hooks/use-prospective"
 
 import { ProposalCards } from "./sections/ProposalCards"
+import { DealScorerSection } from "./sections/DealScorerSection"
 import { ProposalStepper } from "./sections/ProposalStepper"
 import { BenchmarksSection } from "./sections/BenchmarksSection"
 import { type OppEngineHandoff } from "./sections/OpportunityEngineSection"
@@ -29,6 +30,11 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
   const [preselectedProposalId, setPreselectedProposalId] = useState<string | null>(null)
   // A saved proposal opened in the builder for in-place editing.
   const [editingProposalId, setEditingProposalId] = useState<string | null>(null)
+  // Charles 2026-07-04 ("It should be combining those asks together on one
+  // page instead of another screen after a save"): after a builder save the
+  // Deal Scorer appears IN PLACE on the same tab, preloaded with the new
+  // proposal — no navigation to a separate screen.
+  const [inlineDealProposalId, setInlineDealProposalId] = useState<string | null>(null)
 
   const totalProposals = proposals?.length ?? 0
   // Facility projected ANNUAL spend (the user-entered assumption) — falls back
@@ -69,6 +75,7 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             isLoading={isLoading}
             onNewProposal={() => {
               setEditingProposalId(null)
+              setInlineDealProposalId(null)
               setActiveTab("new-proposal")
             }}
             onEditProposal={(id) => {
@@ -112,25 +119,51 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
           <AnalyticsSection proposals={proposals ?? []} isLoading={isLoading} />
         </TabsContent>
 
-        {/* New Proposal Tab (no visible trigger — activated programmatically) */}
+        {/* New Proposal Tab (no visible trigger — activated programmatically).
+            After a save the builder is replaced IN PLACE by the Deal Scorer
+            preloaded with the new proposal — enter the asks on the same page. */}
         <TabsContent value="new-proposal" className="mt-4 space-y-4">
+          {inlineDealProposalId ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-sm">
+                <span>
+                  Proposal saved — now build the ask. Pick products from your
+                  benchmarks, set Floor / Target / Ask, and Analyze; the result
+                  flows straight into the Opportunity Engine.
+                </span>
+              </div>
+              <DealScorerSection
+                vendorId={vendorId}
+                facilities={facilities}
+                proposals={proposals ?? []}
+                preselectedProposalId={inlineDealProposalId}
+                onDealAnalyzed={(deal) => {
+                  setPreselectedProposalId(null)
+                  setOppHandoff(deal)
+                  setInlineDealProposalId(null)
+                  setActiveTab("proposals")
+                }}
+              />
+            </div>
+          ) : (
           <ProposalBuilder
             vendorId={vendorId}
             facilities={facilities}
             editingProposalId={editingProposalId}
             onProposalCreated={(p) => {
-              // Save → continue into the Deal Scorer pre-loaded with this deal.
-              // Clears any card-handoff so Step 1 is the landing step (V-C1).
+              // Save → the Deal Scorer appears on THIS page, preloaded (no
+              // tab switch). The stepper is also preselected for later visits.
               setEditingProposalId(null)
               setOppHandoff(null)
               setPreselectedProposalId(p.id)
-              setActiveTab("proposals")
+              setInlineDealProposalId(p.id)
             }}
             onClose={() => {
               setEditingProposalId(null)
               setActiveTab("opportunities")
             }}
           />
+          )}
         </TabsContent>
       </Tabs>
     </div>
