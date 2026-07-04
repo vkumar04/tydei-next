@@ -615,3 +615,138 @@ describe("projectedSpend is a USER-OWNED assumption — files only SEED it", () 
     expect(harness.state.projectedSpend).toBe(40)
   })
 })
+
+describe("usage↔pricing merge matches SKUs EXACTLY (no substring cross-match)", () => {
+  // Follow-up to the Charles round-3 aggregation fix: the old mutual
+  // includes() match folded one SKU's volume onto a near-identical ref
+  // (…500 vs …5000) or a name that merely contained another.
+
+  function makeState(overrides: Partial<NewProposalState> = {}): NewProposalState {
+    return {
+      facilityId: "",
+      facilityName: "",
+      isMultiFacility: false,
+      facilities: [],
+      productCategory: "",
+      productCategories: [],
+      isGrouped: false,
+      groupName: "",
+      contractLength: 24,
+      projectedSpend: 0,
+      projectedVolume: 0,
+      totalOpportunity: 0,
+      terms: [],
+      products: [],
+      marketShareCommitment: 50,
+      gpoFee: 3,
+      aiNotes: "",
+      ...overrides,
+    }
+  }
+
+  function stateHarness(initial: NewProposalState) {
+    let state = initial
+    const setState: React.Dispatch<React.SetStateAction<NewProposalState>> = (
+      action,
+    ) => {
+      state =
+        typeof action === "function"
+          ? (action as (p: NewProposalState) => NewProposalState)(state)
+          : action
+    }
+    return { get state() { return state }, setState }
+  }
+
+  const noopProgress = () => {}
+  const headers = ["Product Name", "Ref", "Price", "Qty"]
+  const mapping = {
+    name: "Product Name",
+    ref: "Ref",
+    currentPrice: null,
+    price: "Price",
+    qty: "Qty",
+    costBasis: null,
+    category: null,
+  }
+
+  it("ABC-5000 does NOT inherit ABC-500's usage volume; exact ref still merges", async () => {
+    const usageProduct = {
+      benchmarkId: "",
+      productName: "ACL Kit Standard",
+      refNumber: "ABC-500",
+      proposedPrice: 0,
+      projectedVolume: 700,
+      historicalAvgPrice: 120,
+      fromPricingFile: false,
+    }
+    const harness = stateHarness(
+      makeState({ products: [usageProduct] }),
+    )
+    await handlePricingRowsImport(
+      headers,
+      [
+        { "Product Name": "ACL Kit Standard", Ref: "ABC-500", Price: "100", Qty: "1" },
+        { "Product Name": "ACL Kit Deluxe", Ref: "ABC-5000", Price: "200", Qty: "1" },
+      ],
+      mapping,
+      noopProgress as never,
+      harness.setState,
+      () => {},
+    )
+    const byRef = Object.fromEntries(
+      harness.state.products
+        .filter((p) => p.fromPricingFile)
+        .map((p) => [p.refNumber, p]),
+    )
+    // Exact ref merged: gets the usage volume.
+    expect(byRef["ABC-500"]?.projectedVolume).toBe(700)
+    // Near-identical ref did NOT: keeps its own file quantity.
+    expect(byRef["ABC-5000"]?.projectedVolume).toBe(1)
+  })
+
+  it("when both sides carry DIFFERENT refs, a containing name no longer merges", async () => {
+    const usageProduct = {
+      benchmarkId: "",
+      productName: "Knee",
+      refNumber: "K-1",
+      proposedPrice: 0,
+      projectedVolume: 300,
+      historicalAvgPrice: 90,
+      fromPricingFile: false,
+    }
+    const harness = stateHarness(makeState({ products: [usageProduct] }))
+    await handlePricingRowsImport(
+      headers,
+      [{ "Product Name": "Knee Kit Complete", Ref: "K-2", Price: "50", Qty: "2" }],
+      mapping,
+      noopProgress as never,
+      harness.setState,
+      () => {},
+    )
+    const p = harness.state.products.find((x) => x.refNumber === "K-2")
+    expect(p?.projectedVolume).toBe(2)
+  })
+
+  it("ref-less rows still merge on EXACT (case-insensitive) name", async () => {
+    const usageProduct = {
+      benchmarkId: "",
+      productName: "Press Fit Knee",
+      refNumber: "",
+      proposedPrice: 0,
+      projectedVolume: 450,
+      historicalAvgPrice: 80,
+      fromPricingFile: false,
+    }
+    const harness = stateHarness(makeState({ products: [usageProduct] }))
+    await handlePricingRowsImport(
+      ["Product Name", "Price", "Qty"],
+      [{ "Product Name": "press fit knee", Price: "60", Qty: "3" }],
+      { name: "Product Name", ref: null, currentPrice: null, price: "Price", qty: "Qty", costBasis: null, category: null },
+      noopProgress as never,
+      harness.setState,
+      () => {},
+    )
+    const p = harness.state.products.find((x) => x.fromPricingFile)
+    expect(p?.projectedVolume).toBe(450)
+  })
+})
