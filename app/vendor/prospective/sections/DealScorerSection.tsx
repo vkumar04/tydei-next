@@ -123,12 +123,23 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     makeConstruct(),
   ])
   const { data: benchmarks } = useVendorBenchmarks(vendorId)
+  // Categories picked on the ATTACHED PROPOSAL (builder productCategories) —
+  // they flow into the category picker + construct labels, so a benchmark
+  // file without a Category column doesn't strand the deal as "Uncategorized"
+  // (Vick 2026-07-04 "the categories I loaded when entering a proposal are
+  // not coming over").
+  const [proposalCategories, setProposalCategories] = useState<string[]>([])
   const benchmarkCategories = useMemo(
     () =>
-      [...new Set((benchmarks ?? []).map((b) => b.category))]
+      [
+        ...new Set([
+          ...(benchmarks ?? []).map((b) => b.category),
+          ...proposalCategories,
+        ]),
+      ]
         .filter((c) => c && c !== "Uncategorized")
         .sort(),
-    [benchmarks],
+    [benchmarks, proposalCategories],
   )
   const benchmarkById = useMemo(
     () => new Map((benchmarks ?? []).map((b) => [b.id, b])),
@@ -187,6 +198,13 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
         // page"). Only when the proposal targets a single real facility.
         if (detail.facilities.length === 1 && detail.facilities[0]) {
           setFacilityId(detail.facilities[0].id)
+        }
+        const cats = (detail.productCategories ?? []).filter(Boolean)
+        setProposalCategories(cats)
+        // Seed the estimated-spend category from the proposal's first
+        // category — only while the picker is untouched.
+        if (cats[0]) {
+          setEstimatedSpendCategory((prev) => prev || cats[0]!)
         }
         const items = detail.pricingItems ?? []
         const volMap = new Map<string, number>()
@@ -867,7 +885,12 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                                 {c.productName}
                               </div>
                               <span className="text-xs text-muted-foreground">
-                                benchmark · {b.category ?? "uncategorized"}
+                                benchmark ·{" "}
+                                {b.category && b.category !== "Uncategorized"
+                                  ? b.category
+                                  : proposalCategories.length === 1
+                                    ? proposalCategories[0]
+                                    : "uncategorized"}
                               </span>
                             </div>
                           ) : (
