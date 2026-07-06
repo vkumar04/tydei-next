@@ -375,6 +375,7 @@ describe("runAnalysis persist block — dealAssumptions round-trip (Wave-2 D)", 
       currentSharePct: 20,
       estimatedSpend: 500_000,
       estimatedSpendCategory: null,
+      estimatedCategorySpends: null,
       internalUnitCost: 55,
       contractVariant: "CAPITAL_TIE_IN",
       capital: {

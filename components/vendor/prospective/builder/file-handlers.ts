@@ -198,6 +198,10 @@ const parseMoney = (v: string): number => parseFloat(v.replace(/[$,]/g, "")) || 
  * raw, CLAUDE.md), else the lowercased product name. One key = one
  * proposal product, no matter how many invoice LINES the file has.
  */
+/** Round to cents — seeded dollar figures must not carry float tails
+ *  (Charles 2026-07-05: "3924864.7300000004" in Projected Annual Spend). */
+const toCents = (n: number): number => Math.round(n * 100) / 100
+
 const productKey = (refNumber: string | undefined, productName: string): string =>
   normalizeSku(refNumber) || productName.trim().toLowerCase()
 
@@ -494,7 +498,7 @@ export async function handlePricingRowsImport(
           // projectedSpend is a USER-OWNED assumption (Vick: "list ≠
           // entered value") — files only SEED it when it's still 0,
           // never overwrite a typed value.
-          projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : totalSpend,
+          projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : toCents(totalSpend),
           projectedVolume: totalVolume,
           productCategory:
             prev.productCategory ||
@@ -862,7 +866,7 @@ export async function handleUsageRowsImport(
             products: updatedProducts,
             // Seed-only (user-owned assumption): a usage upload used to
             // ADD to projectedSpend, so a re-upload double-counted.
-            projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : totalRevenue,
+            projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : toCents(totalRevenue),
             projectedVolume: prev.projectedVolume + totalVolume,
             totalOpportunity: prev.totalOpportunity + totalRevenue,
             productCategory: prev.productCategory || detectedCategory || prev.productCategory,
@@ -873,7 +877,7 @@ export async function handleUsageRowsImport(
             ...prev,
             products: [...prev.products, ...products],
             // Seed-only (user-owned assumption) — same rule as above.
-            projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : totalRevenue,
+            projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : toCents(totalRevenue),
             projectedVolume: prev.projectedVolume + totalVolume,
             totalOpportunity: prev.totalOpportunity + totalRevenue,
             productCategory: prev.productCategory || detectedCategory || prev.productCategory,
@@ -990,7 +994,7 @@ export function parseProductsFromDescription(
     products: [...prev.products, ...products],
     // Seed-only: projectedSpend is a user-owned assumption — parsing a
     // description never overwrites (or adds to) a typed value.
-    projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : totalSpend,
+    projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : toCents(totalSpend),
     projectedVolume: prev.projectedVolume + totalVolume,
     productCategory: prev.productCategory || detectedCategory || prev.productCategory,
   }))

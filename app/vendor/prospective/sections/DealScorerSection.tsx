@@ -204,7 +204,11 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
         // Seed the estimated-spend category from the proposal's first
         // category — only while the picker is untouched.
         if (cats[0]) {
-          setEstimatedSpendCategory((prev) => prev || cats[0]!)
+          setCategorySpends((prev) =>
+            prev.length === 1 && !prev[0]!.category
+              ? [{ ...prev[0]!, category: cats[0]! }]
+              : prev,
+          )
         }
         const items = detail.pricingItems ?? []
         const volMap = new Map<string, number>()
@@ -245,8 +249,28 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
           fillAtPristine(setTargetMargin, "40", a.targetMarginPct)
           fillAtPristine(setFloorMargin, "25", a.floorMarginPct)
           fillAtPristine(setCurrentShare, "", a.currentSharePct)
-          fillAtPristine(setEstimatedSpend, "", a.estimatedSpend)
-          fillAtPristine(setEstimatedSpendCategory, "", a.estimatedSpendCategory)
+          setCategorySpends((prev) => {
+            const pristine =
+              prev.length === 1 && !prev[0]!.category && !prev[0]!.spend
+            if (!pristine) return prev
+            const saved = a.estimatedCategorySpends?.length
+              ? a.estimatedCategorySpends
+              : a.estimatedSpend != null || a.estimatedSpendCategory
+                ? [
+                    {
+                      category: a.estimatedSpendCategory ?? "",
+                      spend: a.estimatedSpend,
+                    },
+                  ]
+                : null
+            return saved
+              ? saved.map((r) => ({
+                  _uid: crypto.randomUUID(),
+                  category: r.category ?? "",
+                  spend: r.spend != null ? String(r.spend) : "",
+                }))
+              : prev
+          })
           fillAtPristine(setInternalUnitCost, "", a.internalUnitCost)
           setContractVariant(a.contractVariant)
           if (a.capital) {
@@ -318,10 +342,12 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
   const [floorMargin, setFloorMargin] = useState("25")
   const [currentShare, setCurrentShare] = useState("")
   const [targetShare, setTargetShare] = useState("")
-  const [estimatedSpend, setEstimatedSpend] = useState("")
-  // Which category the estimated facility spend refers to ("" = all) — feeds
-  // the server backfill's canonical category filter.
-  const [estimatedSpendCategory, setEstimatedSpendCategory] = useState("")
+  // Facility estimated spend, ONE ROW PER CATEGORY (Charles 2026-07-05
+  // "should be able to enter more than one category spend"). The Σ feeds the
+  // analyzer; the categories scope the server backfill.
+  const [categorySpends, setCategorySpends] = useState<
+    { _uid: string; category: string; spend: string }[]
+  >(() => [{ _uid: crypto.randomUUID(), category: "", spend: "" }])
   const [internalUnitCost, setInternalUnitCost] = useState("")
   const [equipmentCost, setEquipmentCost] = useState("")
   const [maintenanceCost, setMaintenanceCost] = useState("")
@@ -385,7 +411,11 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
         }
         const spend = res.categorySpend
         if (spend != null && spend > 0) {
-          setEstimatedSpend((prev) => (prev ? prev : String(Math.round(spend))))
+          setCategorySpends((prev) =>
+            prev.length === 1 && !prev[0]!.spend
+              ? [{ ...prev[0]!, spend: String(Math.round(spend)) }]
+              : prev,
+          )
         }
       })
       .catch(() => {
@@ -481,10 +511,19 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       currentAnnualSpend,
       targetGrossMarginPercent: Number(targetMargin) / 100,
       minimumAcceptableGrossMarginPercent: Number(floorMargin) / 100,
-      facilityEstimatedAnnualSpend: estimatedSpend
-        ? Number(estimatedSpend)
-        : undefined,
-      estimatedSpendCategory: estimatedSpendCategory || undefined,
+      ...(() => {
+        const rows = categorySpends
+          .map((r) => ({
+            category: r.category.trim(),
+            spend: r.spend ? Number(r.spend) : null,
+          }))
+          .filter((r) => r.category !== "" || (r.spend ?? 0) > 0)
+        const sum = rows.reduce((acc, r) => acc + (r.spend ?? 0), 0)
+        return {
+          facilityEstimatedAnnualSpend: sum > 0 ? sum : undefined,
+          estimatedCategorySpends: rows.length > 0 ? rows : undefined,
+        }
+      })(),
       internalUnitCost:
         internalUnitCost && Number(internalUnitCost) > 0
           ? Number(internalUnitCost)
@@ -995,39 +1034,85 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="estimated-spend">
+            <Label htmlFor="estimated-spend-0">
               Facility estimated annual category spend ($)
             </Label>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                id="estimated-spend"
-                type="number"
-                placeholder="leave blank to estimate from your own sales"
-                value={estimatedSpend}
-                onChange={(e) => setEstimatedSpend(e.target.value)}
-                className="flex-1 min-w-0"
-              />
-              <Select
-                value={estimatedSpendCategory || ALL_CATEGORIES}
-                onValueChange={(v) =>
-                  setEstimatedSpendCategory(v === ALL_CATEGORIES ? "" : v)
-                }
-              >
-                <SelectTrigger className="w-full sm:w-[220px]">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_CATEGORIES}>
-                    All categories
-                  </SelectItem>
-                  {benchmarkCategories.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c}
+            {categorySpends.map((row, i) => (
+              <div key={row._uid} className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  id={`estimated-spend-${i}`}
+                  type="number"
+                  placeholder="leave blank to estimate from your own sales"
+                  value={row.spend}
+                  onChange={(e) =>
+                    setCategorySpends((prev) =>
+                      prev.map((r) =>
+                        r._uid === row._uid
+                          ? { ...r, spend: e.target.value }
+                          : r,
+                      ),
+                    )
+                  }
+                  className="flex-1 min-w-0"
+                />
+                <Select
+                  value={row.category || ALL_CATEGORIES}
+                  onValueChange={(v) =>
+                    setCategorySpends((prev) =>
+                      prev.map((r) =>
+                        r._uid === row._uid
+                          ? { ...r, category: v === ALL_CATEGORIES ? "" : v }
+                          : r,
+                      ),
+                    )
+                  }
+                >
+                  <SelectTrigger className="w-full sm:w-[220px]">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_CATEGORIES}>
+                      {i === 0 ? "All categories" : "Pick a category"}
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                    {benchmarkCategories.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {categorySpends.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0"
+                    onClick={() =>
+                      setCategorySpends((prev) =>
+                        prev.filter((r) => r._uid !== row._uid),
+                      )
+                    }
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Remove category spend</span>
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setCategorySpends((prev) => [
+                  ...prev,
+                  { _uid: crypto.randomUUID(), category: "", spend: "" },
+                ])
+              }
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add another category spend
+            </Button>
             <p className="text-xs text-muted-foreground">
               The facility&apos;s TOTAL category spend across all vendors.
               Left blank, it&apos;s estimated from your own trailing-12mo

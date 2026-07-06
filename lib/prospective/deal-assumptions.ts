@@ -55,6 +55,11 @@ export const dealAssumptionsSchema = z.object({
   /** Dollars — the typed "Facility estimated annual category spend". */
   estimatedSpend: z.number().nullable(),
   estimatedSpendCategory: z.string().nullable(),
+  /** Multi-category rows (Charles 2026-07-05); additive — older saves lack it. */
+  estimatedCategorySpends: z
+    .array(z.object({ category: z.string(), spend: z.number().nullable() }))
+    .nullable()
+    .optional(),
   /** Dollars per unit, null when blank (55% GM fallback applied). */
   internalUnitCost: z.number().nullable(),
   contractVariant: z.enum(CONTRACT_VARIANTS),
