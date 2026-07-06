@@ -329,14 +329,17 @@ grouped/pricing_only).
   `priceChangePct`, share). My-Proposals scored cards get an **"Opportunity
   Engine"** button → `OpportunityEngineSection`'s `initialDeal` prop one-shot
   pre-fills facility + price/share sliders (proposal → score → opportunity story).
-- **Vendor Prospective is a guided STEPPER (2026-06-24).** Tabs are now
-  **Opportunities (list) · Proposals (stepper) · Benchmarks · Analytics** — the
-  standalone Deal Scorer + Opportunity Engine tabs collapsed into the stepper,
-  and the old benchmark-wedge `OpportunitiesSection` was deleted (Opportunities
-  now renders the `ProposalCards` list). `ProposalStepper`
-  (`app/vendor/prospective/sections/ProposalStepper.tsx`) has two steps:
-  **Step 1 Usage & Pricing** = `DealScorerSection` and **Step 2 Opportunity &
-  Report** = `OpportunityEngineSection`. **Constructs come ONLY from the
+- **Vendor Prospective is a ONE-PAGE workspace (2026-07-05, supersedes the
+  2026-06-24 stepper).** Tabs: **Opportunities (list) · Proposals (workspace)
+  · Benchmarks · Analytics**. `ProposalStepper`
+  (`app/vendor/prospective/sections/ProposalStepper.tsx` — name kept, no
+  steps remain) STACKS three sections on one scroll: a collapsible
+  `ProposalBuilder` (create/edit), `DealScorerSection`, and
+  `OpportunityEngineSection`. There is NO Next/Back and NO hidden
+  new-proposal tab — save collapses the builder + pre-selects the proposal
+  in the Deal Scorer below; Analyze seeds the Opportunity Engine below and
+  scrolls to it (Charles 2026-07-05 "make sure there is no next — it's all
+  on the same page"). Do not reintroduce step navigation or a page swap. **Constructs come ONLY from the
   benchmark dropdown** (Vick 2026-06-24) — usage/price files do NOT create
   constructs. Step 1 has two reference dropzones: a **usage** file (`mapUsageRows`
   → SKU→volume map, "what the volume is compared against") and a **current price**

@@ -107,6 +107,14 @@ export interface VendorProspectiveAnalysisInput {
    * `expandCategoriesToCogVariants`, never a raw `in` (CLAUDE.md invariant).
    */
   estimatedSpendCategory?: string
+  /**
+   * Multi-category spend (Charles 2026-07-05 "should be able to enter more
+   * than one category spend"): one row per category. When present, the
+   * effective facility estimated spend is the Σ of entered spends, and the
+   * backfill's category scope covers every listed category.
+   * `estimatedSpendCategory` stays as the single-category back-compat path.
+   */
+  estimatedCategorySpends?: { category: string; spend: number | null }[]
   targetVendorShare?: number
   capitalDetails?: CapitalDealDetails
   /**
@@ -654,7 +662,16 @@ async function runAnalysis(
   //   - the facility TOTAL is derived as vendorSpend / currentShare when
   //     a share was supplied (share > 0), else the vendor spend stands in
   //     for the total and we attach an explicit warning.
-  let facilityEstimatedAnnualSpend = input.facilityEstimatedAnnualSpend
+  // Multi-category rows: their Σ is the effective estimate when the single
+  // field wasn't sent (the client sums too — this keeps the API correct on
+  // its own).
+  const categoryRowSum = (input.estimatedCategorySpends ?? []).reduce(
+    (acc, r) => acc + (r.spend ?? 0),
+    0,
+  )
+  let facilityEstimatedAnnualSpend =
+    input.facilityEstimatedAnnualSpend ??
+    (categoryRowSum > 0 ? categoryRowSum : undefined)
   // An explicit usage-derived current revenue (Σ currentPrice × volume from the
   // uploaded usage + price files) is authoritative — it wins over the
   // share-derived fallback below (Vick 2026-06-25).
@@ -673,17 +690,21 @@ async function runAnalysis(
     // correct change: keep the bare id and flag the class.
     // Optional category scope — expand to every drifted COG category variant
     // (case/word-order/plural insensitive); a raw `in` would drop rows.
-    const spendCategory = input.estimatedSpendCategory?.trim()
-    const categoryFilter: Prisma.COGRecordWhereInput = spendCategory
-      ? {
-          category: {
-            in: expandCategoriesToCogVariants(
-              [spendCategory],
-              await facilityCogCategoryUniverse(facility.id),
-            ),
-          },
-        }
-      : {}
+    const spendCategories = [
+      input.estimatedSpendCategory?.trim() ?? "",
+      ...(input.estimatedCategorySpends ?? []).map((r) => r.category.trim()),
+    ].filter((c) => c !== "")
+    const categoryFilter: Prisma.COGRecordWhereInput =
+      spendCategories.length > 0
+        ? {
+            category: {
+              in: expandCategoriesToCogVariants(
+                spendCategories,
+                await facilityCogCategoryUniverse(facility.id),
+              ),
+            },
+          }
+        : {}
     const agg = await prisma.cOGRecord.aggregate({
       where: {
         facilityId: facility.id,
@@ -776,6 +797,7 @@ async function runAnalysis(
             : null,
         estimatedSpend: input.facilityEstimatedAnnualSpend ?? null,
         estimatedSpendCategory: input.estimatedSpendCategory ?? null,
+        estimatedCategorySpends: input.estimatedCategorySpends ?? null,
         internalUnitCost: input.internalUnitCost ?? null,
         contractVariant: input.contractVariant,
         capital: input.capitalDetails

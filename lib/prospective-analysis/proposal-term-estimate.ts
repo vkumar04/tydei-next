@@ -185,7 +185,13 @@ function estimateTerm(
       amount = payout(rebateType, tier.value, projectedSpend, projectedVolume)
       note = `Tier ${achievedIdx + 1} of ${tiers.length} at ${fmtMetric(targetType, metric)} ${metricNoun} — ${payoutNote(rebateType, tier.value, projectedSpend, projectedVolume)}`
     } else {
-      note = `${fmtMetric(targetType, metric)} ${metricNoun} is below the first tier (${fmtMetric(targetType, tiers[0]!.min)}) — no rebate`
+      // Charles 2026-07-05 ("It stopped calculating here"): a $0 with only
+      // "below target" read as broken — always show what the term WOULD pay
+      // once the threshold is reached, so $0 is visibly a projection, not a
+      // failure.
+      const first = tiers[0]!
+      const wouldPay = payout(rebateType, first.value, projectedSpend, projectedVolume)
+      note = `${fmtMetric(targetType, metric)} ${metricNoun} is below the first tier (${fmtMetric(targetType, first.min)}) — $0 now; would pay ${payoutNote(rebateType, first.value, projectedSpend, projectedVolume)} (≈ ${fmtDollars(wouldPay)}) once reached`
     }
   } else {
     // Flat fallback: rebatePercent gated on the targetValue threshold.
@@ -196,7 +202,9 @@ function estimateTerm(
       amount = payout(rebateType, value, projectedSpend, projectedVolume)
       note = payoutNote(rebateType, value, projectedSpend, projectedVolume)
     } else {
-      note = `${fmtMetric(targetType, metric)} ${metricNoun} is below the ${fmtMetric(targetType, targetValue)} target — no rebate`
+      const value = term.rebatePercent ?? 0
+      const wouldPay = payout(rebateType, value, projectedSpend, projectedVolume)
+      note = `${fmtMetric(targetType, metric)} ${metricNoun} is below the ${fmtMetric(targetType, targetValue)} target — $0 now; would pay ${payoutNote(rebateType, value, projectedSpend, projectedVolume)} (≈ ${fmtDollars(wouldPay)}) once reached`
     }
   }
 

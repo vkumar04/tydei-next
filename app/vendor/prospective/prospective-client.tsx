@@ -4,12 +4,10 @@ import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart3, Gauge, Scale } from "lucide-react"
 
-import { ProposalBuilder } from "@/components/vendor/prospective/proposal-builder"
 import { ProspectiveHero } from "@/components/vendor/prospective/prospective-hero"
 import { useVendorProposals } from "@/hooks/use-prospective"
 
 import { ProposalCards } from "./sections/ProposalCards"
-import { DealScorerSection } from "./sections/DealScorerSection"
 import { ProposalStepper } from "./sections/ProposalStepper"
 import { BenchmarksSection } from "./sections/BenchmarksSection"
 import { type OppEngineHandoff } from "./sections/OpportunityEngineSection"
@@ -26,15 +24,15 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
   const { data: proposals, isLoading } = useVendorProposals(vendorId)
   const [activeTab, setActiveTab] = useState("opportunities")
   const [oppHandoff, setOppHandoff] = useState<OppEngineHandoff | null>(null)
-  // A just-created (or opened) proposal to pre-load into the stepper's Step 1.
+  // A just-created (or opened) proposal to pre-select in the Deal Scorer.
   const [preselectedProposalId, setPreselectedProposalId] = useState<string | null>(null)
   // A saved proposal opened in the builder for in-place editing.
   const [editingProposalId, setEditingProposalId] = useState<string | null>(null)
-  // Charles 2026-07-04 ("It should be combining those asks together on one
-  // page instead of another screen after a save"): after a builder save the
-  // Deal Scorer appears IN PLACE on the same tab, preloaded with the new
-  // proposal — no navigation to a separate screen.
-  const [inlineDealProposalId, setInlineDealProposalId] = useState<string | null>(null)
+  // "New proposal" entry → the Proposals workspace with the builder expanded.
+  // Charles 2026-07-05 ("make sure there is no next — it's all on the same
+  // page"): the hidden new-proposal tab is GONE; builder + Deal Scorer +
+  // Opportunity Engine all live stacked on the Proposals tab.
+  const [showBuilder, setShowBuilder] = useState(false)
 
   const totalProposals = proposals?.length ?? 0
   // Facility projected ANNUAL spend (the user-entered assumption) — falls back
@@ -75,17 +73,16 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             isLoading={isLoading}
             onNewProposal={() => {
               setEditingProposalId(null)
-              setInlineDealProposalId(null)
-              setActiveTab("new-proposal")
+              setShowBuilder(true)
+              setActiveTab("proposals")
             }}
             onEditProposal={(id) => {
               setEditingProposalId(id)
-              setActiveTab("new-proposal")
+              setShowBuilder(true)
+              setActiveTab("proposals")
             }}
             onAnalyzeInOpportunityEngine={(deal) => {
-              // Mutually exclusive with a builder-save preselect: a stale
-              // preselect would force the stepper back to Step 1 and defeat
-              // this jump to the Opportunity Engine (bug-bash V-C1).
+              // Mutually exclusive with a builder-save preselect (V-C1).
               setPreselectedProposalId(null)
               setOppHandoff(deal)
               setActiveTab("proposals")
@@ -93,10 +90,11 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
           />
         </TabsContent>
 
-        {/* Proposals = the guided stepper (Usage & Pricing → Opportunity).
-            forceMount: Radix unmounts inactive tab content, which used to
-            discard unsaved Deal-Scorer work on a peek at Benchmarks — the
-            stepper stays mounted and is CSS-hidden instead. */}
+        {/* Proposals = the ONE-PAGE deal workspace: create/edit proposal +
+            Deal Scorer + Opportunity Engine stacked — no steps, no swaps
+            (Charles 2026-07-05). forceMount: Radix unmounts inactive tab
+            content, which would discard unsaved deal work on a peek at
+            Benchmarks — the workspace stays mounted and is CSS-hidden. */}
         <TabsContent
           value="proposals"
           forceMount
@@ -108,6 +106,21 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             proposals={proposals ?? []}
             initialDeal={oppHandoff}
             preselectedProposalId={preselectedProposalId}
+            editingProposalId={editingProposalId}
+            showBuilderInitially={showBuilder}
+            onBuilderClosed={() => {
+              setShowBuilder(false)
+              setEditingProposalId(null)
+            }}
+            onProposalCreated={(p) => {
+              // Same page: the new proposal pre-selects in the Deal Scorer
+              // below; clear any stale card handoff so the freshly saved deal
+              // owns the flow.
+              setShowBuilder(false)
+              setEditingProposalId(null)
+              setOppHandoff(null)
+              setPreselectedProposalId(p.id)
+            }}
           />
         </TabsContent>
 
@@ -117,53 +130,6 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
 
         <TabsContent value="analytics" className="mt-4 space-y-4">
           <AnalyticsSection proposals={proposals ?? []} isLoading={isLoading} />
-        </TabsContent>
-
-        {/* New Proposal Tab (no visible trigger — activated programmatically).
-            After a save the builder is replaced IN PLACE by the Deal Scorer
-            preloaded with the new proposal — enter the asks on the same page. */}
-        <TabsContent value="new-proposal" className="mt-4 space-y-4">
-          {inlineDealProposalId ? (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-sm">
-                <span>
-                  Proposal saved — now build the ask. Pick products from your
-                  benchmarks, set Floor / Target / Ask, and Analyze; the result
-                  flows straight into the Opportunity Engine.
-                </span>
-              </div>
-              <DealScorerSection
-                vendorId={vendorId}
-                facilities={facilities}
-                proposals={proposals ?? []}
-                preselectedProposalId={inlineDealProposalId}
-                onDealAnalyzed={(deal) => {
-                  setPreselectedProposalId(null)
-                  setOppHandoff(deal)
-                  setInlineDealProposalId(null)
-                  setActiveTab("proposals")
-                }}
-              />
-            </div>
-          ) : (
-          <ProposalBuilder
-            vendorId={vendorId}
-            facilities={facilities}
-            editingProposalId={editingProposalId}
-            onProposalCreated={(p) => {
-              // Save → the Deal Scorer appears on THIS page, preloaded (no
-              // tab switch). The stepper is also preselected for later visits.
-              setEditingProposalId(null)
-              setOppHandoff(null)
-              setPreselectedProposalId(p.id)
-              setInlineDealProposalId(p.id)
-            }}
-            onClose={() => {
-              setEditingProposalId(null)
-              setActiveTab("opportunities")
-            }}
-          />
-          )}
         </TabsContent>
       </Tabs>
     </div>
