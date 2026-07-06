@@ -174,6 +174,17 @@ export async function POST(request: Request) {
         cacheControl: { type: "ephemeral" as const },
       },
     },
+    onError: (event) => {
+      // A mid-stream Anthropic failure (429 / auth / context-overflow) would
+      // otherwise surface only to the client with NO server log — the exact
+      // prod-digest blind spot the AI-action error convention exists to close
+      // (security audit 2026-07-05). Log with the action tag + tenant ids.
+      console.error("[ai/chat] stream error", event.error, {
+        facilityId,
+        vendorId,
+        userId: session.user.id,
+      })
+    },
     onFinish: () => {
       // Fire-and-forget; never await on the user-visible stream path.
       recordClaudeUsage({

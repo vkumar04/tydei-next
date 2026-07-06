@@ -53,17 +53,38 @@ export type VendorBenchmarkImportInput = Omit<
 // ─── List Benchmarks ────────────────────────────────────────────
 
 export async function getBenchmarks(input: BenchmarkFilters) {
-  await requireAuth()
+  const session = await requireAuth()
   const filters = benchmarkFiltersSchema.parse(input)
 
+  // Tenant isolation (security audit 2026-07-05): since 2026-06-12
+  // `importVendorBenchmarks` writes vendor-PRIVATE rows (`source:
+  // "vendor_upload"`, `vendorId: <that vendor>`) into this table, so it is no
+  // longer purely a global reference. Everyone may read the national rows
+  // (`vendorId: null`); a vendor additionally reads its OWN uploads. Facility
+  // / admin callers see national rows only.
+  const callerVendorId = await callerVendorIdOrNull(session.user.id)
+  const tenantScope = {
+    OR: [
+      { vendorId: null },
+      ...(callerVendorId ? [{ vendorId: callerVendorId }] : []),
+    ],
+  }
+
+  const searchClause = filters.search
+    ? {
+        OR: [
+          { description: { contains: filters.search, mode: "insensitive" as const } },
+          { vendorItemNo: { contains: filters.search, mode: "insensitive" as const } },
+        ],
+      }
+    : undefined
+
   const where = {
-    ...(filters.category && { category: filters.category }),
-    ...(filters.search && {
-      OR: [
-        { description: { contains: filters.search, mode: "insensitive" as const } },
-        { vendorItemNo: { contains: filters.search, mode: "insensitive" as const } },
-      ],
-    }),
+    AND: [
+      tenantScope,
+      ...(filters.category ? [{ category: filters.category }] : []),
+      ...(searchClause ? [searchClause] : []),
+    ],
   }
 
   const [benchmarks, total] = await Promise.all([
@@ -82,9 +103,30 @@ export async function getBenchmarks(input: BenchmarkFilters) {
 // ─── Get Single Benchmark ───────────────────────────────────────
 
 export async function getBenchmark(id: string) {
-  await requireAuth()
-  const benchmark = await prisma.productBenchmark.findUniqueOrThrow({ where: { id } })
+  const session = await requireAuth()
+  // Same tenant scope as getBenchmarks — a vendor-uploaded row is only
+  // readable by its owning vendor (national rows by anyone).
+  const callerVendorId = await callerVendorIdOrNull(session.user.id)
+  const benchmark = await prisma.productBenchmark.findFirstOrThrow({
+    where: {
+      id,
+      OR: [
+        { vendorId: null },
+        ...(callerVendorId ? [{ vendorId: callerVendorId }] : []),
+      ],
+    },
+  })
   return serialize(benchmark)
+}
+
+/** Resolve the caller's vendorId without redirecting non-vendors (facility /
+ *  admin callers get null). Used only to scope benchmark reads. */
+async function callerVendorIdOrNull(userId: string): Promise<string | null> {
+  const member = await prisma.member.findFirst({
+    where: { userId },
+    select: { organization: { select: { vendor: { select: { id: true } } } } },
+  })
+  return member?.organization?.vendor?.id ?? null
 }
 
 // ─── Create Benchmark ───────────────────────────────────────────

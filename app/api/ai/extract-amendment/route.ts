@@ -13,6 +13,8 @@ import { rateLimit } from "@/lib/rate-limit"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 
+const MAX_BYTES = 25 * 1024 * 1024
+
 // ─── Types ──────────────────────────────────────────────────────
 
 const amendmentChangeSchema = z.object({
@@ -52,12 +54,29 @@ export async function POST(request: Request) {
       )
     }
 
+    // DoS cap — this route regressed from the 25MB standard every sibling
+    // extract-* route enforces (security audit 2026-07-05, M1). Reject on the
+    // declared content-length before buffering the whole file into memory.
+    const contentLength = request.headers.get("content-length")
+    if (contentLength && parseInt(contentLength) > MAX_BYTES) {
+      return Response.json(
+        { error: "File too large. Maximum size is 25MB." },
+        { status: 413 }
+      )
+    }
+
     const formData = await request.formData()
     const file = formData.get("file") as File | null
     const contractId = formData.get("contractId") as string | null
 
     if (!file) {
       return Response.json({ error: "No file provided" }, { status: 400 })
+    }
+    if (file.size > MAX_BYTES) {
+      return Response.json(
+        { error: "File too large. Maximum size is 25MB." },
+        { status: 413 }
+      )
     }
     if (!contractId) {
       return Response.json({ error: "No contractId provided" }, { status: 400 })

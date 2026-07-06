@@ -270,13 +270,13 @@ const BASELINE_HITS = new Set<string>([
   // alerts.ts: the synthesize-pipeline resolve-by-id transaction moved
   // to lib/alerts/synthesize-persist.ts (2026-06-09 audit H4 — system
   // contexts need it without a session); no by-id ops remain here.
-  // benchmarks.ts: getBenchmark (85) is a read of the GLOBAL, non-tenant
-  // ProductBenchmark reference table (requireAuth, by-id read — no tenant
-  // boundary to cross). The create/update/delete/bulkImport MUTATIONS were
-  // moved to requireAdmin (2026-06-17 security fix) — the scanner auto-
-  // exempts requireAdmin functions, so their prior allowlist entries
-  // (105, 113) were removed as stale.
-  "lib/actions/benchmarks.ts:86",
+  // benchmarks.ts: getBenchmark / getBenchmarks were SCOPED on 2026-07-05
+  // (security audit) — they no longer read the table unscoped. A vendor-
+  // uploaded row is now readable only by its owning vendor (national rows,
+  // vendorId null, by anyone), via a `{ OR: [{vendorId:null},{vendorId:
+  // caller}] }` findFirst/findMany. The former allowlist entry was removed;
+  // the create/update/delete/bulkImport MUTATIONS are requireAdmin (auto-
+  // exempt).
   // bundles.ts: updateBundle (292) / deleteBundle (333) run
   // assertBundleOwnedByFacility(facility.id, bundleId) — which findFirst's
   // the bundle via `primaryContract: contractsOwnedByFacility(...)` — IMMEDIATELY
