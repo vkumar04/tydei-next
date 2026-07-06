@@ -28,12 +28,12 @@ export function ProposalActions({
         ) : editingProposalId ? (
           <>
             <Check className="mr-2 h-4 w-4" />
-            Save Changes
+            Save &amp; build the deal
           </>
         ) : (
           <>
             <Plus className="mr-2 h-4 w-4" />
-            Save Proposal
+            Save &amp; build the deal
           </>
         )}
       </Button>
