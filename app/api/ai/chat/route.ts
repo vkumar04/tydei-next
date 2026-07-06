@@ -1,7 +1,7 @@
 import {
   streamText,
   convertToModelMessages,
-  stepCountIs,
+  isStepCount,
   type UIMessage,
 } from "ai"
 import { z } from "zod"
@@ -161,7 +161,7 @@ export async function POST(request: Request) {
     system: systemPrompt,
     messages: await convertToModelMessages(messages as UIMessage[]),
     tools: chatTools,
-    stopWhen: stepCountIs(5),
+    stopWhen: isStepCount(5),
     // Cap output so a runaway model can't burn unlimited tokens.
     // Chat answers are typically <1k tokens; 4k is 4× headroom.
     maxOutputTokens: 4000,
@@ -185,7 +185,9 @@ export async function POST(request: Request) {
         userId: session.user.id,
       })
     },
-    onFinish: () => {
+    // AI SDK v7 renamed streamText's `onFinish` → `onEnd` (identical
+    // GenerateTextOnEndCallback signature; `onFinish` is a deprecated alias).
+    onEnd: () => {
       // Fire-and-forget; never await on the user-visible stream path.
       recordClaudeUsage({
         facilityId,

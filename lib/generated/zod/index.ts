@@ -152,7 +152,7 @@ export const TieInBundleMemberScalarFieldEnumSchema = z.enum(['id','bundleId','c
 
 export const NotificationScalarFieldEnumSchema = z.enum(['id','userId','type','title','body','payload','actionUrl','readAt','createdAt']);
 
-export const PendingContractScalarFieldEnumSchema = z.enum(['id','vendorId','vendorName','facilityId','facilityName','contractName','contractType','status','effectiveDate','expirationDate','totalValue','contractNumber','annualValue','gpoAffiliation','performancePeriod','rebatePayPeriod','autoRenewal','terminationNoticeDays','capitalCost','interestRate','termMonths','downPayment','paymentCadence','amortizationShape','capitalLineItems','tieInContractId','division','terms','documents','pricingData','notes','submittedAt','reviewedAt','reviewedBy','reviewNotes','approvedContractId']);
+export const PendingContractScalarFieldEnumSchema = z.enum(['id','vendorId','vendorName','facilityId','facilityName','contractName','contractType','status','effectiveDate','expirationDate','totalValue','contractNumber','annualValue','gpoAffiliation','performancePeriod','rebatePayPeriod','autoRenewal','terminationNoticeDays','capitalCost','interestRate','termMonths','downPayment','paymentCadence','amortizationShape','capitalLineItems','tieInContractId','division','vendorDivisionId','terms','documents','pricingData','notes','submittedAt','reviewedAt','reviewedBy','reviewNotes','approvedContractId']);
 
 export const ContractChangeProposalScalarFieldEnumSchema = z.enum(['id','contractId','vendorId','vendorName','facilityId','facilityName','proposalType','status','changes','proposedTerms','vendorMessage','submittedAt','reviewedAt','reviewedBy','reviewNotes']);
 
@@ -2118,6 +2118,7 @@ export type VendorDivisionRelations = {
   contracts: ContractWithRelations[];
   vendorCogRecords: VendorCogRecordWithRelations[];
   connections: ConnectionWithRelations[];
+  pendingContracts: PendingContractWithRelations[];
 };
 
 export type VendorDivisionWithRelations = z.infer<typeof VendorDivisionSchema> & VendorDivisionRelations
@@ -2128,6 +2129,7 @@ export const VendorDivisionWithRelationsSchema: z.ZodType<VendorDivisionWithRela
   contracts: z.lazy(() => ContractWithRelationsSchema).array(),
   vendorCogRecords: z.lazy(() => VendorCogRecordWithRelationsSchema).array(),
   connections: z.lazy(() => ConnectionWithRelationsSchema).array(),
+  pendingContracts: z.lazy(() => PendingContractWithRelationsSchema).array(),
 }))
 
 // VENDOR DIVISION OPTIONAL DEFAULTS RELATION SCHEMA
@@ -2139,6 +2141,7 @@ export type VendorDivisionOptionalDefaultsRelations = {
   contracts: ContractOptionalDefaultsWithRelations[];
   vendorCogRecords: VendorCogRecordOptionalDefaultsWithRelations[];
   connections: ConnectionOptionalDefaultsWithRelations[];
+  pendingContracts: PendingContractOptionalDefaultsWithRelations[];
 };
 
 export type VendorDivisionOptionalDefaultsWithRelations = z.infer<typeof VendorDivisionOptionalDefaultsSchema> & VendorDivisionOptionalDefaultsRelations
@@ -2149,6 +2152,7 @@ export const VendorDivisionOptionalDefaultsWithRelationsSchema: z.ZodType<Vendor
   contracts: z.lazy(() => ContractOptionalDefaultsWithRelationsSchema).array(),
   vendorCogRecords: z.lazy(() => VendorCogRecordOptionalDefaultsWithRelationsSchema).array(),
   connections: z.lazy(() => ConnectionOptionalDefaultsWithRelationsSchema).array(),
+  pendingContracts: z.lazy(() => PendingContractOptionalDefaultsWithRelationsSchema).array(),
 }))
 
 // VENDOR DIVISION PARTIAL RELATION SCHEMA
@@ -2160,6 +2164,7 @@ export type VendorDivisionPartialRelations = {
   contracts?: ContractPartialWithRelations[];
   vendorCogRecords?: VendorCogRecordPartialWithRelations[];
   connections?: ConnectionPartialWithRelations[];
+  pendingContracts?: PendingContractPartialWithRelations[];
 };
 
 export type VendorDivisionPartialWithRelations = z.infer<typeof VendorDivisionPartialSchema> & VendorDivisionPartialRelations
@@ -2170,6 +2175,7 @@ export const VendorDivisionPartialWithRelationsSchema: z.ZodType<VendorDivisionP
   contracts: z.lazy(() => ContractPartialWithRelationsSchema).array(),
   vendorCogRecords: z.lazy(() => VendorCogRecordPartialWithRelationsSchema).array(),
   connections: z.lazy(() => ConnectionPartialWithRelationsSchema).array(),
+  pendingContracts: z.lazy(() => PendingContractPartialWithRelationsSchema).array(),
 })).partial()
 
 export type VendorDivisionOptionalDefaultsWithPartialRelations = z.infer<typeof VendorDivisionOptionalDefaultsSchema> & VendorDivisionPartialRelations
@@ -2180,6 +2186,7 @@ export const VendorDivisionOptionalDefaultsWithPartialRelationsSchema: z.ZodType
   contracts: z.lazy(() => ContractPartialWithRelationsSchema).array(),
   vendorCogRecords: z.lazy(() => VendorCogRecordPartialWithRelationsSchema).array(),
   connections: z.lazy(() => ConnectionPartialWithRelationsSchema).array(),
+  pendingContracts: z.lazy(() => PendingContractPartialWithRelationsSchema).array(),
 }).partial())
 
 export type VendorDivisionWithPartialRelations = z.infer<typeof VendorDivisionSchema> & VendorDivisionPartialRelations
@@ -2190,6 +2197,7 @@ export const VendorDivisionWithPartialRelationsSchema: z.ZodType<VendorDivisionW
   contracts: z.lazy(() => ContractPartialWithRelationsSchema).array(),
   vendorCogRecords: z.lazy(() => VendorCogRecordPartialWithRelationsSchema).array(),
   connections: z.lazy(() => ConnectionPartialWithRelationsSchema).array(),
+  pendingContracts: z.lazy(() => PendingContractPartialWithRelationsSchema).array(),
 }).partial())
 
 /////////////////////////////////////////
@@ -4760,6 +4768,7 @@ export const PendingContractSchema = z.object({
   capitalLineItems: JsonValueSchema.nullable(),
   tieInContractId: z.string().nullable(),
   division: z.string().nullable(),
+  vendorDivisionId: z.string().nullable(),
   terms: JsonValueSchema,
   documents: JsonValueSchema,
   pricingData: JsonValueSchema.nullable(),
@@ -4803,6 +4812,7 @@ export type PendingContractRelations = {
   approvedContract?: ContractWithRelations | null;
   vendor: VendorWithRelations;
   facility?: FacilityWithRelations | null;
+  vendorDivision?: VendorDivisionWithRelations | null;
 };
 
 export type PendingContractWithRelations = Omit<z.infer<typeof PendingContractSchema>, "capitalLineItems" | "pricingData"> & {
@@ -4814,6 +4824,7 @@ export const PendingContractWithRelationsSchema: z.ZodType<PendingContractWithRe
   approvedContract: z.lazy(() => ContractWithRelationsSchema).nullable(),
   vendor: z.lazy(() => VendorWithRelationsSchema),
   facility: z.lazy(() => FacilityWithRelationsSchema).nullable(),
+  vendorDivision: z.lazy(() => VendorDivisionWithRelationsSchema).nullable(),
 }))
 
 // PENDING CONTRACT OPTIONAL DEFAULTS RELATION SCHEMA
@@ -4823,6 +4834,7 @@ export type PendingContractOptionalDefaultsRelations = {
   approvedContract?: ContractOptionalDefaultsWithRelations | null;
   vendor: VendorOptionalDefaultsWithRelations;
   facility?: FacilityOptionalDefaultsWithRelations | null;
+  vendorDivision?: VendorDivisionOptionalDefaultsWithRelations | null;
 };
 
 export type PendingContractOptionalDefaultsWithRelations = Omit<z.infer<typeof PendingContractOptionalDefaultsSchema>, "capitalLineItems" | "pricingData"> & {
@@ -4834,6 +4846,7 @@ export const PendingContractOptionalDefaultsWithRelationsSchema: z.ZodType<Pendi
   approvedContract: z.lazy(() => ContractOptionalDefaultsWithRelationsSchema).nullable(),
   vendor: z.lazy(() => VendorOptionalDefaultsWithRelationsSchema),
   facility: z.lazy(() => FacilityOptionalDefaultsWithRelationsSchema).nullable(),
+  vendorDivision: z.lazy(() => VendorDivisionOptionalDefaultsWithRelationsSchema).nullable(),
 }))
 
 // PENDING CONTRACT PARTIAL RELATION SCHEMA
@@ -4843,6 +4856,7 @@ export type PendingContractPartialRelations = {
   approvedContract?: ContractPartialWithRelations | null;
   vendor?: VendorPartialWithRelations;
   facility?: FacilityPartialWithRelations | null;
+  vendorDivision?: VendorDivisionPartialWithRelations | null;
 };
 
 export type PendingContractPartialWithRelations = Omit<z.infer<typeof PendingContractPartialSchema>, "capitalLineItems" | "pricingData"> & {
@@ -4854,6 +4868,7 @@ export const PendingContractPartialWithRelationsSchema: z.ZodType<PendingContrac
   approvedContract: z.lazy(() => ContractPartialWithRelationsSchema).nullable(),
   vendor: z.lazy(() => VendorPartialWithRelationsSchema),
   facility: z.lazy(() => FacilityPartialWithRelationsSchema).nullable(),
+  vendorDivision: z.lazy(() => VendorDivisionPartialWithRelationsSchema).nullable(),
 })).partial()
 
 export type PendingContractOptionalDefaultsWithPartialRelations = Omit<z.infer<typeof PendingContractOptionalDefaultsSchema>, "capitalLineItems" | "pricingData"> & {
@@ -4865,6 +4880,7 @@ export const PendingContractOptionalDefaultsWithPartialRelationsSchema: z.ZodTyp
   approvedContract: z.lazy(() => ContractPartialWithRelationsSchema).nullable(),
   vendor: z.lazy(() => VendorPartialWithRelationsSchema),
   facility: z.lazy(() => FacilityPartialWithRelationsSchema).nullable(),
+  vendorDivision: z.lazy(() => VendorDivisionPartialWithRelationsSchema).nullable(),
 }).partial())
 
 export type PendingContractWithPartialRelations = Omit<z.infer<typeof PendingContractSchema>, "capitalLineItems" | "pricingData"> & {
@@ -4876,6 +4892,7 @@ export const PendingContractWithPartialRelationsSchema: z.ZodType<PendingContrac
   approvedContract: z.lazy(() => ContractPartialWithRelationsSchema).nullable(),
   vendor: z.lazy(() => VendorPartialWithRelationsSchema),
   facility: z.lazy(() => FacilityPartialWithRelationsSchema).nullable(),
+  vendorDivision: z.lazy(() => VendorDivisionPartialWithRelationsSchema).nullable(),
 }).partial())
 
 /////////////////////////////////////////
@@ -8855,6 +8872,7 @@ export const VendorDivisionIncludeSchema: z.ZodType<Prisma.VendorDivisionInclude
   contracts: z.union([z.boolean(),z.lazy(() => ContractFindManyArgsSchema)]).optional(),
   vendorCogRecords: z.union([z.boolean(),z.lazy(() => VendorCogRecordFindManyArgsSchema)]).optional(),
   connections: z.union([z.boolean(),z.lazy(() => ConnectionFindManyArgsSchema)]).optional(),
+  pendingContracts: z.union([z.boolean(),z.lazy(() => PendingContractFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => VendorDivisionCountOutputTypeArgsSchema)]).optional(),
 }).strict();
 
@@ -8872,6 +8890,7 @@ export const VendorDivisionCountOutputTypeSelectSchema: z.ZodType<Prisma.VendorD
   contracts: z.boolean().optional(),
   vendorCogRecords: z.boolean().optional(),
   connections: z.boolean().optional(),
+  pendingContracts: z.boolean().optional(),
 }).strict();
 
 export const VendorDivisionSelectSchema: z.ZodType<Prisma.VendorDivisionSelect> = z.object({
@@ -8887,6 +8906,7 @@ export const VendorDivisionSelectSchema: z.ZodType<Prisma.VendorDivisionSelect> 
   contracts: z.union([z.boolean(),z.lazy(() => ContractFindManyArgsSchema)]).optional(),
   vendorCogRecords: z.union([z.boolean(),z.lazy(() => VendorCogRecordFindManyArgsSchema)]).optional(),
   connections: z.union([z.boolean(),z.lazy(() => ConnectionFindManyArgsSchema)]).optional(),
+  pendingContracts: z.union([z.boolean(),z.lazy(() => PendingContractFindManyArgsSchema)]).optional(),
   _count: z.union([z.boolean(),z.lazy(() => VendorDivisionCountOutputTypeArgsSchema)]).optional(),
 }).strict()
 
@@ -9689,6 +9709,7 @@ export const PendingContractIncludeSchema: z.ZodType<Prisma.PendingContractInclu
   approvedContract: z.union([z.boolean(),z.lazy(() => ContractArgsSchema)]).optional(),
   vendor: z.union([z.boolean(),z.lazy(() => VendorArgsSchema)]).optional(),
   facility: z.union([z.boolean(),z.lazy(() => FacilityArgsSchema)]).optional(),
+  vendorDivision: z.union([z.boolean(),z.lazy(() => VendorDivisionArgsSchema)]).optional(),
 }).strict();
 
 export const PendingContractArgsSchema: z.ZodType<Prisma.PendingContractDefaultArgs> = z.object({
@@ -9724,6 +9745,7 @@ export const PendingContractSelectSchema: z.ZodType<Prisma.PendingContractSelect
   capitalLineItems: z.boolean().optional(),
   tieInContractId: z.boolean().optional(),
   division: z.boolean().optional(),
+  vendorDivisionId: z.boolean().optional(),
   terms: z.boolean().optional(),
   documents: z.boolean().optional(),
   pricingData: z.boolean().optional(),
@@ -9736,6 +9758,7 @@ export const PendingContractSelectSchema: z.ZodType<Prisma.PendingContractSelect
   approvedContract: z.union([z.boolean(),z.lazy(() => ContractArgsSchema)]).optional(),
   vendor: z.union([z.boolean(),z.lazy(() => VendorArgsSchema)]).optional(),
   facility: z.union([z.boolean(),z.lazy(() => FacilityArgsSchema)]).optional(),
+  vendorDivision: z.union([z.boolean(),z.lazy(() => VendorDivisionArgsSchema)]).optional(),
 }).strict()
 
 // CONTRACT CHANGE PROPOSAL
@@ -12156,6 +12179,7 @@ export const VendorDivisionWhereInputSchema: z.ZodType<Prisma.VendorDivisionWher
   contracts: z.lazy(() => ContractListRelationFilterSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordListRelationFilterSchema).optional(),
   connections: z.lazy(() => ConnectionListRelationFilterSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractListRelationFilterSchema).optional(),
 });
 
 export const VendorDivisionOrderByWithRelationInputSchema: z.ZodType<Prisma.VendorDivisionOrderByWithRelationInput> = z.strictObject({
@@ -12171,6 +12195,7 @@ export const VendorDivisionOrderByWithRelationInputSchema: z.ZodType<Prisma.Vend
   contracts: z.lazy(() => ContractOrderByRelationAggregateInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordOrderByRelationAggregateInputSchema).optional(),
   connections: z.lazy(() => ConnectionOrderByRelationAggregateInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractOrderByRelationAggregateInputSchema).optional(),
 });
 
 export const VendorDivisionWhereUniqueInputSchema: z.ZodType<Prisma.VendorDivisionWhereUniqueInput> = z.union([
@@ -12202,6 +12227,7 @@ export const VendorDivisionWhereUniqueInputSchema: z.ZodType<Prisma.VendorDivisi
   contracts: z.lazy(() => ContractListRelationFilterSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordListRelationFilterSchema).optional(),
   connections: z.lazy(() => ConnectionListRelationFilterSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractListRelationFilterSchema).optional(),
 }));
 
 export const VendorDivisionOrderByWithAggregationInputSchema: z.ZodType<Prisma.VendorDivisionOrderByWithAggregationInput> = z.strictObject({
@@ -14535,6 +14561,7 @@ export const PendingContractWhereInputSchema: z.ZodType<Prisma.PendingContractWh
   capitalLineItems: z.lazy(() => JsonNullableFilterSchema).optional(),
   tieInContractId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   division: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   terms: z.lazy(() => JsonFilterSchema).optional(),
   documents: z.lazy(() => JsonFilterSchema).optional(),
   pricingData: z.lazy(() => JsonNullableFilterSchema).optional(),
@@ -14547,6 +14574,7 @@ export const PendingContractWhereInputSchema: z.ZodType<Prisma.PendingContractWh
   approvedContract: z.union([ z.lazy(() => ContractNullableScalarRelationFilterSchema), z.lazy(() => ContractWhereInputSchema) ]).optional().nullable(),
   vendor: z.union([ z.lazy(() => VendorScalarRelationFilterSchema), z.lazy(() => VendorWhereInputSchema) ]).optional(),
   facility: z.union([ z.lazy(() => FacilityNullableScalarRelationFilterSchema), z.lazy(() => FacilityWhereInputSchema) ]).optional().nullable(),
+  vendorDivision: z.union([ z.lazy(() => VendorDivisionNullableScalarRelationFilterSchema), z.lazy(() => VendorDivisionWhereInputSchema) ]).optional().nullable(),
 });
 
 export const PendingContractOrderByWithRelationInputSchema: z.ZodType<Prisma.PendingContractOrderByWithRelationInput> = z.strictObject({
@@ -14577,6 +14605,7 @@ export const PendingContractOrderByWithRelationInputSchema: z.ZodType<Prisma.Pen
   capitalLineItems: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   tieInContractId: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   division: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  vendorDivisionId: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   terms: z.lazy(() => SortOrderSchema).optional(),
   documents: z.lazy(() => SortOrderSchema).optional(),
   pricingData: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
@@ -14589,6 +14618,7 @@ export const PendingContractOrderByWithRelationInputSchema: z.ZodType<Prisma.Pen
   approvedContract: z.lazy(() => ContractOrderByWithRelationInputSchema).optional(),
   vendor: z.lazy(() => VendorOrderByWithRelationInputSchema).optional(),
   facility: z.lazy(() => FacilityOrderByWithRelationInputSchema).optional(),
+  vendorDivision: z.lazy(() => VendorDivisionOrderByWithRelationInputSchema).optional(),
 });
 
 export const PendingContractWhereUniqueInputSchema: z.ZodType<Prisma.PendingContractWhereUniqueInput> = z.object({
@@ -14625,6 +14655,7 @@ export const PendingContractWhereUniqueInputSchema: z.ZodType<Prisma.PendingCont
   capitalLineItems: z.lazy(() => JsonNullableFilterSchema).optional(),
   tieInContractId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   division: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   terms: z.lazy(() => JsonFilterSchema).optional(),
   documents: z.lazy(() => JsonFilterSchema).optional(),
   pricingData: z.lazy(() => JsonNullableFilterSchema).optional(),
@@ -14637,6 +14668,7 @@ export const PendingContractWhereUniqueInputSchema: z.ZodType<Prisma.PendingCont
   approvedContract: z.union([ z.lazy(() => ContractNullableScalarRelationFilterSchema), z.lazy(() => ContractWhereInputSchema) ]).optional().nullable(),
   vendor: z.union([ z.lazy(() => VendorScalarRelationFilterSchema), z.lazy(() => VendorWhereInputSchema) ]).optional(),
   facility: z.union([ z.lazy(() => FacilityNullableScalarRelationFilterSchema), z.lazy(() => FacilityWhereInputSchema) ]).optional().nullable(),
+  vendorDivision: z.union([ z.lazy(() => VendorDivisionNullableScalarRelationFilterSchema), z.lazy(() => VendorDivisionWhereInputSchema) ]).optional().nullable(),
 }));
 
 export const PendingContractOrderByWithAggregationInputSchema: z.ZodType<Prisma.PendingContractOrderByWithAggregationInput> = z.strictObject({
@@ -14667,6 +14699,7 @@ export const PendingContractOrderByWithAggregationInputSchema: z.ZodType<Prisma.
   capitalLineItems: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   tieInContractId: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   division: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  vendorDivisionId: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   terms: z.lazy(() => SortOrderSchema).optional(),
   documents: z.lazy(() => SortOrderSchema).optional(),
   pricingData: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
@@ -14714,6 +14747,7 @@ export const PendingContractScalarWhereWithAggregatesInputSchema: z.ZodType<Pris
   capitalLineItems: z.lazy(() => JsonNullableWithAggregatesFilterSchema).optional(),
   tieInContractId: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
   division: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
   terms: z.lazy(() => JsonWithAggregatesFilterSchema).optional(),
   documents: z.lazy(() => JsonWithAggregatesFilterSchema).optional(),
   pricingData: z.lazy(() => JsonNullableWithAggregatesFilterSchema).optional(),
@@ -19656,6 +19690,7 @@ export const VendorDivisionCreateInputSchema: z.ZodType<Prisma.VendorDivisionCre
   contracts: z.lazy(() => ContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   connections: z.lazy(() => ConnectionCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedCreateInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedCreateInput> = z.strictObject({
@@ -19670,6 +19705,7 @@ export const VendorDivisionUncheckedCreateInputSchema: z.ZodType<Prisma.VendorDi
   contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   connections: z.lazy(() => ConnectionUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionUpdateInputSchema: z.ZodType<Prisma.VendorDivisionUpdateInput> = z.strictObject({
@@ -19684,6 +19720,7 @@ export const VendorDivisionUpdateInputSchema: z.ZodType<Prisma.VendorDivisionUpd
   contracts: z.lazy(() => ContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   connections: z.lazy(() => ConnectionUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedUpdateInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedUpdateInput> = z.strictObject({
@@ -19698,6 +19735,7 @@ export const VendorDivisionUncheckedUpdateInputSchema: z.ZodType<Prisma.VendorDi
   contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   connections: z.lazy(() => ConnectionUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const VendorDivisionCreateManyInputSchema: z.ZodType<Prisma.VendorDivisionCreateManyInput> = z.strictObject({
@@ -22082,6 +22120,7 @@ export const PendingContractCreateInputSchema: z.ZodType<Prisma.PendingContractC
   approvedContract: z.lazy(() => ContractCreateNestedOneWithoutApprovedFromPendingInputSchema).optional(),
   vendor: z.lazy(() => VendorCreateNestedOneWithoutPendingContractsInputSchema),
   facility: z.lazy(() => FacilityCreateNestedOneWithoutPendingContractsInputSchema).optional(),
+  vendorDivision: z.lazy(() => VendorDivisionCreateNestedOneWithoutPendingContractsInputSchema).optional(),
 });
 
 export const PendingContractUncheckedCreateInputSchema: z.ZodType<Prisma.PendingContractUncheckedCreateInput> = z.strictObject({
@@ -22112,6 +22151,7 @@ export const PendingContractUncheckedCreateInputSchema: z.ZodType<Prisma.Pending
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.string().optional().nullable(),
   division: z.string().optional().nullable(),
+  vendorDivisionId: z.string().optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -22160,6 +22200,7 @@ export const PendingContractUpdateInputSchema: z.ZodType<Prisma.PendingContractU
   approvedContract: z.lazy(() => ContractUpdateOneWithoutApprovedFromPendingNestedInputSchema).optional(),
   vendor: z.lazy(() => VendorUpdateOneRequiredWithoutPendingContractsNestedInputSchema).optional(),
   facility: z.lazy(() => FacilityUpdateOneWithoutPendingContractsNestedInputSchema).optional(),
+  vendorDivision: z.lazy(() => VendorDivisionUpdateOneWithoutPendingContractsNestedInputSchema).optional(),
 });
 
 export const PendingContractUncheckedUpdateInputSchema: z.ZodType<Prisma.PendingContractUncheckedUpdateInput> = z.strictObject({
@@ -22190,6 +22231,7 @@ export const PendingContractUncheckedUpdateInputSchema: z.ZodType<Prisma.Pending
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -22229,6 +22271,7 @@ export const PendingContractCreateManyInputSchema: z.ZodType<Prisma.PendingContr
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.string().optional().nullable(),
   division: z.string().optional().nullable(),
+  vendorDivisionId: z.string().optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -22304,6 +22347,7 @@ export const PendingContractUncheckedUpdateManyInputSchema: z.ZodType<Prisma.Pen
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -29271,6 +29315,7 @@ export const PendingContractCountOrderByAggregateInputSchema: z.ZodType<Prisma.P
   capitalLineItems: z.lazy(() => SortOrderSchema).optional(),
   tieInContractId: z.lazy(() => SortOrderSchema).optional(),
   division: z.lazy(() => SortOrderSchema).optional(),
+  vendorDivisionId: z.lazy(() => SortOrderSchema).optional(),
   terms: z.lazy(() => SortOrderSchema).optional(),
   documents: z.lazy(() => SortOrderSchema).optional(),
   pricingData: z.lazy(() => SortOrderSchema).optional(),
@@ -29319,6 +29364,7 @@ export const PendingContractMaxOrderByAggregateInputSchema: z.ZodType<Prisma.Pen
   amortizationShape: z.lazy(() => SortOrderSchema).optional(),
   tieInContractId: z.lazy(() => SortOrderSchema).optional(),
   division: z.lazy(() => SortOrderSchema).optional(),
+  vendorDivisionId: z.lazy(() => SortOrderSchema).optional(),
   notes: z.lazy(() => SortOrderSchema).optional(),
   submittedAt: z.lazy(() => SortOrderSchema).optional(),
   reviewedAt: z.lazy(() => SortOrderSchema).optional(),
@@ -29354,6 +29400,7 @@ export const PendingContractMinOrderByAggregateInputSchema: z.ZodType<Prisma.Pen
   amortizationShape: z.lazy(() => SortOrderSchema).optional(),
   tieInContractId: z.lazy(() => SortOrderSchema).optional(),
   division: z.lazy(() => SortOrderSchema).optional(),
+  vendorDivisionId: z.lazy(() => SortOrderSchema).optional(),
   notes: z.lazy(() => SortOrderSchema).optional(),
   submittedAt: z.lazy(() => SortOrderSchema).optional(),
   reviewedAt: z.lazy(() => SortOrderSchema).optional(),
@@ -34691,6 +34738,13 @@ export const ConnectionCreateNestedManyWithoutVendorDivisionInputSchema: z.ZodTy
   connect: z.union([ z.lazy(() => ConnectionWhereUniqueInputSchema), z.lazy(() => ConnectionWhereUniqueInputSchema).array() ]).optional(),
 });
 
+export const PendingContractCreateNestedManyWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractCreateNestedManyWithoutVendorDivisionInput> = z.strictObject({
+  create: z.union([ z.lazy(() => PendingContractCreateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractCreateWithoutVendorDivisionInputSchema).array(), z.lazy(() => PendingContractUncheckedCreateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUncheckedCreateWithoutVendorDivisionInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => PendingContractCreateOrConnectWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractCreateOrConnectWithoutVendorDivisionInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => PendingContractCreateManyVendorDivisionInputEnvelopeSchema).optional(),
+  connect: z.union([ z.lazy(() => PendingContractWhereUniqueInputSchema), z.lazy(() => PendingContractWhereUniqueInputSchema).array() ]).optional(),
+});
+
 export const DivisionMemberUncheckedCreateNestedManyWithoutDivisionInputSchema: z.ZodType<Prisma.DivisionMemberUncheckedCreateNestedManyWithoutDivisionInput> = z.strictObject({
   create: z.union([ z.lazy(() => DivisionMemberCreateWithoutDivisionInputSchema), z.lazy(() => DivisionMemberCreateWithoutDivisionInputSchema).array(), z.lazy(() => DivisionMemberUncheckedCreateWithoutDivisionInputSchema), z.lazy(() => DivisionMemberUncheckedCreateWithoutDivisionInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => DivisionMemberCreateOrConnectWithoutDivisionInputSchema), z.lazy(() => DivisionMemberCreateOrConnectWithoutDivisionInputSchema).array() ]).optional(),
@@ -34717,6 +34771,13 @@ export const ConnectionUncheckedCreateNestedManyWithoutVendorDivisionInputSchema
   connectOrCreate: z.union([ z.lazy(() => ConnectionCreateOrConnectWithoutVendorDivisionInputSchema), z.lazy(() => ConnectionCreateOrConnectWithoutVendorDivisionInputSchema).array() ]).optional(),
   createMany: z.lazy(() => ConnectionCreateManyVendorDivisionInputEnvelopeSchema).optional(),
   connect: z.union([ z.lazy(() => ConnectionWhereUniqueInputSchema), z.lazy(() => ConnectionWhereUniqueInputSchema).array() ]).optional(),
+});
+
+export const PendingContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractUncheckedCreateNestedManyWithoutVendorDivisionInput> = z.strictObject({
+  create: z.union([ z.lazy(() => PendingContractCreateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractCreateWithoutVendorDivisionInputSchema).array(), z.lazy(() => PendingContractUncheckedCreateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUncheckedCreateWithoutVendorDivisionInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => PendingContractCreateOrConnectWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractCreateOrConnectWithoutVendorDivisionInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => PendingContractCreateManyVendorDivisionInputEnvelopeSchema).optional(),
+  connect: z.union([ z.lazy(() => PendingContractWhereUniqueInputSchema), z.lazy(() => PendingContractWhereUniqueInputSchema).array() ]).optional(),
 });
 
 export const VendorDivisionUpdatecategoriesInputSchema: z.ZodType<Prisma.VendorDivisionUpdatecategoriesInput> = z.strictObject({
@@ -34788,6 +34849,20 @@ export const ConnectionUpdateManyWithoutVendorDivisionNestedInputSchema: z.ZodTy
   deleteMany: z.union([ z.lazy(() => ConnectionScalarWhereInputSchema), z.lazy(() => ConnectionScalarWhereInputSchema).array() ]).optional(),
 });
 
+export const PendingContractUpdateManyWithoutVendorDivisionNestedInputSchema: z.ZodType<Prisma.PendingContractUpdateManyWithoutVendorDivisionNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => PendingContractCreateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractCreateWithoutVendorDivisionInputSchema).array(), z.lazy(() => PendingContractUncheckedCreateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUncheckedCreateWithoutVendorDivisionInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => PendingContractCreateOrConnectWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractCreateOrConnectWithoutVendorDivisionInputSchema).array() ]).optional(),
+  upsert: z.union([ z.lazy(() => PendingContractUpsertWithWhereUniqueWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUpsertWithWhereUniqueWithoutVendorDivisionInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => PendingContractCreateManyVendorDivisionInputEnvelopeSchema).optional(),
+  set: z.union([ z.lazy(() => PendingContractWhereUniqueInputSchema), z.lazy(() => PendingContractWhereUniqueInputSchema).array() ]).optional(),
+  disconnect: z.union([ z.lazy(() => PendingContractWhereUniqueInputSchema), z.lazy(() => PendingContractWhereUniqueInputSchema).array() ]).optional(),
+  delete: z.union([ z.lazy(() => PendingContractWhereUniqueInputSchema), z.lazy(() => PendingContractWhereUniqueInputSchema).array() ]).optional(),
+  connect: z.union([ z.lazy(() => PendingContractWhereUniqueInputSchema), z.lazy(() => PendingContractWhereUniqueInputSchema).array() ]).optional(),
+  update: z.union([ z.lazy(() => PendingContractUpdateWithWhereUniqueWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUpdateWithWhereUniqueWithoutVendorDivisionInputSchema).array() ]).optional(),
+  updateMany: z.union([ z.lazy(() => PendingContractUpdateManyWithWhereWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUpdateManyWithWhereWithoutVendorDivisionInputSchema).array() ]).optional(),
+  deleteMany: z.union([ z.lazy(() => PendingContractScalarWhereInputSchema), z.lazy(() => PendingContractScalarWhereInputSchema).array() ]).optional(),
+});
+
 export const DivisionMemberUncheckedUpdateManyWithoutDivisionNestedInputSchema: z.ZodType<Prisma.DivisionMemberUncheckedUpdateManyWithoutDivisionNestedInput> = z.strictObject({
   create: z.union([ z.lazy(() => DivisionMemberCreateWithoutDivisionInputSchema), z.lazy(() => DivisionMemberCreateWithoutDivisionInputSchema).array(), z.lazy(() => DivisionMemberUncheckedCreateWithoutDivisionInputSchema), z.lazy(() => DivisionMemberUncheckedCreateWithoutDivisionInputSchema).array() ]).optional(),
   connectOrCreate: z.union([ z.lazy(() => DivisionMemberCreateOrConnectWithoutDivisionInputSchema), z.lazy(() => DivisionMemberCreateOrConnectWithoutDivisionInputSchema).array() ]).optional(),
@@ -34842,6 +34917,20 @@ export const ConnectionUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema
   update: z.union([ z.lazy(() => ConnectionUpdateWithWhereUniqueWithoutVendorDivisionInputSchema), z.lazy(() => ConnectionUpdateWithWhereUniqueWithoutVendorDivisionInputSchema).array() ]).optional(),
   updateMany: z.union([ z.lazy(() => ConnectionUpdateManyWithWhereWithoutVendorDivisionInputSchema), z.lazy(() => ConnectionUpdateManyWithWhereWithoutVendorDivisionInputSchema).array() ]).optional(),
   deleteMany: z.union([ z.lazy(() => ConnectionScalarWhereInputSchema), z.lazy(() => ConnectionScalarWhereInputSchema).array() ]).optional(),
+});
+
+export const PendingContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema: z.ZodType<Prisma.PendingContractUncheckedUpdateManyWithoutVendorDivisionNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => PendingContractCreateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractCreateWithoutVendorDivisionInputSchema).array(), z.lazy(() => PendingContractUncheckedCreateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUncheckedCreateWithoutVendorDivisionInputSchema).array() ]).optional(),
+  connectOrCreate: z.union([ z.lazy(() => PendingContractCreateOrConnectWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractCreateOrConnectWithoutVendorDivisionInputSchema).array() ]).optional(),
+  upsert: z.union([ z.lazy(() => PendingContractUpsertWithWhereUniqueWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUpsertWithWhereUniqueWithoutVendorDivisionInputSchema).array() ]).optional(),
+  createMany: z.lazy(() => PendingContractCreateManyVendorDivisionInputEnvelopeSchema).optional(),
+  set: z.union([ z.lazy(() => PendingContractWhereUniqueInputSchema), z.lazy(() => PendingContractWhereUniqueInputSchema).array() ]).optional(),
+  disconnect: z.union([ z.lazy(() => PendingContractWhereUniqueInputSchema), z.lazy(() => PendingContractWhereUniqueInputSchema).array() ]).optional(),
+  delete: z.union([ z.lazy(() => PendingContractWhereUniqueInputSchema), z.lazy(() => PendingContractWhereUniqueInputSchema).array() ]).optional(),
+  connect: z.union([ z.lazy(() => PendingContractWhereUniqueInputSchema), z.lazy(() => PendingContractWhereUniqueInputSchema).array() ]).optional(),
+  update: z.union([ z.lazy(() => PendingContractUpdateWithWhereUniqueWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUpdateWithWhereUniqueWithoutVendorDivisionInputSchema).array() ]).optional(),
+  updateMany: z.union([ z.lazy(() => PendingContractUpdateManyWithWhereWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUpdateManyWithWhereWithoutVendorDivisionInputSchema).array() ]).optional(),
+  deleteMany: z.union([ z.lazy(() => PendingContractScalarWhereInputSchema), z.lazy(() => PendingContractScalarWhereInputSchema).array() ]).optional(),
 });
 
 export const VendorDivisionCreateNestedOneWithoutMembersInputSchema: z.ZodType<Prisma.VendorDivisionCreateNestedOneWithoutMembersInput> = z.strictObject({
@@ -36883,6 +36972,12 @@ export const FacilityCreateNestedOneWithoutPendingContractsInputSchema: z.ZodTyp
   connect: z.lazy(() => FacilityWhereUniqueInputSchema).optional(),
 });
 
+export const VendorDivisionCreateNestedOneWithoutPendingContractsInputSchema: z.ZodType<Prisma.VendorDivisionCreateNestedOneWithoutPendingContractsInput> = z.strictObject({
+  create: z.union([ z.lazy(() => VendorDivisionCreateWithoutPendingContractsInputSchema), z.lazy(() => VendorDivisionUncheckedCreateWithoutPendingContractsInputSchema) ]).optional(),
+  connectOrCreate: z.lazy(() => VendorDivisionCreateOrConnectWithoutPendingContractsInputSchema).optional(),
+  connect: z.lazy(() => VendorDivisionWhereUniqueInputSchema).optional(),
+});
+
 export const EnumPendingContractStatusFieldUpdateOperationsInputSchema: z.ZodType<Prisma.EnumPendingContractStatusFieldUpdateOperationsInput> = z.strictObject({
   set: z.lazy(() => PendingContractStatusSchema).optional(),
 });
@@ -36913,6 +37008,16 @@ export const FacilityUpdateOneWithoutPendingContractsNestedInputSchema: z.ZodTyp
   delete: z.union([ z.boolean(),z.lazy(() => FacilityWhereInputSchema) ]).optional(),
   connect: z.lazy(() => FacilityWhereUniqueInputSchema).optional(),
   update: z.union([ z.lazy(() => FacilityUpdateToOneWithWhereWithoutPendingContractsInputSchema), z.lazy(() => FacilityUpdateWithoutPendingContractsInputSchema), z.lazy(() => FacilityUncheckedUpdateWithoutPendingContractsInputSchema) ]).optional(),
+});
+
+export const VendorDivisionUpdateOneWithoutPendingContractsNestedInputSchema: z.ZodType<Prisma.VendorDivisionUpdateOneWithoutPendingContractsNestedInput> = z.strictObject({
+  create: z.union([ z.lazy(() => VendorDivisionCreateWithoutPendingContractsInputSchema), z.lazy(() => VendorDivisionUncheckedCreateWithoutPendingContractsInputSchema) ]).optional(),
+  connectOrCreate: z.lazy(() => VendorDivisionCreateOrConnectWithoutPendingContractsInputSchema).optional(),
+  upsert: z.lazy(() => VendorDivisionUpsertWithoutPendingContractsInputSchema).optional(),
+  disconnect: z.union([ z.boolean(),z.lazy(() => VendorDivisionWhereInputSchema) ]).optional(),
+  delete: z.union([ z.boolean(),z.lazy(() => VendorDivisionWhereInputSchema) ]).optional(),
+  connect: z.lazy(() => VendorDivisionWhereUniqueInputSchema).optional(),
+  update: z.union([ z.lazy(() => VendorDivisionUpdateToOneWithWhereWithoutPendingContractsInputSchema), z.lazy(() => VendorDivisionUpdateWithoutPendingContractsInputSchema), z.lazy(() => VendorDivisionUncheckedUpdateWithoutPendingContractsInputSchema) ]).optional(),
 });
 
 export const ContractCreateNestedOneWithoutChangeProposalsInputSchema: z.ZodType<Prisma.ContractCreateNestedOneWithoutChangeProposalsInput> = z.strictObject({
@@ -41514,6 +41619,7 @@ export const PendingContractCreateWithoutFacilityInputSchema: z.ZodType<Prisma.P
   reviewNotes: z.string().optional().nullable(),
   approvedContract: z.lazy(() => ContractCreateNestedOneWithoutApprovedFromPendingInputSchema).optional(),
   vendor: z.lazy(() => VendorCreateNestedOneWithoutPendingContractsInputSchema),
+  vendorDivision: z.lazy(() => VendorDivisionCreateNestedOneWithoutPendingContractsInputSchema).optional(),
 });
 
 export const PendingContractUncheckedCreateWithoutFacilityInputSchema: z.ZodType<Prisma.PendingContractUncheckedCreateWithoutFacilityInput> = z.strictObject({
@@ -41543,6 +41649,7 @@ export const PendingContractUncheckedCreateWithoutFacilityInputSchema: z.ZodType
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.string().optional().nullable(),
   division: z.string().optional().nullable(),
+  vendorDivisionId: z.string().optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -42659,6 +42766,7 @@ export const PendingContractScalarWhereInputSchema: z.ZodType<Prisma.PendingCont
   capitalLineItems: z.lazy(() => JsonNullableFilterSchema).optional(),
   tieInContractId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   division: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   terms: z.lazy(() => JsonFilterSchema).optional(),
   documents: z.lazy(() => JsonFilterSchema).optional(),
   pricingData: z.lazy(() => JsonNullableFilterSchema).optional(),
@@ -43992,6 +44100,7 @@ export const PendingContractCreateWithoutVendorInputSchema: z.ZodType<Prisma.Pen
   reviewNotes: z.string().optional().nullable(),
   approvedContract: z.lazy(() => ContractCreateNestedOneWithoutApprovedFromPendingInputSchema).optional(),
   facility: z.lazy(() => FacilityCreateNestedOneWithoutPendingContractsInputSchema).optional(),
+  vendorDivision: z.lazy(() => VendorDivisionCreateNestedOneWithoutPendingContractsInputSchema).optional(),
 });
 
 export const PendingContractUncheckedCreateWithoutVendorInputSchema: z.ZodType<Prisma.PendingContractUncheckedCreateWithoutVendorInput> = z.strictObject({
@@ -44021,6 +44130,7 @@ export const PendingContractUncheckedCreateWithoutVendorInputSchema: z.ZodType<P
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.string().optional().nullable(),
   division: z.string().optional().nullable(),
+  vendorDivisionId: z.string().optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -44487,6 +44597,7 @@ export const VendorDivisionCreateWithoutVendorInputSchema: z.ZodType<Prisma.Vend
   contracts: z.lazy(() => ContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   connections: z.lazy(() => ConnectionCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedCreateWithoutVendorInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedCreateWithoutVendorInput> = z.strictObject({
@@ -44500,6 +44611,7 @@ export const VendorDivisionUncheckedCreateWithoutVendorInputSchema: z.ZodType<Pr
   contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   connections: z.lazy(() => ConnectionUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionCreateOrConnectWithoutVendorInputSchema: z.ZodType<Prisma.VendorDivisionCreateOrConnectWithoutVendorInput> = z.strictObject({
@@ -45940,6 +46052,94 @@ export const ConnectionCreateManyVendorDivisionInputEnvelopeSchema: z.ZodType<Pr
   skipDuplicates: z.boolean().optional(),
 });
 
+export const PendingContractCreateWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractCreateWithoutVendorDivisionInput> = z.strictObject({
+  id: z.cuid().optional(),
+  vendorName: z.string(),
+  facilityName: z.string().optional().nullable(),
+  contractName: z.string(),
+  contractType: z.lazy(() => ContractTypeSchema).optional(),
+  status: z.lazy(() => PendingContractStatusSchema).optional(),
+  effectiveDate: z.coerce.date().optional().nullable(),
+  expirationDate: z.coerce.date().optional().nullable(),
+  totalValue: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  contractNumber: z.string().optional().nullable(),
+  annualValue: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  gpoAffiliation: z.string().optional().nullable(),
+  performancePeriod: z.string().optional().nullable(),
+  rebatePayPeriod: z.string().optional().nullable(),
+  autoRenewal: z.boolean().optional(),
+  terminationNoticeDays: z.number().optional().nullable(),
+  capitalCost: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  interestRate: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  termMonths: z.number().optional().nullable(),
+  downPayment: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  paymentCadence: z.string().optional().nullable(),
+  amortizationShape: z.string().optional().nullable(),
+  capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  tieInContractId: z.string().optional().nullable(),
+  division: z.string().optional().nullable(),
+  terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  notes: z.string().optional().nullable(),
+  submittedAt: z.coerce.date().optional(),
+  reviewedAt: z.coerce.date().optional().nullable(),
+  reviewedBy: z.string().optional().nullable(),
+  reviewNotes: z.string().optional().nullable(),
+  approvedContract: z.lazy(() => ContractCreateNestedOneWithoutApprovedFromPendingInputSchema).optional(),
+  vendor: z.lazy(() => VendorCreateNestedOneWithoutPendingContractsInputSchema),
+  facility: z.lazy(() => FacilityCreateNestedOneWithoutPendingContractsInputSchema).optional(),
+});
+
+export const PendingContractUncheckedCreateWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractUncheckedCreateWithoutVendorDivisionInput> = z.strictObject({
+  id: z.cuid().optional(),
+  vendorId: z.string(),
+  vendorName: z.string(),
+  facilityId: z.string().optional().nullable(),
+  facilityName: z.string().optional().nullable(),
+  contractName: z.string(),
+  contractType: z.lazy(() => ContractTypeSchema).optional(),
+  status: z.lazy(() => PendingContractStatusSchema).optional(),
+  effectiveDate: z.coerce.date().optional().nullable(),
+  expirationDate: z.coerce.date().optional().nullable(),
+  totalValue: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  contractNumber: z.string().optional().nullable(),
+  annualValue: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  gpoAffiliation: z.string().optional().nullable(),
+  performancePeriod: z.string().optional().nullable(),
+  rebatePayPeriod: z.string().optional().nullable(),
+  autoRenewal: z.boolean().optional(),
+  terminationNoticeDays: z.number().optional().nullable(),
+  capitalCost: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  interestRate: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  termMonths: z.number().optional().nullable(),
+  downPayment: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  paymentCadence: z.string().optional().nullable(),
+  amortizationShape: z.string().optional().nullable(),
+  capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  tieInContractId: z.string().optional().nullable(),
+  division: z.string().optional().nullable(),
+  terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  notes: z.string().optional().nullable(),
+  submittedAt: z.coerce.date().optional(),
+  reviewedAt: z.coerce.date().optional().nullable(),
+  reviewedBy: z.string().optional().nullable(),
+  reviewNotes: z.string().optional().nullable(),
+  approvedContractId: z.string().optional().nullable(),
+});
+
+export const PendingContractCreateOrConnectWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractCreateOrConnectWithoutVendorDivisionInput> = z.strictObject({
+  where: z.lazy(() => PendingContractWhereUniqueInputSchema),
+  create: z.union([ z.lazy(() => PendingContractCreateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUncheckedCreateWithoutVendorDivisionInputSchema) ]),
+});
+
+export const PendingContractCreateManyVendorDivisionInputEnvelopeSchema: z.ZodType<Prisma.PendingContractCreateManyVendorDivisionInputEnvelope> = z.strictObject({
+  data: z.union([ z.lazy(() => PendingContractCreateManyVendorDivisionInputSchema), z.lazy(() => PendingContractCreateManyVendorDivisionInputSchema).array() ]),
+  skipDuplicates: z.boolean().optional(),
+});
+
 export const VendorUpsertWithoutDivisionsInputSchema: z.ZodType<Prisma.VendorUpsertWithoutDivisionsInput> = z.strictObject({
   update: z.union([ z.lazy(() => VendorUpdateWithoutDivisionsInputSchema), z.lazy(() => VendorUncheckedUpdateWithoutDivisionsInputSchema) ]),
   create: z.union([ z.lazy(() => VendorCreateWithoutDivisionsInputSchema), z.lazy(() => VendorUncheckedCreateWithoutDivisionsInputSchema) ]),
@@ -46093,6 +46293,22 @@ export const ConnectionUpdateManyWithWhereWithoutVendorDivisionInputSchema: z.Zo
   data: z.union([ z.lazy(() => ConnectionUpdateManyMutationInputSchema), z.lazy(() => ConnectionUncheckedUpdateManyWithoutVendorDivisionInputSchema) ]),
 });
 
+export const PendingContractUpsertWithWhereUniqueWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractUpsertWithWhereUniqueWithoutVendorDivisionInput> = z.strictObject({
+  where: z.lazy(() => PendingContractWhereUniqueInputSchema),
+  update: z.union([ z.lazy(() => PendingContractUpdateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUncheckedUpdateWithoutVendorDivisionInputSchema) ]),
+  create: z.union([ z.lazy(() => PendingContractCreateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUncheckedCreateWithoutVendorDivisionInputSchema) ]),
+});
+
+export const PendingContractUpdateWithWhereUniqueWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractUpdateWithWhereUniqueWithoutVendorDivisionInput> = z.strictObject({
+  where: z.lazy(() => PendingContractWhereUniqueInputSchema),
+  data: z.union([ z.lazy(() => PendingContractUpdateWithoutVendorDivisionInputSchema), z.lazy(() => PendingContractUncheckedUpdateWithoutVendorDivisionInputSchema) ]),
+});
+
+export const PendingContractUpdateManyWithWhereWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractUpdateManyWithWhereWithoutVendorDivisionInput> = z.strictObject({
+  where: z.lazy(() => PendingContractScalarWhereInputSchema),
+  data: z.union([ z.lazy(() => PendingContractUpdateManyMutationInputSchema), z.lazy(() => PendingContractUncheckedUpdateManyWithoutVendorDivisionInputSchema) ]),
+});
+
 export const VendorDivisionCreateWithoutMembersInputSchema: z.ZodType<Prisma.VendorDivisionCreateWithoutMembersInput> = z.strictObject({
   id: z.cuid().optional(),
   name: z.string(),
@@ -46104,6 +46320,7 @@ export const VendorDivisionCreateWithoutMembersInputSchema: z.ZodType<Prisma.Ven
   contracts: z.lazy(() => ContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   connections: z.lazy(() => ConnectionCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedCreateWithoutMembersInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedCreateWithoutMembersInput> = z.strictObject({
@@ -46117,6 +46334,7 @@ export const VendorDivisionUncheckedCreateWithoutMembersInputSchema: z.ZodType<P
   contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   connections: z.lazy(() => ConnectionUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionCreateOrConnectWithoutMembersInputSchema: z.ZodType<Prisma.VendorDivisionCreateOrConnectWithoutMembersInput> = z.strictObject({
@@ -46205,6 +46423,7 @@ export const VendorDivisionUpdateWithoutMembersInputSchema: z.ZodType<Prisma.Ven
   contracts: z.lazy(() => ContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   connections: z.lazy(() => ConnectionUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedUpdateWithoutMembersInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedUpdateWithoutMembersInput> = z.strictObject({
@@ -46218,6 +46437,7 @@ export const VendorDivisionUncheckedUpdateWithoutMembersInputSchema: z.ZodType<P
   contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   connections: z.lazy(() => ConnectionUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const UserUpsertWithoutDivisionMembersInputSchema: z.ZodType<Prisma.UserUpsertWithoutDivisionMembersInput> = z.strictObject({
@@ -47192,6 +47412,7 @@ export const VendorDivisionCreateWithoutContractsInputSchema: z.ZodType<Prisma.V
   members: z.lazy(() => DivisionMemberCreateNestedManyWithoutDivisionInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   connections: z.lazy(() => ConnectionCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedCreateWithoutContractsInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedCreateWithoutContractsInput> = z.strictObject({
@@ -47205,6 +47426,7 @@ export const VendorDivisionUncheckedCreateWithoutContractsInputSchema: z.ZodType
   members: z.lazy(() => DivisionMemberUncheckedCreateNestedManyWithoutDivisionInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   connections: z.lazy(() => ConnectionUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionCreateOrConnectWithoutContractsInputSchema: z.ZodType<Prisma.VendorDivisionCreateOrConnectWithoutContractsInput> = z.strictObject({
@@ -48119,6 +48341,7 @@ export const PendingContractCreateWithoutApprovedContractInputSchema: z.ZodType<
   reviewNotes: z.string().optional().nullable(),
   vendor: z.lazy(() => VendorCreateNestedOneWithoutPendingContractsInputSchema),
   facility: z.lazy(() => FacilityCreateNestedOneWithoutPendingContractsInputSchema).optional(),
+  vendorDivision: z.lazy(() => VendorDivisionCreateNestedOneWithoutPendingContractsInputSchema).optional(),
 });
 
 export const PendingContractUncheckedCreateWithoutApprovedContractInputSchema: z.ZodType<Prisma.PendingContractUncheckedCreateWithoutApprovedContractInput> = z.strictObject({
@@ -48149,6 +48372,7 @@ export const PendingContractUncheckedCreateWithoutApprovedContractInputSchema: z
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.string().optional().nullable(),
   division: z.string().optional().nullable(),
+  vendorDivisionId: z.string().optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -48477,6 +48701,7 @@ export const VendorDivisionUpdateWithoutContractsInputSchema: z.ZodType<Prisma.V
   members: z.lazy(() => DivisionMemberUpdateManyWithoutDivisionNestedInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   connections: z.lazy(() => ConnectionUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedUpdateWithoutContractsInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedUpdateWithoutContractsInput> = z.strictObject({
@@ -48490,6 +48715,7 @@ export const VendorDivisionUncheckedUpdateWithoutContractsInputSchema: z.ZodType
   members: z.lazy(() => DivisionMemberUncheckedUpdateManyWithoutDivisionNestedInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   connections: z.lazy(() => ConnectionUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const ContractTermUpsertWithWhereUniqueWithoutContractInputSchema: z.ZodType<Prisma.ContractTermUpsertWithWhereUniqueWithoutContractInput> = z.strictObject({
@@ -54610,6 +54836,39 @@ export const FacilityCreateOrConnectWithoutPendingContractsInputSchema: z.ZodTyp
   create: z.union([ z.lazy(() => FacilityCreateWithoutPendingContractsInputSchema), z.lazy(() => FacilityUncheckedCreateWithoutPendingContractsInputSchema) ]),
 });
 
+export const VendorDivisionCreateWithoutPendingContractsInputSchema: z.ZodType<Prisma.VendorDivisionCreateWithoutPendingContractsInput> = z.strictObject({
+  id: z.cuid().optional(),
+  name: z.string(),
+  code: z.string(),
+  categories: z.union([ z.lazy(() => VendorDivisionCreatecategoriesInputSchema), z.string().array() ]).optional(),
+  isDefault: z.boolean().optional(),
+  createdAt: z.coerce.date().optional(),
+  vendor: z.lazy(() => VendorCreateNestedOneWithoutDivisionsInputSchema),
+  members: z.lazy(() => DivisionMemberCreateNestedManyWithoutDivisionInputSchema).optional(),
+  contracts: z.lazy(() => ContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  vendorCogRecords: z.lazy(() => VendorCogRecordCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  connections: z.lazy(() => ConnectionCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+});
+
+export const VendorDivisionUncheckedCreateWithoutPendingContractsInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedCreateWithoutPendingContractsInput> = z.strictObject({
+  id: z.cuid().optional(),
+  vendorId: z.string(),
+  name: z.string(),
+  code: z.string(),
+  categories: z.union([ z.lazy(() => VendorDivisionCreatecategoriesInputSchema), z.string().array() ]).optional(),
+  isDefault: z.boolean().optional(),
+  createdAt: z.coerce.date().optional(),
+  members: z.lazy(() => DivisionMemberUncheckedCreateNestedManyWithoutDivisionInputSchema).optional(),
+  contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  connections: z.lazy(() => ConnectionUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+});
+
+export const VendorDivisionCreateOrConnectWithoutPendingContractsInputSchema: z.ZodType<Prisma.VendorDivisionCreateOrConnectWithoutPendingContractsInput> = z.strictObject({
+  where: z.lazy(() => VendorDivisionWhereUniqueInputSchema),
+  create: z.union([ z.lazy(() => VendorDivisionCreateWithoutPendingContractsInputSchema), z.lazy(() => VendorDivisionUncheckedCreateWithoutPendingContractsInputSchema) ]),
+});
+
 export const ContractUpsertWithoutApprovedFromPendingInputSchema: z.ZodType<Prisma.ContractUpsertWithoutApprovedFromPendingInput> = z.strictObject({
   update: z.union([ z.lazy(() => ContractUpdateWithoutApprovedFromPendingInputSchema), z.lazy(() => ContractUncheckedUpdateWithoutApprovedFromPendingInputSchema) ]),
   create: z.union([ z.lazy(() => ContractCreateWithoutApprovedFromPendingInputSchema), z.lazy(() => ContractUncheckedCreateWithoutApprovedFromPendingInputSchema) ]),
@@ -54919,6 +55178,45 @@ export const FacilityUncheckedUpdateWithoutPendingContractsInputSchema: z.ZodTyp
   vendorNameMappings: z.lazy(() => VendorNameMappingUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   facilityAssignments: z.lazy(() => FacilityAssignmentUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
   proposalEvaluations: z.lazy(() => ProposalEvaluationUncheckedUpdateManyWithoutFacilityNestedInputSchema).optional(),
+});
+
+export const VendorDivisionUpsertWithoutPendingContractsInputSchema: z.ZodType<Prisma.VendorDivisionUpsertWithoutPendingContractsInput> = z.strictObject({
+  update: z.union([ z.lazy(() => VendorDivisionUpdateWithoutPendingContractsInputSchema), z.lazy(() => VendorDivisionUncheckedUpdateWithoutPendingContractsInputSchema) ]),
+  create: z.union([ z.lazy(() => VendorDivisionCreateWithoutPendingContractsInputSchema), z.lazy(() => VendorDivisionUncheckedCreateWithoutPendingContractsInputSchema) ]),
+  where: z.lazy(() => VendorDivisionWhereInputSchema).optional(),
+});
+
+export const VendorDivisionUpdateToOneWithWhereWithoutPendingContractsInputSchema: z.ZodType<Prisma.VendorDivisionUpdateToOneWithWhereWithoutPendingContractsInput> = z.strictObject({
+  where: z.lazy(() => VendorDivisionWhereInputSchema).optional(),
+  data: z.union([ z.lazy(() => VendorDivisionUpdateWithoutPendingContractsInputSchema), z.lazy(() => VendorDivisionUncheckedUpdateWithoutPendingContractsInputSchema) ]),
+});
+
+export const VendorDivisionUpdateWithoutPendingContractsInputSchema: z.ZodType<Prisma.VendorDivisionUpdateWithoutPendingContractsInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  code: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  categories: z.union([ z.lazy(() => VendorDivisionUpdatecategoriesInputSchema), z.string().array() ]).optional(),
+  isDefault: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  vendor: z.lazy(() => VendorUpdateOneRequiredWithoutDivisionsNestedInputSchema).optional(),
+  members: z.lazy(() => DivisionMemberUpdateManyWithoutDivisionNestedInputSchema).optional(),
+  contracts: z.lazy(() => ContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  vendorCogRecords: z.lazy(() => VendorCogRecordUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  connections: z.lazy(() => ConnectionUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+});
+
+export const VendorDivisionUncheckedUpdateWithoutPendingContractsInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedUpdateWithoutPendingContractsInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  vendorId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  name: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  code: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  categories: z.union([ z.lazy(() => VendorDivisionUpdatecategoriesInputSchema), z.string().array() ]).optional(),
+  isDefault: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  createdAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  members: z.lazy(() => DivisionMemberUncheckedUpdateManyWithoutDivisionNestedInputSchema).optional(),
+  contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  connections: z.lazy(() => ConnectionUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const ContractCreateWithoutChangeProposalsInputSchema: z.ZodType<Prisma.ContractCreateWithoutChangeProposalsInput> = z.strictObject({
@@ -55735,6 +56033,7 @@ export const VendorDivisionCreateWithoutVendorCogRecordsInputSchema: z.ZodType<P
   members: z.lazy(() => DivisionMemberCreateNestedManyWithoutDivisionInputSchema).optional(),
   contracts: z.lazy(() => ContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   connections: z.lazy(() => ConnectionCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedCreateWithoutVendorCogRecordsInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedCreateWithoutVendorCogRecordsInput> = z.strictObject({
@@ -55748,6 +56047,7 @@ export const VendorDivisionUncheckedCreateWithoutVendorCogRecordsInputSchema: z.
   members: z.lazy(() => DivisionMemberUncheckedCreateNestedManyWithoutDivisionInputSchema).optional(),
   contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   connections: z.lazy(() => ConnectionUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionCreateOrConnectWithoutVendorCogRecordsInputSchema: z.ZodType<Prisma.VendorDivisionCreateOrConnectWithoutVendorCogRecordsInput> = z.strictObject({
@@ -55866,6 +56166,7 @@ export const VendorDivisionUpdateWithoutVendorCogRecordsInputSchema: z.ZodType<P
   members: z.lazy(() => DivisionMemberUpdateManyWithoutDivisionNestedInputSchema).optional(),
   contracts: z.lazy(() => ContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   connections: z.lazy(() => ConnectionUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedUpdateWithoutVendorCogRecordsInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedUpdateWithoutVendorCogRecordsInput> = z.strictObject({
@@ -55879,6 +56180,7 @@ export const VendorDivisionUncheckedUpdateWithoutVendorCogRecordsInputSchema: z.
   members: z.lazy(() => DivisionMemberUncheckedUpdateManyWithoutDivisionNestedInputSchema).optional(),
   contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   connections: z.lazy(() => ConnectionUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const VendorCreateWithoutPricingFilesInputSchema: z.ZodType<Prisma.VendorCreateWithoutPricingFilesInput> = z.strictObject({
@@ -62862,6 +63164,7 @@ export const VendorDivisionCreateWithoutConnectionsInputSchema: z.ZodType<Prisma
   members: z.lazy(() => DivisionMemberCreateNestedManyWithoutDivisionInputSchema).optional(),
   contracts: z.lazy(() => ContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedCreateWithoutConnectionsInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedCreateWithoutConnectionsInput> = z.strictObject({
@@ -62875,6 +63178,7 @@ export const VendorDivisionUncheckedCreateWithoutConnectionsInputSchema: z.ZodTy
   members: z.lazy(() => DivisionMemberUncheckedCreateNestedManyWithoutDivisionInputSchema).optional(),
   contracts: z.lazy(() => ContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedCreateNestedManyWithoutVendorDivisionInputSchema).optional(),
 });
 
 export const VendorDivisionCreateOrConnectWithoutConnectionsInputSchema: z.ZodType<Prisma.VendorDivisionCreateOrConnectWithoutConnectionsInput> = z.strictObject({
@@ -63086,6 +63390,7 @@ export const VendorDivisionUpdateWithoutConnectionsInputSchema: z.ZodType<Prisma
   members: z.lazy(() => DivisionMemberUpdateManyWithoutDivisionNestedInputSchema).optional(),
   contracts: z.lazy(() => ContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedUpdateWithoutConnectionsInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedUpdateWithoutConnectionsInput> = z.strictObject({
@@ -63099,6 +63404,7 @@ export const VendorDivisionUncheckedUpdateWithoutConnectionsInputSchema: z.ZodTy
   members: z.lazy(() => DivisionMemberUncheckedUpdateManyWithoutDivisionNestedInputSchema).optional(),
   contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const FacilityCreateWithoutFeatureFlagsInputSchema: z.ZodType<Prisma.FacilityCreateWithoutFeatureFlagsInput> = z.strictObject({
@@ -65866,6 +66172,7 @@ export const PendingContractCreateManyFacilityInputSchema: z.ZodType<Prisma.Pend
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.string().optional().nullable(),
   division: z.string().optional().nullable(),
+  vendorDivisionId: z.string().optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -66418,6 +66725,7 @@ export const PendingContractUpdateWithoutFacilityInputSchema: z.ZodType<Prisma.P
   reviewNotes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   approvedContract: z.lazy(() => ContractUpdateOneWithoutApprovedFromPendingNestedInputSchema).optional(),
   vendor: z.lazy(() => VendorUpdateOneRequiredWithoutPendingContractsNestedInputSchema).optional(),
+  vendorDivision: z.lazy(() => VendorDivisionUpdateOneWithoutPendingContractsNestedInputSchema).optional(),
 });
 
 export const PendingContractUncheckedUpdateWithoutFacilityInputSchema: z.ZodType<Prisma.PendingContractUncheckedUpdateWithoutFacilityInput> = z.strictObject({
@@ -66447,6 +66755,7 @@ export const PendingContractUncheckedUpdateWithoutFacilityInputSchema: z.ZodType
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -66485,6 +66794,7 @@ export const PendingContractUncheckedUpdateManyWithoutFacilityInputSchema: z.Zod
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -67655,6 +67965,7 @@ export const PendingContractCreateManyVendorInputSchema: z.ZodType<Prisma.Pendin
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.string().optional().nullable(),
   division: z.string().optional().nullable(),
+  vendorDivisionId: z.string().optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -68185,6 +68496,7 @@ export const PendingContractUpdateWithoutVendorInputSchema: z.ZodType<Prisma.Pen
   reviewNotes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   approvedContract: z.lazy(() => ContractUpdateOneWithoutApprovedFromPendingNestedInputSchema).optional(),
   facility: z.lazy(() => FacilityUpdateOneWithoutPendingContractsNestedInputSchema).optional(),
+  vendorDivision: z.lazy(() => VendorDivisionUpdateOneWithoutPendingContractsNestedInputSchema).optional(),
 });
 
 export const PendingContractUncheckedUpdateWithoutVendorInputSchema: z.ZodType<Prisma.PendingContractUncheckedUpdateWithoutVendorInput> = z.strictObject({
@@ -68214,6 +68526,7 @@ export const PendingContractUncheckedUpdateWithoutVendorInputSchema: z.ZodType<P
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -68252,6 +68565,7 @@ export const PendingContractUncheckedUpdateManyWithoutVendorInputSchema: z.ZodTy
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -68785,6 +69099,7 @@ export const VendorDivisionUpdateWithoutVendorInputSchema: z.ZodType<Prisma.Vend
   contracts: z.lazy(() => ContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   connections: z.lazy(() => ConnectionUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedUpdateWithoutVendorInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedUpdateWithoutVendorInput> = z.strictObject({
@@ -68798,6 +69113,7 @@ export const VendorDivisionUncheckedUpdateWithoutVendorInputSchema: z.ZodType<Pr
   contracts: z.lazy(() => ContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   vendorCogRecords: z.lazy(() => VendorCogRecordUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
   connections: z.lazy(() => ConnectionUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
+  pendingContracts: z.lazy(() => PendingContractUncheckedUpdateManyWithoutVendorDivisionNestedInputSchema).optional(),
 });
 
 export const VendorDivisionUncheckedUpdateManyWithoutVendorInputSchema: z.ZodType<Prisma.VendorDivisionUncheckedUpdateManyWithoutVendorInput> = z.strictObject({
@@ -69085,6 +69401,45 @@ export const ConnectionCreateManyVendorDivisionInputSchema: z.ZodType<Prisma.Con
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+});
+
+export const PendingContractCreateManyVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractCreateManyVendorDivisionInput> = z.strictObject({
+  id: z.cuid().optional(),
+  vendorId: z.string(),
+  vendorName: z.string(),
+  facilityId: z.string().optional().nullable(),
+  facilityName: z.string().optional().nullable(),
+  contractName: z.string(),
+  contractType: z.lazy(() => ContractTypeSchema).optional(),
+  status: z.lazy(() => PendingContractStatusSchema).optional(),
+  effectiveDate: z.coerce.date().optional().nullable(),
+  expirationDate: z.coerce.date().optional().nullable(),
+  totalValue: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  contractNumber: z.string().optional().nullable(),
+  annualValue: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  gpoAffiliation: z.string().optional().nullable(),
+  performancePeriod: z.string().optional().nullable(),
+  rebatePayPeriod: z.string().optional().nullable(),
+  autoRenewal: z.boolean().optional(),
+  terminationNoticeDays: z.number().optional().nullable(),
+  capitalCost: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  interestRate: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  termMonths: z.number().optional().nullable(),
+  downPayment: z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  paymentCadence: z.string().optional().nullable(),
+  amortizationShape: z.string().optional().nullable(),
+  capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  tieInContractId: z.string().optional().nullable(),
+  division: z.string().optional().nullable(),
+  terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  notes: z.string().optional().nullable(),
+  submittedAt: z.coerce.date().optional(),
+  reviewedAt: z.coerce.date().optional().nullable(),
+  reviewedBy: z.string().optional().nullable(),
+  reviewNotes: z.string().optional().nullable(),
+  approvedContractId: z.string().optional().nullable(),
 });
 
 export const DivisionMemberUpdateWithoutDivisionInputSchema: z.ZodType<Prisma.DivisionMemberUpdateWithoutDivisionInput> = z.strictObject({
@@ -69394,6 +69749,123 @@ export const ConnectionUncheckedUpdateManyWithoutVendorDivisionInputSchema: z.Zo
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+});
+
+export const PendingContractUpdateWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractUpdateWithoutVendorDivisionInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  vendorName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  facilityName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  contractName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contractType: z.union([ z.lazy(() => ContractTypeSchema), z.lazy(() => EnumContractTypeFieldUpdateOperationsInputSchema) ]).optional(),
+  status: z.union([ z.lazy(() => PendingContractStatusSchema), z.lazy(() => EnumPendingContractStatusFieldUpdateOperationsInputSchema) ]).optional(),
+  effectiveDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  expirationDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  totalValue: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  contractNumber: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  annualValue: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  gpoAffiliation: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  performancePeriod: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  rebatePayPeriod: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  autoRenewal: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  terminationNoticeDays: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  capitalCost: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  interestRate: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  termMonths: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  downPayment: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  paymentCadence: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  amortizationShape: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  submittedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  reviewedAt: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  reviewedBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  reviewNotes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  approvedContract: z.lazy(() => ContractUpdateOneWithoutApprovedFromPendingNestedInputSchema).optional(),
+  vendor: z.lazy(() => VendorUpdateOneRequiredWithoutPendingContractsNestedInputSchema).optional(),
+  facility: z.lazy(() => FacilityUpdateOneWithoutPendingContractsNestedInputSchema).optional(),
+});
+
+export const PendingContractUncheckedUpdateWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractUncheckedUpdateWithoutVendorDivisionInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  vendorId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  vendorName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  facilityId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  facilityName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  contractName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contractType: z.union([ z.lazy(() => ContractTypeSchema), z.lazy(() => EnumContractTypeFieldUpdateOperationsInputSchema) ]).optional(),
+  status: z.union([ z.lazy(() => PendingContractStatusSchema), z.lazy(() => EnumPendingContractStatusFieldUpdateOperationsInputSchema) ]).optional(),
+  effectiveDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  expirationDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  totalValue: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  contractNumber: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  annualValue: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  gpoAffiliation: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  performancePeriod: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  rebatePayPeriod: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  autoRenewal: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  terminationNoticeDays: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  capitalCost: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  interestRate: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  termMonths: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  downPayment: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  paymentCadence: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  amortizationShape: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  submittedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  reviewedAt: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  reviewedBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  reviewNotes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  approvedContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+});
+
+export const PendingContractUncheckedUpdateManyWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractUncheckedUpdateManyWithoutVendorDivisionInput> = z.strictObject({
+  id: z.union([ z.cuid(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  vendorId: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  vendorName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  facilityId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  facilityName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  contractName: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
+  contractType: z.union([ z.lazy(() => ContractTypeSchema), z.lazy(() => EnumContractTypeFieldUpdateOperationsInputSchema) ]).optional(),
+  status: z.union([ z.lazy(() => PendingContractStatusSchema), z.lazy(() => EnumPendingContractStatusFieldUpdateOperationsInputSchema) ]).optional(),
+  effectiveDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  expirationDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  totalValue: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  contractNumber: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  annualValue: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  gpoAffiliation: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  performancePeriod: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  rebatePayPeriod: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  autoRenewal: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
+  terminationNoticeDays: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  capitalCost: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  interestRate: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  termMonths: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  downPayment: z.union([ z.union([z.number(),z.string(),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  paymentCadence: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  amortizationShape: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
+  notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  submittedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
+  reviewedAt: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  reviewedBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  reviewNotes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  approvedContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
 export const ProductCategoryCreateManyParentInputSchema: z.ZodType<Prisma.ProductCategoryCreateManyParentInput> = z.strictObject({
@@ -69983,6 +70455,7 @@ export const PendingContractCreateManyApprovedContractInputSchema: z.ZodType<Pri
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.string().optional().nullable(),
   division: z.string().optional().nullable(),
+  vendorDivisionId: z.string().optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -70946,6 +71419,7 @@ export const PendingContractUpdateWithoutApprovedContractInputSchema: z.ZodType<
   reviewNotes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   vendor: z.lazy(() => VendorUpdateOneRequiredWithoutPendingContractsNestedInputSchema).optional(),
   facility: z.lazy(() => FacilityUpdateOneWithoutPendingContractsNestedInputSchema).optional(),
+  vendorDivision: z.lazy(() => VendorDivisionUpdateOneWithoutPendingContractsNestedInputSchema).optional(),
 });
 
 export const PendingContractUncheckedUpdateWithoutApprovedContractInputSchema: z.ZodType<Prisma.PendingContractUncheckedUpdateWithoutApprovedContractInput> = z.strictObject({
@@ -70976,6 +71450,7 @@ export const PendingContractUncheckedUpdateWithoutApprovedContractInputSchema: z
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
@@ -71014,6 +71489,7 @@ export const PendingContractUncheckedUpdateManyWithoutApprovedContractInputSchem
   capitalLineItems: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   tieInContractId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   division: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   terms: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   documents: z.union([ z.lazy(() => JsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
   pricingData: z.union([ z.lazy(() => NullableJsonNullValueInputSchema), InputJsonValueSchema ]).optional(),
