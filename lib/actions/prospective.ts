@@ -1023,9 +1023,30 @@ export async function getVendorProposalDetail(
   // Resolve targeted facilities to names. The builder writes ["none"]
   // when no facility was picked (audit M7) — drop that placeholder.
   const realFacilityIds = base.facilityIds.filter((fid) => fid && fid !== "none")
+  // Scope the name lookup to facilities this vendor actually relates to
+  // (security audit 2026-07-05, LOW): a vendor could otherwise plant an
+  // arbitrary facility cuid in its own draft's `facilityIds` and read the
+  // name back. Unrelated ids fall through to "Unknown facility". Predicate
+  // mirrors vendor-prospective's `vendorRelatedFacilityWhere`.
   const facilityRows = realFacilityIds.length
     ? await prisma.facility.findMany({
-        where: { id: { in: realFacilityIds } },
+        where: {
+          id: { in: realFacilityIds },
+          OR: [
+            {
+              contracts: {
+                some: {
+                  OR: [
+                    { vendorId: vendor.id },
+                    { additionalVendorIds: { has: vendor.id } },
+                  ],
+                },
+              },
+            },
+            { cogRecords: { some: { vendorId: vendor.id } } },
+            { pendingContracts: { some: { vendorId: vendor.id } } },
+          ],
+        },
         select: { id: true, name: true },
       })
     : []

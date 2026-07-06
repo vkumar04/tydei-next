@@ -300,7 +300,20 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         )
       }
-      const pdfBytes = generateOpportunityReportPDF(p)
+      // A malformed NESTED payload (missing arrays the generator dereferences)
+      // is a client bug, not a server error — return 400, not the outer 500
+      // (security audit 2026-07-05, M2). The payload is the caller's own
+      // client model, so nothing tenant-owned leaks either way.
+      let pdfBytes: Uint8Array
+      try {
+        pdfBytes = generateOpportunityReportPDF(p)
+      } catch (err) {
+        console.error("[reports/pdf] opportunity payload malformed:", err)
+        return NextResponse.json(
+          { error: "Invalid payload shape" },
+          { status: 400 },
+        )
+      }
       return new Response(Buffer.from(pdfBytes), {
         status: 200,
         headers: {
@@ -327,7 +340,16 @@ export async function POST(request: NextRequest) {
           { status: 400 },
         )
       }
-      const pdfBytes = generateAnalysisReportPDF(p)
+      let pdfBytes: Uint8Array
+      try {
+        pdfBytes = generateAnalysisReportPDF(p)
+      } catch (err) {
+        console.error("[reports/pdf] analysis payload malformed:", err)
+        return NextResponse.json(
+          { error: "Invalid payload shape" },
+          { status: 400 },
+        )
+      }
       return new Response(Buffer.from(pdfBytes), {
         status: 200,
         headers: {
