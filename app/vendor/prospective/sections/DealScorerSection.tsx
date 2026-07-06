@@ -34,6 +34,7 @@ import {
 } from "@/components/vendor/prospective/builder/file-handlers"
 import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import { cn } from "@/lib/utils"
 import {
   getFacilityActualsForVendor,
   getVendorProspectiveAnalysis,
@@ -76,6 +77,16 @@ interface DealScorerSectionProps {
    * hydrates the construct grid from its products ("save → next step").
    */
   preselectedProposalId?: string | null
+  /**
+   * One-page workspace mode (Charles 2026-07-06 "you should not need to enter
+   * the facility twice or usage or pricing"): when the Deal Scorer sits below
+   * the ProposalBuilder on the same page, the facility, usage, pricing, and
+   * categories were ALREADY entered in the builder and ride in on the attached
+   * proposal. In embedded mode we HIDE the facility select, the attach-proposal
+   * dropdown, and the upload dropzones once a proposal is attached — showing an
+   * inherited summary instead — so nothing is re-entered.
+   */
+  embedded?: boolean
 }
 
 const NO_PROPOSAL = "__none__"
@@ -113,7 +124,7 @@ function makeConstruct(seed?: Partial<ConstructForm>): ConstructForm {
 
 // ─── Section ───────────────────────────────────────────────────
 
-export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed, preselectedProposalId }: DealScorerSectionProps) {
+export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed, preselectedProposalId, embedded = false }: DealScorerSectionProps) {
   const queryClient = useQueryClient()
   const [facilityId, setFacilityId] = useState<string>("")
   const [proposalRowId, setProposalRowId] = useState<string>(NO_PROPOSAL)
@@ -531,10 +542,20 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       facilityCurrentVendorShare: currentShare
         ? Number(currentShare) / 100
         : undefined,
-      // Current revenue from the usage + price files (Σ current price × volume),
-      // authoritative over spend × share when present.
+      // Current revenue on the CONSTRUCTS being negotiated — Σ(construct
+      // current price × volume), the same universe the scenario table scores
+      // against. Feeding the whole usage-file Σ here instead put the
+      // penetration half on a larger SKU set than the scenario half, so the
+      // analyzer's spend floor + "revenue loss" warning fired on inconsistent
+      // bases (Charles 2026-07-06 "the AI spend numbers here are wrong").
+      // Falls back to the usage-file Σ only when no construct carries a current
+      // price.
       facilityCurrentVendorRevenue:
-        usageCurrentRevenue > 0 ? usageCurrentRevenue : undefined,
+        currentAnnualSpend > 0
+          ? currentAnnualSpend
+          : usageCurrentRevenue > 0
+            ? usageCurrentRevenue
+            : undefined,
       targetVendorShare: targetShare ? Number(targetShare) / 100 : undefined,
       capitalDetails:
         isCapital && equipmentCost
@@ -685,6 +706,15 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     })
   }
 
+  // Inherited-context derivations (embedded one-page flow).
+  const hasAttachedProposal = proposalRowId !== NO_PROPOSAL
+  const attachedProposal = proposals.find((p) => p.id === proposalRowId) ?? null
+  const inheritedFacilityName =
+    facilities.find((f) => f.id === facilityId)?.name ?? null
+  // Hide the redundant inputs only when we truly have the proposal's data to
+  // inherit from — otherwise fall back to the full manual form.
+  const inheritInputs = embedded && hasAttachedProposal
+
   return (
     <div className="space-y-4">
       <Card>
@@ -698,7 +728,44 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2">
+          {inheritInputs ? (
+            // One-page flow: facility + usage + pricing + categories were
+            // entered in the proposal above and carry over — show a compact
+            // inherited summary, don't re-ask (Charles 2026-07-06).
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">
+                From your proposal:
+              </span>
+              {inheritedFacilityName ? (
+                <span className="font-medium">{inheritedFacilityName}</span>
+              ) : null}
+              {usageLoadedCount > 0 ? (
+                <span className="text-muted-foreground">
+                  · usage {usageLoadedCount} products
+                </span>
+              ) : null}
+              {priceLoadedCount > 0 ? (
+                <span className="text-muted-foreground">
+                  · pricing {priceLoadedCount} products
+                </span>
+              ) : null}
+              {actualsSyncMode === "two_way" ? (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-normal text-emerald-600 dark:text-emerald-400"
+                >
+                  Synced from facility actuals (two-way)
+                </Badge>
+              ) : null}
+            </div>
+          ) : null}
+          <div
+            className={cn(
+              "grid gap-4 md:grid-cols-2",
+              inheritInputs && "md:grid-cols-1",
+            )}
+          >
+            {!inheritInputs ? (
             <div className="space-y-2">
               <Label htmlFor="facility">Facility</Label>
               <Select value={facilityId} onValueChange={setFacilityId}>
@@ -737,6 +804,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                 </Badge>
               )}
             </div>
+            ) : null}
             <div className="space-y-2">
               <Label htmlFor="variant">Contract variant</Label>
               <Select
@@ -762,6 +830,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
             </div>
           </div>
 
+          {!inheritInputs ? (
           <div className="space-y-2">
             <Label htmlFor="attach-proposal">
               Attach score to proposal (optional)
@@ -795,7 +864,9 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
               on its card in My Proposals.
             </p>
           </div>
+          ) : null}
 
+          {!inheritInputs ? (
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2 rounded-md border border-dashed p-3">
               <Label className="text-sm">
@@ -844,6 +915,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
               />
             </div>
           </div>
+          ) : null}
 
           <div className="space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">

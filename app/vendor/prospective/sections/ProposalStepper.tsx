@@ -139,6 +139,7 @@ export function ProposalStepper({
           })
         }}
         preselectedProposalId={preselectedProposalId}
+        embedded
       />
 
       {/* ── Opportunity & report ───────────────────────────────────── */}
