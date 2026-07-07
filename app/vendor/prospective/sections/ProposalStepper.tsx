@@ -82,7 +82,7 @@ export function ProposalStepper({
 
   // A card handoff arrives → bring the seeded Opportunity Engine into view
   // (same page — scroll, never navigate).
-  const engineRef = useRef<HTMLDivElement | null>(null)
+  const engineRef = useRef<HTMLElement | null>(null)
   const lastDealRef = useRef<string | null>(initialDeal?.proposalId ?? null)
   useEffect(() => {
     if (initialDeal && lastDealRef.current !== initialDeal.proposalId) {
@@ -92,30 +92,29 @@ export function ProposalStepper({
   }, [initialDeal])
 
   return (
-    <div className="space-y-6">
-      {/* ── Create / edit the proposal (collapsible, same page) ────── */}
-      <div className="rounded-lg border">
+    <div className="space-y-8">
+      {/* ① Build the proposal (collapsible, same page) ───────────── */}
+      <section className="space-y-3">
         <button
           type="button"
-          className="flex w-full items-center justify-between px-4 py-3 text-left"
+          className="flex w-full items-center justify-between text-left"
           onClick={() => setBuilderOpen((v) => !v)}
         >
-          <span className="text-sm font-semibold">
-            {editingProposalId ? "Edit proposal" : "Create a proposal"}
-            <span className="ml-2 font-normal text-muted-foreground">
-              — products, categories, terms
-            </span>
-          </span>
+          <StepHeader
+            num={1}
+            title={editingProposalId ? "Edit the proposal" : "Build the proposal"}
+            desc="Facility, products, categories, and terms"
+          />
           {builderOpen ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
           ) : (
-            <span className="flex items-center gap-1 text-sm text-muted-foreground">
+            <span className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground">
               <Plus className="h-4 w-4" /> Open
             </span>
           )}
         </button>
         {builderOpen ? (
-          <div className="border-t p-4">
+          <div className="rounded-lg border p-4">
             <ProposalBuilder
               ref={builderRef}
               vendorId={vendorId}
@@ -135,9 +134,15 @@ export function ProposalStepper({
             />
           </div>
         ) : null}
-      </div>
+      </section>
 
-      {/* ── Usage & pricing + the asks ─────────────────────────────── */}
+      {/* ② Score the deal ─────────────────────────────────────────── */}
+      <section className="space-y-3">
+        <StepHeader
+          num={2}
+          title="Score the deal"
+          desc="Set Floor / Target / Ask per product, then Analyze — it saves and scores in one step"
+        />
       <DealScorerSection
         vendorId={vendorId}
         facilities={facilities}
@@ -164,15 +169,49 @@ export function ProposalStepper({
           return { proposalId: p.id, facilityId: p.facilityIds[0] ?? null }
         }}
       />
+      </section>
 
-      {/* ── Opportunity & report ───────────────────────────────────── */}
-      <div ref={engineRef}>
+      {/* ③ Opportunity & report ───────────────────────────────────── */}
+      <section className="space-y-3" ref={engineRef}>
+        <StepHeader
+          num={3}
+          title="Opportunity & report"
+          desc="Model the scenario levers and export the deal report"
+        />
         <OpportunityEngineSection
           vendorId={vendorId}
           facilities={facilities}
           initialDeal={opportunityDeal}
         />
-      </div>
+      </section>
     </div>
+  )
+}
+
+/** Numbered step marker for the one-page workspace (Charles 2026-07-06 — give
+ *  the long single scroll a 1 → 2 → 3 structure). */
+function StepHeader({
+  num,
+  title,
+  desc,
+}: {
+  num: number
+  title: string
+  desc: string
+}) {
+  // Phrasing-safe (spans, not h2/p) — step 1's header sits inside a toggle
+  // <button>, where flow content would be invalid.
+  return (
+    <span className="flex items-center gap-3">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+        {num}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold leading-tight">
+          {title}
+        </span>
+        <span className="block text-xs text-muted-foreground">{desc}</span>
+      </span>
+    </span>
   )
 }
