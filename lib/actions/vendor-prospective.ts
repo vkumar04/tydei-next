@@ -7,6 +7,7 @@ import { requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { serialize } from "@/lib/serialize"
 import { onlyProspectiveProposalRows } from "@/lib/prospective/proposal-rows"
+import { dealConstructSchema } from "@/lib/prospective/deal-construct-schema"
 import {
   callerVendorDivisionIds,
   divisionScopeWhere,
@@ -62,19 +63,6 @@ export interface PersistedDealConstruct {
   rebatePercent: number
 }
 
-// Validate the client-supplied constructs before writing them into the
-// `pricingData` JSON column (CLAUDE.md: validate JSON-column writes).
-const dealConstructSchema = z.object({
-  benchmarkId: z.string().nullable(),
-  productName: z.string().max(120),
-  category: z.string().max(120).optional(),
-  current: z.number(),
-  floor: z.number(),
-  target: z.number(),
-  ask: z.number(),
-  annualVolume: z.number(),
-  rebatePercent: z.number(),
-})
 
 /**
  * Caller-supplied portion of a vendor prospective analysis request.
