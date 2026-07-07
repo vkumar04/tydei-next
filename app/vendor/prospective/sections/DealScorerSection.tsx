@@ -87,6 +87,14 @@ interface DealScorerSectionProps {
    * inherited summary instead — so nothing is re-entered.
    */
   embedded?: boolean
+  /**
+   * One-page bridge (Charles 2026-07-06): "Analyze deal" is the single commit
+   * — when the builder above has unsaved content, this persists it first and
+   * returns the created proposal id + facility so the score attaches and the
+   * facility resolves without a separate mid-page Save. Returns null when
+   * there's nothing to save (a proposal is already attached).
+   */
+  beforeAnalyze?: () => Promise<{ proposalId: string; facilityId: string | null } | null>
 }
 
 const NO_PROPOSAL = "__none__"
@@ -124,7 +132,7 @@ function makeConstruct(seed?: Partial<ConstructForm>): ConstructForm {
 
 // ─── Section ───────────────────────────────────────────────────
 
-export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed, preselectedProposalId, embedded = false }: DealScorerSectionProps) {
+export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed, preselectedProposalId, embedded = false, beforeAnalyze }: DealScorerSectionProps) {
   const queryClient = useQueryClient()
   const [facilityId, setFacilityId] = useState<string>("")
   const [proposalRowId, setProposalRowId] = useState<string>(NO_PROPOSAL)
@@ -460,9 +468,33 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     }
   }
 
-  function handleAnalyze() {
-    if (!facilityId) {
-      toast.error("Select a facility first")
+  async function handleAnalyze() {
+    // One-page single-commit: if the builder above has unsaved content, save
+    // it first — that becomes the attached proposal + resolves the facility,
+    // so there's no separate mid-page Save (Charles 2026-07-06).
+    let effFacilityId = facilityId
+    let effProposalId = proposalRowId
+    if (beforeAnalyze && proposalRowId === NO_PROPOSAL) {
+      const saved = await beforeAnalyze()
+      if (saved) {
+        effProposalId = saved.proposalId
+        setProposalRowId(saved.proposalId)
+        if (saved.facilityId) {
+          effFacilityId = saved.facilityId
+          setFacilityId(saved.facilityId)
+        }
+      }
+    }
+    if (!effFacilityId) {
+      // In the one-page flow the facility lives in the builder above; the
+      // bridge save (beforeAnalyze) already toasted the specific gap (missing
+      // product/category/facility), so point there instead of a generic
+      // "select a facility" the user can't act on here.
+      toast.error(
+        embedded
+          ? "Complete the proposal above (facility + a product), then Analyze."
+          : "Select a facility first",
+      )
       return
     }
     const { scenarios: blended, currentAnnualSpend } =
@@ -489,12 +521,12 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
           : 0
       analyzeSeqRef.current += 1
       onDealAnalyzed({
-        proposalId: `step1-${facilityId}-${analyzeSeqRef.current}`,
+        proposalId: `step1-${effFacilityId}-${analyzeSeqRef.current}`,
         // When the deal is attached to a real proposal, carry its id so Step 2
         // can save the Opportunity run back onto it.
         savedProposalId:
-          proposalRowId !== NO_PROPOSAL ? proposalRowId : null,
-        facilityId,
+          effProposalId !== NO_PROPOSAL ? effProposalId : null,
+        facilityId: effFacilityId,
         priceChangePct,
         targetSharePct: targetShare ? Number(targetShare) : null,
         // Capital component of THIS deal — Step 2's Capital/Robotic revenue
@@ -509,7 +541,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     }
 
     mutation.mutate({
-      facilityId,
+      facilityId: effFacilityId,
       contractVariant,
       pricingScenarios: blended,
       // Phase 2: persist the real per-construct deal so a scored proposal can be
@@ -569,7 +601,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
               discountRate: Number(discountRate) >= 0 ? Number(discountRate) / 100 : 0.1,
             }
           : undefined,
-      proposalRowId: proposalRowId !== NO_PROPOSAL ? proposalRowId : undefined,
+      proposalRowId: effProposalId !== NO_PROPOSAL ? effProposalId : undefined,
     })
   }
 
@@ -708,12 +740,13 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
 
   // Inherited-context derivations (embedded one-page flow).
   const hasAttachedProposal = proposalRowId !== NO_PROPOSAL
-  const attachedProposal = proposals.find((p) => p.id === proposalRowId) ?? null
   const inheritedFacilityName =
     facilities.find((f) => f.id === facilityId)?.name ?? null
-  // Hide the redundant inputs only when we truly have the proposal's data to
-  // inherit from — otherwise fall back to the full manual form.
-  const inheritInputs = embedded && hasAttachedProposal
+  // In the one-page flow the facility, usage, pricing, and categories are
+  // BUILDER concerns — always inherit, never re-ask here (Charles 2026-07-06).
+  // Before the bridge-save the facility resolves on "Analyze deal"; the
+  // summary shows the proposal facility once known.
+  const inheritInputs = embedded
 
   return (
     <div className="space-y-4">
@@ -734,7 +767,9 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
             // inherited summary, don't re-ask (Charles 2026-07-06).
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-sm">
               <span className="text-muted-foreground">
-                From your proposal:
+                {inheritedFacilityName || usageLoadedCount > 0
+                  ? "From your proposal:"
+                  : "Facility, usage & pricing come from the proposal above."}
               </span>
               {inheritedFacilityName ? (
                 <span className="font-medium">{inheritedFacilityName}</span>

@@ -16,7 +16,10 @@
 import { useEffect, useRef, useState } from "react"
 import { ChevronUp, Plus } from "lucide-react"
 
-import { ProposalBuilder } from "@/components/vendor/prospective/proposal-builder"
+import {
+  ProposalBuilder,
+  type ProposalBuilderHandle,
+} from "@/components/vendor/prospective/proposal-builder"
 import { DealScorerSection } from "./DealScorerSection"
 import {
   OpportunityEngineSection,
@@ -70,6 +73,13 @@ export function ProposalStepper({
     if (editingProposalId || showBuilderInitially) setBuilderOpen(true)
   }, [editingProposalId, showBuilderInitially])
 
+  // Single-commit bridge: the builder exposes an imperative save that the Deal
+  // Scorer's "Analyze deal" calls, so there is no mid-page Save button
+  // (Charles 2026-07-06). Tracks the proposal id it just attached so the same
+  // proposal isn't re-created on a re-analyze.
+  const builderRef = useRef<ProposalBuilderHandle>(null)
+  const [bridgedProposalId, setBridgedProposalId] = useState<string | null>(null)
+
   // A card handoff arrives → bring the seeded Opportunity Engine into view
   // (same page — scroll, never navigate).
   const engineRef = useRef<HTMLDivElement | null>(null)
@@ -107,13 +117,15 @@ export function ProposalStepper({
         {builderOpen ? (
           <div className="border-t p-4">
             <ProposalBuilder
+              ref={builderRef}
               vendorId={vendorId}
               facilities={facilities}
               editingProposalId={editingProposalId}
-              onProposalCreated={(p) => {
-                // Same page: collapse the builder; the parent pre-selects the
-                // proposal in the Deal Scorer right below. No navigation.
-                setBuilderOpen(false)
+              embedded
+              onAutoAttach={(p) => {
+                // Bridge save from "Analyze deal": attach the proposal WITHOUT
+                // collapsing/resetting the builder (Charles 2026-07-06).
+                setBridgedProposalId(p.id)
                 onProposalCreated?.(p)
               }}
               onClose={() => {
@@ -138,8 +150,19 @@ export function ProposalStepper({
             block: "start",
           })
         }}
-        preselectedProposalId={preselectedProposalId}
+        preselectedProposalId={preselectedProposalId ?? bridgedProposalId}
         embedded
+        beforeAnalyze={async () => {
+          // Only bridge-save when the builder is open with unsaved content and
+          // nothing is attached yet — otherwise the Deal Scorer analyzes with
+          // whatever is already attached.
+          if (!builderOpen || bridgedProposalId || preselectedProposalId)
+            return null
+          if (!builderRef.current?.hasContent()) return null
+          const p = await builderRef.current.submit()
+          if (!p) return null
+          return { proposalId: p.id, facilityId: p.facilityIds[0] ?? null }
+        }}
       />
 
       {/* ── Opportunity & report ───────────────────────────────────── */}

@@ -77,6 +77,7 @@ export function FacilityCurrentStatePanel({
   vendorId,
   facilities,
   syncFacilityId,
+  locked = false,
   onSnapshotChange,
 }: {
   vendorId: string
@@ -88,6 +89,12 @@ export function FacilityCurrentStatePanel({
    * The user can still switch manually after a sync.
    */
   syncFacilityId?: string | null
+  /**
+   * One-page flow: the facility came from the proposal/deal above, so lock
+   * the selector to it (read-only) — don't re-ask (Charles 2026-07-06
+   * "asks you to enter your facility twice").
+   */
+  locked?: boolean
   /** Emits the current facility model so the parent export can include it. */
   onSnapshotChange?: (snapshot: FacilityCurrentStateSnapshot | null) => void
 }) {
@@ -132,18 +139,25 @@ export function FacilityCurrentStatePanel({
             <Label htmlFor="fcs-facility" className="text-xs">
               Facility
             </Label>
-            <Select value={facilityId} onValueChange={setFacilityId}>
-              <SelectTrigger id="fcs-facility" className="w-[240px]">
-                <SelectValue placeholder="Select a facility" />
-              </SelectTrigger>
-              <SelectContent>
-                {facilities.map((f) => (
-                  <SelectItem key={f.id} value={f.id}>
-                    {f.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {locked ? (
+              <p className="w-[240px] rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
+                {facilities.find((f) => f.id === facilityId)?.name ??
+                  "From your proposal"}
+              </p>
+            ) : (
+              <Select value={facilityId} onValueChange={setFacilityId}>
+                <SelectTrigger id="fcs-facility" className="w-[240px]">
+                  <SelectValue placeholder="Select a facility" />
+                </SelectTrigger>
+                <SelectContent>
+                  {facilities.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>
+                      {f.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
 
