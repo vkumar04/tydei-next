@@ -212,6 +212,8 @@ export function BenchmarksSection({ vendorId }: Props) {
                     <TableHead className="text-right">P25</TableHead>
                     <TableHead className="text-right">Median</TableHead>
                     <TableHead className="text-right">P75</TableHead>
+                    <TableHead className="text-right">Min</TableHead>
+                    <TableHead className="text-right">Max</TableHead>
                     <TableHead className="text-right">Sample</TableHead>
                     <TableHead>Source</TableHead>
                   </TableRow>
@@ -249,6 +251,12 @@ export function BenchmarksSection({ vendorId }: Props) {
                         {row.percentile75 > 0
                           ? formatCurrency(row.percentile75)
                           : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {row.minPrice > 0 ? formatCurrency(row.minPrice) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {row.maxPrice > 0 ? formatCurrency(row.maxPrice) : "—"}
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">
                         {row.sampleSize > 0 ? row.sampleSize.toLocaleString() : "—"}

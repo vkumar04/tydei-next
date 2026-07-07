@@ -10,7 +10,11 @@ import { toast } from "sonner"
 import { toCSV, buildReportFilename } from "@/lib/reports/csv-export"
 import { formatPercent, formatCompactCurrency } from "@/lib/formatting"
 import type { OpportunityReportPayload } from "@/lib/pdf"
-import { buildOpportunityNarrative } from "@/lib/prospective-analysis/opportunity-narrative"
+import {
+  buildOpportunityNarrative,
+  buildFacilityProposalNarrative,
+  facilityProposedPrice,
+} from "@/lib/prospective-analysis/opportunity-narrative"
 import type { OpportunityEngineResult } from "@/lib/prospective-analysis/opportunity-engine"
 import type { VendorOpportunityScore } from "@/lib/prospective-analysis/vendor-opportunity-score"
 import type { FacilityCurrentStateSnapshot } from "@/components/vendor/prospective/facility-current-state"
@@ -24,6 +28,16 @@ export interface OpportunityScenarioMeta {
   targetShare: number
   expectedVolumeGrowthPct: number
 }
+
+/**
+ * Two report formats (John, bugs.rtfd 2026-07-07): "internal" is the full
+ * vendor working document (win probability, opportunity score, negotiation
+ * ladder, recommended offer); "facility" is the version the vendor HANDS TO
+ * THE FACILITY — proposed pricing + savings + rebate only, with every
+ * vendor-internal lever (score, win probability, Floor/Target ladder,
+ * recommended offer, facility financial model) stripped.
+ */
+export type OpportunityReportAudience = "internal" | "facility"
 
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
@@ -72,13 +86,133 @@ export function facilityCurrentStateRows(
   ]
 }
 
+/**
+ * Facility-facing per-product rows + summary — the ONE builder shared by the
+ * facility CSV and the facility PDF payload so the two can't drift. The
+ * presented price is the ASK (opening position), falling back to Target when
+ * no Ask was entered (`facilityProposedPrice`); Floor/Target never appear.
+ */
+export function facilityProposalTable(constructs: ExportDealConstruct[]): {
+  head: string[]
+  rows: string[][]
+  summary: [string, string][]
+} {
+  const usdFull = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`
+  const rows = constructs.map((c) => {
+    const proposed = facilityProposedPrice(c)
+    const savings = (c.current - proposed) * c.annualVolume
+    return [
+      c.productName,
+      c.category || "—",
+      c.current > 0 ? usdFull(c.current) : "—",
+      proposed > 0 ? usdFull(proposed) : "—",
+      c.annualVolume.toLocaleString("en-US"),
+      `${c.rebatePercent}%`,
+      c.current > 0 && proposed > 0 ? usdFull(savings) : "—",
+    ]
+  })
+  const currentSpend = constructs.reduce(
+    (s, c) => s + Math.max(0, c.current) * Math.max(0, c.annualVolume),
+    0,
+  )
+  const proposedSpend = constructs.reduce(
+    (s, c) =>
+      s + Math.max(0, facilityProposedPrice(c)) * Math.max(0, c.annualVolume),
+    0,
+  )
+  const rebateValue = constructs.reduce(
+    (s, c) =>
+      s +
+      Math.max(0, facilityProposedPrice(c)) *
+        Math.max(0, c.annualVolume) *
+        (Math.max(0, c.rebatePercent) / 100),
+    0,
+  )
+  const summary: [string, string][] = [
+    ["Current annual spend (these products)", usdFull(currentSpend)],
+    ["Proposed annual spend", usdFull(proposedSpend)],
+    [
+      "Estimated annual savings",
+      currentSpend > 0 ? usdFull(currentSpend - proposedSpend) : "—",
+    ],
+    ["Estimated annual rebate value", usdFull(rebateValue)],
+  ]
+  return {
+    head: [
+      "Product",
+      "Category",
+      "Current price",
+      "Proposed price",
+      "Annual volume",
+      "Rebate %",
+      "Annual savings",
+    ],
+    rows,
+    summary,
+  }
+}
+
+/** CSV the vendor hands to the facility — narrative + proposed pricing +
+ *  summary. No score, no win probability, no Floor/Target ladder. */
+function downloadFacilityProposalCsv(
+  scenario: OpportunityScenarioMeta,
+  constructs: ExportDealConstruct[],
+): void {
+  const narrative = buildFacilityProposalNarrative({ scenario, constructs })
+  const table = facilityProposalTable(constructs)
+  const csv = [
+    "Narrative",
+    toCSV({
+      columns: [{ key: "narrative", label: "Narrative" }],
+      rows: narrative.map((paragraph) => ({ narrative: paragraph })),
+    }),
+    "",
+    "Proposed Pricing — by product",
+    toCSV({
+      columns: table.head.map((label, i) => ({ key: `c${i}`, label })),
+      rows: table.rows.map((r) =>
+        Object.fromEntries(r.map((v, i) => [`c${i}`, v])),
+      ),
+    }),
+    "",
+    "Summary",
+    toCSV({
+      columns: [
+        { key: "metric", label: "Metric" },
+        { key: "value", label: "Value" },
+      ],
+      rows: [
+        ...table.summary.map(([metric, value]) => ({ metric, value })),
+        {
+          metric: "Category commitment",
+          value: pct(scenario.targetShare),
+        },
+        {
+          metric: "Expected volume growth",
+          value: pct(scenario.expectedVolumeGrowthPct),
+        },
+      ],
+    }),
+  ].join("\n")
+
+  triggerDownload(
+    new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    buildReportFilename("Supply Partnership Proposal"),
+  )
+}
+
 export function downloadOpportunityCsv(
   engine: OpportunityEngineResult,
   score: VendorOpportunityScore,
   scenario: OpportunityScenarioMeta,
   facility?: FacilityCurrentStateSnapshot | null,
   constructs?: ExportDealConstruct[],
+  audience: OpportunityReportAudience = "internal",
 ): void {
+  if (audience === "facility") {
+    downloadFacilityProposalCsv(scenario, constructs ?? [])
+    return
+  }
   const narrativeCsv = toCSV({
     columns: [{ key: "narrative", label: "Narrative" }],
     rows: buildOpportunityNarrative({
@@ -218,8 +352,67 @@ export function buildOpportunityPdfPayload(
   scenario: OpportunityScenarioMeta,
   facility?: FacilityCurrentStateSnapshot | null,
   constructs?: ExportDealConstruct[],
+  audience: OpportunityReportAudience = "internal",
 ): OpportunityReportPayload {
+  if (audience === "facility") {
+    // The version the vendor HANDS TO THE FACILITY: proposed pricing +
+    // savings + rebate only. Engine/score still ride the payload shape but
+    // the facility branch of the server generator never renders them; the
+    // facility financial model is stripped outright.
+    const table = facilityProposalTable(constructs ?? [])
+    return {
+      audience: "facility",
+      narrative: buildFacilityProposalNarrative({
+        scenario,
+        constructs,
+      }),
+      proposal: {
+        head: table.head,
+        rows: table.rows,
+        summary: [
+          ...table.summary,
+          ["Category commitment", pct(scenario.targetShare)],
+          [
+            "Expected volume growth",
+            pct(scenario.expectedVolumeGrowthPct),
+          ],
+        ],
+      },
+      scenario: {
+        division: scenario.division,
+        facility: scenario.facility,
+        priceChangePct: scenario.priceChangePct,
+        targetShare: scenario.targetShare,
+        expectedVolumeGrowthPct: scenario.expectedVolumeGrowthPct,
+      },
+      engine: {
+        winProbability: engine.winProbability,
+        incrementalRevenue: engine.incrementalRevenue,
+        currentRevenue: engine.currentRevenue,
+        targetRevenue: engine.targetRevenue,
+        netUnitImpact: engine.netUnitImpact,
+        blendedMarketShare: engine.blendedMarketShare,
+        territoryRecurringRevenue: engine.territoryRecurringRevenue,
+        capitalRoboticRevenue: engine.capitalRoboticRevenue,
+      },
+      score: {
+        overall: score.overall,
+        winProbability: {
+          probability: score.winProbability.probability,
+          riskLevel: score.winProbability.riskLevel,
+          recommendedAction: score.winProbability.recommendedAction,
+        },
+        recommendedOffer: {
+          targetConversionPct: score.recommendedOffer.targetConversionPct,
+          items: [...score.recommendedOffer.items],
+        },
+      },
+      facility: null,
+      constructs: [],
+    }
+  }
   return {
+    audience: "internal",
     narrative: buildOpportunityNarrative({
       scenario,
       engine,
@@ -281,6 +474,7 @@ export async function downloadOpportunityPdf(
   scenario: OpportunityScenarioMeta,
   facility?: FacilityCurrentStateSnapshot | null,
   constructs?: ExportDealConstruct[],
+  audience: OpportunityReportAudience = "internal",
 ): Promise<void> {
   try {
     const res = await fetch("/api/reports/pdf", {
@@ -294,6 +488,7 @@ export async function downloadOpportunityPdf(
           scenario,
           facility,
           constructs,
+          audience,
         ),
       }),
     })
@@ -305,7 +500,11 @@ export async function downloadOpportunityPdf(
     }
     triggerDownload(
       await res.blob(),
-      buildReportFilename("Opportunity Engine Scenario").replace(/\.csv$/, ".pdf"),
+      buildReportFilename(
+        audience === "facility"
+          ? "Supply Partnership Proposal"
+          : "Opportunity Engine Scenario",
+      ).replace(/\.csv$/, ".pdf"),
     )
     toast.success("PDF downloaded")
   } catch (err) {

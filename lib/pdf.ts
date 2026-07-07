@@ -1183,6 +1183,23 @@ export function generateAnalysisReportPDF(
 
 export interface OpportunityReportPayload {
   /**
+   * Report format (John's two-format ask, bugs.rtfd 2026-07-07): "internal"
+   * (default; the vendor's full working document) or "facility" (the version
+   * handed to the facility — proposed pricing + savings + rebate only; the
+   * generator's facility branch never renders engine/score/offer sections).
+   */
+  audience?: "internal" | "facility"
+  /**
+   * Facility-facing proposed-pricing table + summary (audience "facility"
+   * only) — pre-formatted client-side by `facilityProposalTable` (the ONE
+   * builder shared with the facility CSV).
+   */
+  proposal?: {
+    head: string[]
+    rows: string[][]
+    summary: [string, string][]
+  } | null
+  /**
    * Plain-English story paragraphs (buildOpportunityNarrative, client-side) —
    * rendered as section 1, before the Facility Current State table.
    */
@@ -1243,8 +1260,15 @@ export function generateOpportunityReportPDF(
   const margin = 40
   let y = margin
 
+  const facilityFacing = payload.audience === "facility"
   doc.setFontSize(18)
-  doc.text("Opportunity Engine — Deal Scenario", margin, y)
+  doc.text(
+    facilityFacing
+      ? "Supply Partnership Proposal"
+      : "Opportunity Engine — Deal Scenario",
+    margin,
+    y,
+  )
   y += 18
   doc.setFontSize(10)
   doc.setTextColor(120)
@@ -1267,6 +1291,39 @@ export function generateOpportunityReportPDF(
   y += 2
 
   const after = (fallback: number) => getFinalY(doc, fallback + 20)
+
+  // Facility-facing format (John's two-format ask, bugs.rtfd 2026-07-07):
+  // proposed pricing + summary ONLY — no win probability, no opportunity
+  // score, no recommended offer, no Floor/Target ladder, no facility
+  // financial model. Everything is pre-formatted client-side in
+  // payload.proposal (facilityProposalTable, shared with the facility CSV).
+  if (facilityFacing) {
+    const proposal = payload.proposal
+    if (proposal && proposal.rows.length > 0) {
+      doc.setFontSize(12)
+      doc.text("Proposed Pricing — by product", margin, y + 6)
+      autoTable(doc, {
+        startY: y + 12,
+        head: [proposal.head],
+        body: proposal.rows,
+        theme: "striped",
+        headStyles: { fillColor: [30, 41, 59] },
+        styles: { fontSize: 8 },
+      })
+      y = after(y)
+    }
+    doc.setFontSize(12)
+    doc.text("Summary", margin, y + 6)
+    autoTable(doc, {
+      startY: y + 12,
+      head: [["Metric", "Value"]],
+      body: proposal?.summary ?? [],
+      theme: "striped",
+      headStyles: { fillColor: [30, 41, 59] },
+      styles: { fontSize: 9 },
+    })
+    return toBytes(doc)
+  }
 
   // Facility Current State — the financial picture of the pitch target.
   if (payload.facility) {

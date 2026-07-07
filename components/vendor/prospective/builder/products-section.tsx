@@ -1,12 +1,10 @@
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Textarea } from "@/components/ui/textarea"
 import {
   Upload,
   History,
   Package,
-  ListPlus,
   Loader2,
   CheckCircle2,
   Trash2,
@@ -31,22 +29,16 @@ type UploadImportHandler = (
 export interface ProductsSectionProps {
   newProposal: NewProposalState
   fileUploadProgress: FileUploadProgressState
-  productDescription: string
-  setProductDescription: (v: string) => void
   onUsageImport: UploadImportHandler
   onPricingImport: UploadImportHandler
-  parseProductsFromDescription: () => void
   removeProductFromProposal: (benchmarkId: string) => void
 }
 
 export function ProductsSection({
   newProposal,
   fileUploadProgress,
-  productDescription,
-  setProductDescription,
   onUsageImport,
   onPricingImport,
-  parseProductsFromDescription,
   removeProductFromProposal,
 }: ProductsSectionProps) {
   return (
@@ -173,34 +165,6 @@ export function ProductsSection({
           )}
         </div>
 
-        {/* Parse from description (simple text rules, not AI) */}
-        <div className="p-4 border rounded-lg border-dashed">
-          <div className="flex items-center gap-2 mb-2">
-            <ListPlus className="h-4 w-4 text-primary" />
-            <span className="font-medium text-sm">Parse from description</span>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            List products one per line with a name, price, and optional unit count. Parsed with simple text rules — lines without a price are skipped.
-          </p>
-          <div className="space-y-2">
-            <Textarea
-              placeholder={"Primary Hip System $8,500 50 units\nRevision Hip System $12,000 30 units\nSpinal Fusion Kit $15,000"}
-              value={productDescription}
-              onChange={(e) => setProductDescription(e.target.value)}
-              className="text-sm h-20 resize-none"
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full"
-              onClick={parseProductsFromDescription}
-              disabled={!productDescription.trim()}
-            >
-              <ListPlus className="mr-2 h-4 w-4" />
-              Parse products
-            </Button>
-          </div>
-        </div>
       </div>
 
       {/* Products List */}
@@ -208,7 +172,7 @@ export function ProductsSection({
         <div className="text-center py-6 text-muted-foreground border rounded-lg">
           <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
           <p>No products added yet</p>
-          <p className="text-sm">Upload a pricing file or parse products from a description</p>
+          <p className="text-sm">Upload a pricing file to add products</p>
         </div>
       ) : (() => {
         const pricingProducts = newProposal.products.filter(p => p.proposedPrice > 0)

@@ -58,6 +58,9 @@ export interface ProposalProduct {
 }
 
 export interface NewProposalState {
+  /** User-chosen proposal name — persisted as the row's contractName and shown
+   *  in lists/dropdowns ("let you name the proposal", bugs.rtfd 2026-07-07). */
+  proposalName: string
   facilityId: string
   facilityName: string
   isMultiFacility: boolean

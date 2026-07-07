@@ -51,6 +51,9 @@ const NATIONAL_AVG_ALIASES = [
   "national_average", "nationalaverage", "national_average_price",
   "avg_price", "avgprice", "average_price", "averageprice",
   "benchmark_price", "benchmarkprice",
+  // Charles's real benchmark file (2026-07-06) names the average "National
+  // ASP" — average selling price, the industry term.
+  "national_asp", "nationalasp", "asp", "avg_asp", "average_selling_price",
   ...UNIT_PRICE_ALIASES,
 ]
 
@@ -71,10 +74,14 @@ const P75_ALIASES = [
 
 const MIN_PRICE_ALIASES = [
   "min_price", "minprice", "min", "low", "low_price", "lowprice", "floor_price",
+  // Charles's real file calls the bottom of the range "Hard Floor" — that
+  // column silently dropped ("Bottom not coming over", bugs.rtfd 2026-07-07).
+  "hard_floor", "hardfloor", "floor", "price_floor",
 ]
 
 const MAX_PRICE_ALIASES = [
   "max_price", "maxprice", "max", "high", "high_price", "highprice", "ceiling_price",
+  "hard_ceiling", "hardceiling", "ceiling", "price_ceiling",
 ]
 
 const SAMPLE_SIZE_ALIASES = [

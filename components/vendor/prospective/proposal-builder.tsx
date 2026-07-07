@@ -17,6 +17,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Save } from "lucide-react"
 import type { ProposedPricingItem, VendorProposal } from "@/lib/actions/prospective"
 import { DealScoreView } from "./deal-score-view"
 import type { DealScore } from "@/lib/actions/prospective"
@@ -31,7 +34,6 @@ import { ProposalActions } from "./builder/proposal-actions"
 import {
   handlePricingRowsImport,
   handleUsageRowsImport,
-  parseProductsFromDescription as doParseProducts,
   generateTermsFromNotes,
 } from "./builder/file-handlers"
 import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
@@ -119,13 +121,12 @@ export const ProposalBuilder = forwardRef<
     isLoading: false, type: null, progress: 0, message: "",
   })
 
-  const [productDescription, setProductDescription] = useState("")
-
   const [termSuggestions, setTermSuggestions] = useState<TermSuggestionsState>({
     data: null,
   })
 
   const [newProposal, setNewProposal] = useState<NewProposalState>({
+    proposalName: "",
     facilityId: "",
     facilityName: "",
     isMultiFacility: false,
@@ -194,6 +195,7 @@ export const ProposalBuilder = forwardRef<
     hydratedRef.current = editingProposalId
     setNewProposal((prev) => ({
       ...prev,
+      proposalName: editDetail.name ?? "",
       facilityId: editDetail.facilities[0]?.id ?? "",
       facilityName: editDetail.facilities[0]?.name ?? "",
       isMultiFacility: editDetail.facilities.length > 1,
@@ -313,15 +315,6 @@ export const ProposalBuilder = forwardRef<
       setNewProposal,
     )
 
-  const parseProductsFromDescription = useCallback(() => {
-    doParseProducts(
-      productDescription,
-      newProposal.productCategory,
-      setNewProposal,
-      setProductDescription,
-    )
-  }, [productDescription, newProposal.productCategory])
-
   const handleGenerateTermsFromNotes = useCallback(() => {
     // Synchronous keyword heuristics — no artificial "analyzing" delay.
     const suggestions = generateTermsFromNotes(newProposal, setNewProposal)
@@ -351,6 +344,7 @@ export const ProposalBuilder = forwardRef<
 
   const resetForm = () => {
     setNewProposal({
+      proposalName: "",
       facilityId: "",
       facilityName: "",
       isMultiFacility: false,
@@ -369,13 +363,18 @@ export const ProposalBuilder = forwardRef<
       gpoFee: 3,
       aiNotes: "",
     })
-    setProductDescription("")
+    createdIdRef.current = null
   }
   // Cancel: reset + let the parent navigate away.
   const handleResetAndClose = () => {
     resetForm()
     onClose?.()
   }
+
+  // The row a mid-page Save already created — subsequent saves UPDATE it
+  // instead of minting a duplicate draft per click (bugs.rtfd 2026-07-07
+  // explicit-save flow). Reset with the form.
+  const createdIdRef = useRef<string | null>(null)
 
   // Core persist — validation + create/update. Returns the proposal (or null
   // on a validation miss). No navigation side-effects, so both the explicit
@@ -414,6 +413,7 @@ export const ProposalBuilder = forwardRef<
       // Shared builder payload — Charles 2026-04-26 #67: carry the rich fields
       // so the detail dialog renders what the builder collected.
       const payload = {
+        name: newProposal.proposalName.trim() || undefined,
         facilityIds: facilityIds.length > 0 ? facilityIds : ["none"],
         pricingItems,
         terms: {
@@ -460,9 +460,11 @@ export const ProposalBuilder = forwardRef<
               }))
             : undefined,
       }
-      // Edit an existing proposal in place, or create a new draft.
-      const created = editingProposalId
-        ? await updateMutation.mutateAsync({ proposalId: editingProposalId, ...payload })
+      // Edit an existing proposal in place (opened for edit OR already
+      // created by a prior mid-page Save), or create a new draft.
+      const targetId = editingProposalId ?? createdIdRef.current
+      const created = targetId
+        ? await updateMutation.mutateAsync({ proposalId: targetId, ...payload })
         : await createMutation.mutateAsync({
             vendorId,
             ...payload,
@@ -470,6 +472,7 @@ export const ProposalBuilder = forwardRef<
               ? vendorDivisionId || (myDivisions?.divisions[0]?.id ?? null)
               : null,
           })
+      if (!editingProposalId) createdIdRef.current = created.id
       return created
     } catch {
       // Error toast handled by mutation
@@ -506,6 +509,26 @@ export const ProposalBuilder = forwardRef<
       <ProposalHeader editingProposalId={editingProposalId} />
 
       <div className="space-y-6">
+        <div className="space-y-1.5">
+          <Label htmlFor="proposal-name">Proposal name</Label>
+          <Input
+            id="proposal-name"
+            className="max-w-md"
+            placeholder="e.g. Lighthouse TJA 2026 renewal"
+            value={newProposal.proposalName}
+            onChange={(e) =>
+              setNewProposal((prev) => ({
+                ...prev,
+                proposalName: e.target.value,
+              }))
+            }
+          />
+          <p className="text-xs text-muted-foreground">
+            Saved with the proposal and shown in your proposal lists. Left
+            blank, a name is generated from the item count.
+          </p>
+        </div>
+
         <FacilitySelector
           newProposal={newProposal}
           setNewProposal={setNewProposal}
@@ -567,11 +590,8 @@ export const ProposalBuilder = forwardRef<
         <ProductsSection
           newProposal={newProposal}
           fileUploadProgress={fileUploadProgress}
-          productDescription={productDescription}
-          setProductDescription={setProductDescription}
           onUsageImport={handleUsageImport}
           onPricingImport={handlePricingImport}
-          parseProductsFromDescription={parseProductsFromDescription}
           removeProductFromProposal={removeProductFromProposal}
         />
 
@@ -588,12 +608,36 @@ export const ProposalBuilder = forwardRef<
         {score && <DealScoreView score={score} />}
 
         {embedded ? (
-          // One-page flow: no mid-page Save button. Filling this in and then
-          // clicking "Analyze deal" below persists + scores in one action.
-          <p className="text-right text-xs text-muted-foreground">
-            Fill this in, then <strong>Analyze deal</strong> below — it saves
-            and scores in one step.
-          </p>
+          // One-page flow: "Analyze deal" below still saves + scores in one
+          // action, but the vendor can ALSO save the work-in-progress
+          // explicitly ("There is no where to save a proposal you are working
+          // on", bugs.rtfd 2026-07-07). Save keeps the form open — it just
+          // persists and attaches the proposal below.
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <p className="text-xs text-muted-foreground">
+              <strong>Analyze deal</strong> below saves and scores in one step
+              — or save your progress now.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={createMutation.isPending || updateMutation.isPending}
+              onClick={async () => {
+                const created = await persist()
+                if (!created) return
+                onAutoAttach?.(created)
+                toast.success(
+                  created.name
+                    ? `Proposal "${created.name}" saved`
+                    : "Proposal saved",
+                )
+              }}
+            >
+              <Save className="mr-1.5 h-4 w-4" />
+              Save proposal
+            </Button>
+          </div>
         ) : (
           <ProposalActions
             editingProposalId={editingProposalId}

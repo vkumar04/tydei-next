@@ -477,6 +477,7 @@ describe("invoice-line exports aggregate per SKU (Charles 2026-06-30, SYK Usage 
 
 function makeBuilderState(overrides: Partial<NewProposalState> = {}): NewProposalState {
   return {
+    proposalName: "",
     facilityId: "",
     facilityName: "",
     isMultiFacility: false,
@@ -506,6 +507,7 @@ describe("projectedSpend is a USER-OWNED assumption — files only SEED it", () 
 
   function makeState(overrides: Partial<NewProposalState> = {}): NewProposalState {
     return {
+      proposalName: "",
       facilityId: "",
       facilityName: "",
       isMultiFacility: false,
@@ -623,6 +625,7 @@ describe("usage↔pricing merge matches SKUs EXACTLY (no substring cross-match)"
 
   function makeState(overrides: Partial<NewProposalState> = {}): NewProposalState {
     return {
+      proposalName: "",
       facilityId: "",
       facilityName: "",
       isMultiFacility: false,

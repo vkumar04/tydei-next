@@ -34,6 +34,7 @@ import {
 } from "@/components/vendor/prospective/builder/file-handlers"
 import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { cn } from "@/lib/utils"
 import {
   getFacilityActualsForVendor,
@@ -239,6 +240,35 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     }
     return sum
   }, [currentPriceBySku, usageVolumeBySku])
+
+  // Starting-point spend for a category picked on a "Facility estimated annual
+  // category spend" row, derived from the loaded reference files: Σ(current
+  // price × usage volume) over the SKUs whose BENCHMARK category matches
+  // (canonical compare — never raw ===), divided by Current share % when one
+  // is entered so it approximates the facility's TOTAL category spend. Blank
+  // category (= all) sums every SKU present in both files. The user can edit
+  // it — it only seeds a BLANK row ("system should take initial spend from
+  // those files", bugs.rtfd 2026-07-07).
+  function estimateCategorySpendFromFiles(category: string): number {
+    let revenue = 0
+    if (category) {
+      const wanted = canonicalizeCategoryName(category)
+      for (const b of benchmarks ?? []) {
+        if (canonicalizeCategoryName(b.category) !== wanted) continue
+        const sku = normalizeSku(b.itemNumber)
+        const price = currentPriceBySku.get(sku)
+        const vol = usageVolumeBySku.get(sku)
+        if (price != null && vol != null) revenue += price * vol
+      }
+    } else {
+      revenue = usageCurrentRevenue
+    }
+    if (revenue <= 0) return 0
+    const sharePct = Number(currentShare)
+    return sharePct > 0 && sharePct <= 100
+      ? revenue / (sharePct / 100)
+      : revenue
+  }
 
   // Coming from a builder save just SELECTS the proposal in the "Attach score"
   // dropdown; the load below keys on that selection, so choosing a proposal
@@ -594,6 +624,18 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
         capitalRevenue:
           isCapital && equipmentCost ? Number(equipmentCost) : null,
         facilitySupplySpend: categorySpendSum > 0 ? categorySpendSum : null,
+        // The deal's OWN current revenue — construct Σ(current × volume), else
+        // the usage-file Σ — so the Opportunity Engine's "current" comes from
+        // the entered deal, never the book-of-business/default seed (bugs.rtfd
+        // 2026-07-07 "not sure where these numbers are coming from").
+        currentRevenue:
+          currentAnnualSpend > 0
+            ? currentAnnualSpend
+            : usageCurrentRevenue > 0
+              ? usageCurrentRevenue
+              : null,
+        // Manual entry — "" stays null, but a typed 0 is a real answer.
+        currentSharePct: currentShare !== "" ? Number(currentShare) : null,
         constructs: constructs.map((c) => ({
           productName: c.productName.trim() || "(unnamed)",
           category: c.category.trim() || undefined,
@@ -957,12 +999,13 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                 {proposals.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {/* Created date leads so near-identical proposals (Charles
-                        saved five copies while testing) stay tellable-apart. */}
+                        saved five copies while testing) stay tellable-apart;
+                        the user-chosen name (when set) replaces the bare #id. */}
                     {new Date(p.createdAt).toLocaleDateString(undefined, {
                       month: "short",
                       day: "numeric",
                     })}{" "}
-                    · #{p.id.slice(0, 8)} — {p.itemCount} items,{" "}
+                    · {p.name || `#${p.id.slice(0, 8)}`} — {p.itemCount} items,{" "}
                     {formatCurrency(p.totalProposedCost)}
                     {p.dealScore ? ` (scored ${p.dealScore.overall})` : ""}
                     {p.stage === "analyzed" ? " · analyzed" : ""}
@@ -1171,13 +1214,29 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                         {numCell("rebatePercent")}
                         <td className="whitespace-nowrap px-2 py-1.5 text-right text-xs">
                           {b ? (
-                            <>
-                              <div>avg {formatCurrency(b.nationalAvgPrice)}</div>
-                              <div className="text-muted-foreground">
-                                {formatCurrency(b.percentile25)}–
-                                {formatCurrency(b.percentile75)}
-                              </div>
-                            </>
+                            (() => {
+                              // Range falls back P25–P75 → Min–Max; hidden when
+                              // the upload carried no range data at all (was a
+                              // hardcoded "$0–$0", bugs.rtfd 2026-07-07
+                              // "Bottom not coming over").
+                              const lo =
+                                b.percentile25 > 0 ? b.percentile25 : b.minPrice
+                              const hi =
+                                b.percentile75 > 0 ? b.percentile75 : b.maxPrice
+                              return (
+                                <>
+                                  <div>
+                                    avg {formatCurrency(b.nationalAvgPrice)}
+                                  </div>
+                                  {lo > 0 || hi > 0 ? (
+                                    <div className="text-muted-foreground">
+                                      {lo > 0 ? formatCurrency(lo) : "—"}–
+                                      {hi > 0 ? formatCurrency(hi) : "—"}
+                                    </div>
+                                  ) : null}
+                                </>
+                              )
+                            })()
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
@@ -1268,15 +1327,27 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                 />
                 <Select
                   value={row.category || ALL_CATEGORIES}
-                  onValueChange={(v) =>
+                  onValueChange={(v) => {
+                    const category = v === ALL_CATEGORIES ? "" : v
+                    // Seed a BLANK spend from the loaded usage + price files
+                    // (or two-way actuals) — an editable starting point, never
+                    // clobbering a typed value (bugs.rtfd 2026-07-07).
+                    const seeded = estimateCategorySpendFromFiles(category)
                     setCategorySpends((prev) =>
                       prev.map((r) =>
                         r._uid === row._uid
-                          ? { ...r, category: v === ALL_CATEGORIES ? "" : v }
+                          ? {
+                              ...r,
+                              category,
+                              spend:
+                                !r.spend && seeded > 0
+                                  ? String(Math.round(seeded))
+                                  : r.spend,
+                            }
                           : r,
                       ),
                     )
-                  }
+                  }}
                 >
                   <SelectTrigger className="w-full sm:w-[220px]">
                     <SelectValue placeholder="Category" />

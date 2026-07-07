@@ -14,8 +14,18 @@
  */
 
 import { useEffect, useRef, useState } from "react"
-import { ChevronUp, Plus } from "lucide-react"
+import { ChevronUp, Download, Plus } from "lucide-react"
+import { toast } from "sonner"
 
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   ProposalBuilder,
   type ProposalBuilderHandle,
@@ -24,6 +34,7 @@ import { DealScorerSection } from "./DealScorerSection"
 import {
   OpportunityEngineSection,
   type OppEngineHandoff,
+  type OpportunityEngineExportHandle,
 } from "./OpportunityEngineSection"
 import type { VendorProposal } from "@/lib/actions/prospective"
 
@@ -98,6 +109,12 @@ export function ProposalStepper({
   const builderRef = useRef<ProposalBuilderHandle>(null)
   const [bridgedProposalId, setBridgedProposalId] = useState<string | null>(null)
 
+  // Top-of-page Export ("Export button should be at the top not in the
+  // middle", bugs.rtfd 2026-07-07): the live engine/score state stays in the
+  // Opportunity Engine section; this handle triggers its exports from the
+  // workspace toolbar.
+  const exportRef = useRef<OpportunityEngineExportHandle>(null)
+
   // A card handoff arrives → bring the seeded Opportunity Engine into view
   // (same page — scroll, never navigate).
   const engineRef = useRef<HTMLElement | null>(null)
@@ -111,6 +128,62 @@ export function ProposalStepper({
 
   return (
     <div className="space-y-8">
+      {/* Workspace toolbar — Export lives at the TOP of the page (bugs.rtfd
+          2026-07-07), with the two report formats John asked for: the
+          vendor-internal working document and the version handed to the
+          facility. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted-foreground">
+          Build the proposal, score the deal, model the opportunity — then
+          export the report.
+        </p>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Internal (vendor)</DropdownMenuLabel>
+            <DropdownMenuItem
+              onSelect={() => void exportRef.current?.exportPdf("internal")}
+            >
+              Export PDF — internal
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => exportRef.current?.exportCsv("internal")}
+            >
+              Export CSV — internal
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>For the facility</DropdownMenuLabel>
+            <DropdownMenuItem
+              onSelect={() => void exportRef.current?.exportPdf("facility")}
+            >
+              Export PDF — facility proposal
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => exportRef.current?.exportCsv("facility")}
+            >
+              Export CSV — facility proposal
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                if (!exportRef.current?.saveToProposal()) {
+                  toast.error(
+                    "Attach the deal to a saved proposal first (save it above, then Analyze).",
+                  )
+                }
+              }}
+            >
+              Save opportunity to proposal
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
       {/* ① Build the proposal (collapsible, same page) ───────────── */}
       <section className="space-y-3">
         <button
@@ -200,6 +273,7 @@ export function ProposalStepper({
           desc="Model the scenario levers and export the deal report"
         />
         <OpportunityEngineSection
+          ref={exportRef}
           vendorId={vendorId}
           facilities={facilities}
           initialDeal={opportunityDeal}
