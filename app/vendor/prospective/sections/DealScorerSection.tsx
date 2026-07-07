@@ -95,6 +95,17 @@ interface DealScorerSectionProps {
    * there's nothing to save (a proposal is already attached).
    */
   beforeAnalyze?: () => Promise<{ proposalId: string; facilityId: string | null } | null>
+  /**
+   * One-page LIVE inheritance (Charles 2026-07-06 "categories not coming
+   * over"): the categories + facility the user is picking in the ProposalBuilder
+   * above, streamed down BEFORE Analyze persists the proposal. `builderCategories`
+   * seeds/backfills construct categories and fills the category datalist;
+   * `builderFacilityId` resolves the inherited-facility summary before attach.
+   * Without these the Deal Scorer only learns categories after a proposal is
+   * saved + refetched — i.e. never, in the build-first flow.
+   */
+  builderCategories?: string[]
+  builderFacilityId?: string | null
 }
 
 const NO_PROPOSAL = "__none__"
@@ -139,7 +150,7 @@ function makeConstruct(seed?: Partial<ConstructForm>): ConstructForm {
 
 // ─── Section ───────────────────────────────────────────────────
 
-export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed, preselectedProposalId, embedded = false, beforeAnalyze }: DealScorerSectionProps) {
+export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed, preselectedProposalId, embedded = false, beforeAnalyze, builderCategories = [], builderFacilityId = null }: DealScorerSectionProps) {
   const queryClient = useQueryClient()
   const [facilityId, setFacilityId] = useState<string>("")
   const [proposalRowId, setProposalRowId] = useState<string>(NO_PROPOSAL)
@@ -155,36 +166,55 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
   // (Vick 2026-07-04 "the categories I loaded when entering a proposal are
   // not coming over").
   const [proposalCategories, setProposalCategories] = useState<string[]>([])
+  // The LIVE category source for the one-page flow: the builder's current
+  // selection (streamed down before Analyze) merged with the attached
+  // proposal's categories (post-Analyze). Use this everywhere the constructs
+  // need a category — NOT the post-attach-only `proposalCategories` (Charles
+  // 2026-07-06 "categories not coming over" in the build-first flow).
+  const effectiveCategories = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          [...(builderCategories ?? []), ...proposalCategories].filter(Boolean),
+        ),
+      ),
+    [builderCategories, proposalCategories],
+  )
   const benchmarkCategories = useMemo(
     () =>
       [
         ...new Set([
           ...(benchmarks ?? []).map((b) => b.category),
-          ...proposalCategories,
+          ...effectiveCategories,
         ]),
       ]
         .filter((c) => c && c !== "Uncategorized")
         .sort(),
-    [benchmarks, proposalCategories],
+    [benchmarks, effectiveCategories],
   )
   const benchmarkById = useMemo(
     () => new Map((benchmarks ?? []).map((b) => [b.id, b])),
     [benchmarks],
   )
   const [benchPick, setBenchPick] = useState("")
-  // When the attached proposal's categories arrive AFTER constructs were added
-  // (benchmark file had no Category column), backfill any construct still
-  // blank with the proposal's single category — never clobber one the vendor
-  // already typed (Charles 2026-07-06 "categories not coming through").
+  // When the builder's categories arrive/change (live, before Analyze) OR the
+  // attached proposal's categories load, backfill any construct still blank
+  // with the FIRST category — never clobber one the vendor already typed
+  // (Charles 2026-07-06 "categories not coming over"). Uses the first of the
+  // set (not `=== 1`) so a multi-category proposal still labels constructs
+  // instead of leaving them "uncategorized"; the vendor can retarget any
+  // construct via the category datalist.
+  const firstCategory = effectiveCategories[0]
   useEffect(() => {
-    if (proposalCategories.length !== 1) return
-    const only = proposalCategories[0]!
+    if (!firstCategory) return
     setConstructs((prev) =>
       prev.some((c) => !c.category.trim())
-        ? prev.map((c) => (c.category.trim() ? c : { ...c, category: only }))
+        ? prev.map((c) =>
+            c.category.trim() ? c : { ...c, category: firstCategory },
+          )
         : prev,
     )
-  }, [proposalCategories])
+  }, [firstCategory])
   const analyzeSeqRef = useRef(0)
   // Reference data: usage gives the VOLUME each construct is compared against;
   // the price file gives the CURRENT price. Keyed by normalized SKU; they
@@ -734,14 +764,13 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     const benchTarget =
       b.percentile50 > 0 ? b.percentile50 : b.nationalAvgPrice
     // Seed the category from the benchmark's own Category column when present,
-    // else the attached proposal's single category; blank (and editable) when
-    // neither is available so the vendor can name it (Charles 2026-07-06).
+    // else the FIRST category the vendor picked in the builder above (live) or
+    // on the attached proposal; blank (and editable) only when nothing is
+    // available (Charles 2026-07-06 "categories not coming over").
     const seededCat =
       b.category && b.category !== "Uncategorized"
         ? b.category
-        : proposalCategories.length === 1
-          ? proposalCategories[0]!
-          : ""
+        : (effectiveCategories[0] ?? "")
     setConstructs((prev) => {
       const blankIdx = prev.findIndex(
         (c) =>
@@ -771,10 +800,14 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     })
   }
 
-  // Inherited-context derivations (embedded one-page flow).
+  // Inherited-context derivations (embedded one-page flow). The facility
+  // resolves from the local pick, else the builder's LIVE facility selection
+  // (streamed down before Analyze), so the summary names it immediately instead
+  // of waiting for the bridge-save (Charles 2026-07-06).
   const hasAttachedProposal = proposalRowId !== NO_PROPOSAL
+  const effectiveFacilityId = facilityId || builderFacilityId || ""
   const inheritedFacilityName =
-    facilities.find((f) => f.id === facilityId)?.name ?? null
+    facilities.find((f) => f.id === effectiveFacilityId)?.name ?? null
   // In the one-page flow the facility, usage, pricing, and categories are
   // BUILDER concerns — always inherit, never re-ask here (Charles 2026-07-06).
   // Before the bridge-save the facility resolves on "Analyze deal"; the
