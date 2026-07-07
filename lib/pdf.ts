@@ -1222,6 +1222,7 @@ export interface OpportunityReportPayload {
   /** Per-construct deal rows (present when reached via the stepper). */
   constructs: {
     productName: string
+    category?: string
     current: number
     floor: number
     target: number
@@ -1335,9 +1336,10 @@ export function generateOpportunityReportPDF(
     doc.text("Proposed Deal — by product", margin, y + 6)
     autoTable(doc, {
       startY: y + 12,
-      head: [["Product", "Current", "Floor", "Target", "Ask", "Volume", "Rebate %"]],
+      head: [["Product", "Category", "Current", "Floor", "Target", "Ask", "Volume", "Rebate %"]],
       body: payload.constructs.map((c) => [
         c.productName,
+        c.category || "—",
         usd(c.current),
         usd(c.floor),
         usd(c.target),

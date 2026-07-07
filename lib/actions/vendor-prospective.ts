@@ -51,6 +51,9 @@ import { z } from "zod"
 export interface PersistedDealConstruct {
   benchmarkId: string | null
   productName: string
+  /** Per-construct category (benchmark Category column / proposal category /
+   *  vendor-typed) — additive, optional (Charles 2026-07-06). */
+  category?: string
   current: number
   floor: number
   target: number
@@ -64,6 +67,7 @@ export interface PersistedDealConstruct {
 const dealConstructSchema = z.object({
   benchmarkId: z.string().nullable(),
   productName: z.string().max(120),
+  category: z.string().max(120).optional(),
   current: z.number(),
   floor: z.number(),
   target: z.number(),

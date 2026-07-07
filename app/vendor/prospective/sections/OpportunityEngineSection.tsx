@@ -93,6 +93,7 @@ interface FacilityOption {
  */
 export interface OppDealConstructRow {
   productName: string
+  category?: string
   current: number
   floor: number
   target: number
