@@ -107,6 +107,12 @@ interface ConstructForm {
   _uid: string
   benchmarkId: string | null
   productName: string
+  /** Editable per-construct category — seeded from the benchmark's Category
+   *  column (when the uploaded file has one) or the attached proposal's single
+   *  category, but always overridable so a benchmark file WITHOUT a Category
+   *  column never strands the construct as "uncategorized" (Charles
+   *  2026-07-06 "categories not coming through"). */
+  category: string
   current: string
   floor: string
   target: string
@@ -120,6 +126,7 @@ function makeConstruct(seed?: Partial<ConstructForm>): ConstructForm {
     _uid: crypto.randomUUID(),
     benchmarkId: null,
     productName: "",
+    category: "",
     current: "",
     floor: "",
     target: "",
@@ -165,6 +172,19 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     [benchmarks],
   )
   const [benchPick, setBenchPick] = useState("")
+  // When the attached proposal's categories arrive AFTER constructs were added
+  // (benchmark file had no Category column), backfill any construct still
+  // blank with the proposal's single category — never clobber one the vendor
+  // already typed (Charles 2026-07-06 "categories not coming through").
+  useEffect(() => {
+    if (proposalCategories.length !== 1) return
+    const only = proposalCategories[0]!
+    setConstructs((prev) =>
+      prev.some((c) => !c.category.trim())
+        ? prev.map((c) => (c.category.trim() ? c : { ...c, category: only }))
+        : prev,
+    )
+  }, [proposalCategories])
   const analyzeSeqRef = useRef(0)
   // Reference data: usage gives the VOLUME each construct is compared against;
   // the price file gives the CURRENT price. Keyed by normalized SKU; they
@@ -334,6 +354,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
               makeConstruct({
                 benchmarkId: c.benchmarkId,
                 productName: c.productName || "(unnamed)",
+                category: c.category ?? "",
                 current: c.current ? String(c.current) : "",
                 floor: c.floor ? String(c.floor) : "",
                 target: c.target ? String(c.target) : "",
@@ -535,6 +556,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
           isCapital && equipmentCost ? Number(equipmentCost) : null,
         constructs: constructs.map((c) => ({
           productName: c.productName.trim() || "(unnamed)",
+          category: c.category.trim() || undefined,
           ...constructToDeal(c),
         })),
       })
@@ -549,6 +571,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       constructs: constructs.map((c) => ({
         benchmarkId: c.benchmarkId,
         productName: c.productName.trim(),
+        category: c.category.trim() || undefined,
         ...constructToDeal(c),
       })),
       currentAnnualSpend,
@@ -710,6 +733,15 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     const benchFloor = b.minPrice > 0 ? b.minPrice : b.percentile25
     const benchTarget =
       b.percentile50 > 0 ? b.percentile50 : b.nationalAvgPrice
+    // Seed the category from the benchmark's own Category column when present,
+    // else the attached proposal's single category; blank (and editable) when
+    // neither is available so the vendor can name it (Charles 2026-07-06).
+    const seededCat =
+      b.category && b.category !== "Uncategorized"
+        ? b.category
+        : proposalCategories.length === 1
+          ? proposalCategories[0]!
+          : ""
     setConstructs((prev) => {
       const blankIdx = prev.findIndex(
         (c) =>
@@ -724,6 +756,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       const seed = makeConstruct({
         benchmarkId: b.id,
         productName,
+        category: seededCat,
         current: current != null ? String(current) : "",
         floor: benchFloor > 0 ? String(benchFloor) : "",
         target: benchTarget > 0 ? String(benchTarget) : "",
@@ -989,6 +1022,13 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
               </div>
             </div>
 
+            {/* Known categories (uploaded benchmarks + attached proposal) for
+                the per-construct category inputs — free text still allowed. */}
+            <datalist id="deal-construct-categories">
+              {benchmarkCategories.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
             <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
@@ -1033,30 +1073,51 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                       <tr key={c._uid} className="border-t align-top">
                         <td className="min-w-[180px] px-2 py-1.5">
                           {b ? (
-                            <div className="min-w-0">
+                            <div className="min-w-0 space-y-1">
                               <div className="truncate font-medium">
                                 {c.productName}
                               </div>
-                              <span className="text-xs text-muted-foreground">
-                                benchmark ·{" "}
-                                {b.category && b.category !== "Uncategorized"
-                                  ? b.category
-                                  : proposalCategories.length === 1
-                                    ? proposalCategories[0]
-                                    : "uncategorized"}
-                              </span>
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs text-muted-foreground">
+                                  benchmark ·
+                                </span>
+                                <Input
+                                  className="h-6 flex-1 text-xs"
+                                  list="deal-construct-categories"
+                                  placeholder="category"
+                                  value={c.category}
+                                  onChange={(e) =>
+                                    updateConstruct(c._uid, {
+                                      category: e.target.value,
+                                    })
+                                  }
+                                />
+                              </div>
                             </div>
                           ) : (
-                            <Input
-                              className="h-8"
-                              placeholder="Product name"
-                              value={c.productName}
-                              onChange={(e) =>
-                                updateConstruct(c._uid, {
-                                  productName: e.target.value,
-                                })
-                              }
-                            />
+                            <div className="min-w-0 space-y-1">
+                              <Input
+                                className="h-8"
+                                placeholder="Product name"
+                                value={c.productName}
+                                onChange={(e) =>
+                                  updateConstruct(c._uid, {
+                                    productName: e.target.value,
+                                  })
+                                }
+                              />
+                              <Input
+                                className="h-6 text-xs"
+                                list="deal-construct-categories"
+                                placeholder="Category"
+                                value={c.category}
+                                onChange={(e) =>
+                                  updateConstruct(c._uid, {
+                                    category: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
                           )}
                         </td>
                         {numCell("current")}

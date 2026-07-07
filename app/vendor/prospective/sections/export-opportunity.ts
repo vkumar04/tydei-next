@@ -150,6 +150,7 @@ export function downloadOpportunityCsv(
           toCSV({
             columns: [
               { key: "productName", label: "Product" },
+              { key: "category", label: "Category" },
               { key: "current", label: "Current" },
               { key: "floor", label: "Floor" },
               { key: "target", label: "Target" },
@@ -189,6 +190,7 @@ export function downloadOpportunityCsv(
  *  matches OppDealConstructRow — defined here to avoid an import cycle). */
 export interface ExportDealConstruct {
   productName: string
+  category?: string
   current: number
   floor: number
   target: number
@@ -262,6 +264,7 @@ export function buildOpportunityPdfPayload(
       : null,
     constructs: (constructs ?? []).map((c) => ({
       productName: c.productName,
+      category: c.category,
       current: c.current,
       floor: c.floor,
       target: c.target,

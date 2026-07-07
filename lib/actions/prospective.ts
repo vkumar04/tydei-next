@@ -145,6 +145,7 @@ export interface ProposalDealHandoff {
    *  (structurally matches OppEngineHandoff/OppDealConstructRow). */
   constructs: {
     productName: string
+    category?: string
     current: number
     floor: number
     target: number
@@ -182,6 +183,7 @@ export interface VendorProposalDetail extends VendorProposal {
   dealConstructs?: {
     benchmarkId: string | null
     productName: string
+    category?: string
     current: number
     floor: number
     target: number
@@ -822,6 +824,7 @@ function payloadToProposal(
       // export works from a saved proposal (was computed-then-discarded).
       constructs: rawConstructs.map((c) => ({
         productName: typeof c.productName === "string" ? c.productName : "",
+        category: typeof c.category === "string" ? c.category : undefined,
         current: num(c.current),
         floor: num(c.floor),
         target: num(c.target),
@@ -1001,6 +1004,7 @@ export async function getVendorProposalDetail(
     ? (meta.dealConstructs as Array<Record<string, unknown>>).map((c) => ({
         benchmarkId: typeof c.benchmarkId === "string" ? c.benchmarkId : null,
         productName: typeof c.productName === "string" ? c.productName : "",
+        category: typeof c.category === "string" ? c.category : undefined,
         current: num(c.current),
         floor: num(c.floor),
         target: num(c.target),
