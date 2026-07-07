@@ -233,6 +233,10 @@ export async function sendConnectionInvite(input: {
       invitedByEmail: session.user.email,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       message: input.message,
+      // Fail-secure: a new connection shares NO facility actuals until the
+      // vendor explicitly opts into two_way (setConnectionMode). Explicit here
+      // so the default is visible at the call site, not just the schema.
+      mode: "one_way",
     },
   })
 

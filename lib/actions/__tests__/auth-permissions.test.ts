@@ -91,12 +91,30 @@ describe("getCurrentAccessContext", () => {
     })
   })
 
-  it("defaults tier to `super` when there is NO member row", async () => {
+  it("FAIL-SECURE: a non-admin user with NO member row falls to read-only `user`", async () => {
     asTier(null, "facility")
+
+    await expect(getCurrentAccessContext()).resolves.toEqual({
+      tier: "user",
+      side: "facility",
+    })
+  })
+
+  it("a platform admin (role=admin) with NO member row stays `super`", async () => {
+    asTier(null, "admin")
 
     await expect(getCurrentAccessContext()).resolves.toEqual({
       tier: "super",
       side: "facility",
+    })
+  })
+
+  it("FAIL-SECURE: a vendor user with NO member row falls to read-only `user`", async () => {
+    asTier(null, "vendor")
+
+    await expect(getCurrentAccessContext()).resolves.toEqual({
+      tier: "user",
+      side: "vendor",
     })
   })
 

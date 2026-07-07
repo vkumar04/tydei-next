@@ -27,10 +27,15 @@ import { AccessDeniedError } from "@/lib/auth/access-error"
  */
 
 /**
- * Resolve the calling user's access context (tier + side). Admin platform
- * users and any user without a Member row resolve to `super` (they manage
- * the platform / their own org), so existing behavior is unchanged until a
- * member is explicitly demoted. Returns `null` only when unauthenticated.
+ * Resolve the calling user's access context (tier + side).
+ *
+ * FAIL-SECURE (2026-07-06 launch hardening): only a **platform super-admin**
+ * (`User.role === "admin"` — the cross-tenant `/admin` operator, legitimately
+ * Member-less) defaults to `super` when there is no Member row. Any OTHER
+ * authenticated user without a Member row (orphaned / misconfigured) falls to
+ * the lowest tier `user` (read-only) rather than silently getting full access.
+ * Real facility/vendor users always have a Member row (created on org join),
+ * so this only tightens the orphan case. Returns `null` when unauthenticated.
  */
 export async function getCurrentAccessContext(): Promise<AccessContext | null> {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -47,8 +52,10 @@ export async function getCurrentAccessContext(): Promise<AccessContext | null> {
     }),
   ])
 
+  const isPlatformAdmin = user?.role === "admin"
   const side: AccessSide = user?.role === "vendor" ? "vendor" : "facility"
-  const tier: AccessTier = member?.accessTier ?? "super"
+  const tier: AccessTier =
+    member?.accessTier ?? (isPlatformAdmin ? "super" : "user")
   return { tier, side }
 }
 
