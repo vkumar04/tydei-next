@@ -484,6 +484,9 @@ export function OpportunityEngineSection({
         vendorId={vendorId}
         facilities={facilities}
         syncFacilityId={scopedFacilityId}
+        // Deal came from the proposal above → the facility is already known;
+        // lock it so it isn't re-asked (Charles 2026-07-06).
+        locked={Boolean(initialDeal?.facilityId)}
         onSnapshotChange={setFacilitySnapshot}
       />
 
@@ -520,22 +523,32 @@ export function OpportunityEngineSection({
 
             <div className="space-y-2">
               <Label htmlFor="oe-facility">Facility</Label>
-              <Input
-                id="oe-facility"
-                list="oe-facility-options"
-                value={facility}
-                onChange={(e) => setFacility(e.target.value)}
-                placeholder="Choose or type a facility"
-              />
-              <datalist id="oe-facility-options">
-                {facilities.map((f) => (
-                  <option key={f.id} value={f.name} />
-                ))}
-              </datalist>
-              <p className="text-xs text-muted-foreground">
-                For your report only — choose a facility you serve or write in a
-                new prospect. Not shared with the facility.
-              </p>
+              {initialDeal?.facilityId ? (
+                // Inherited from the proposal/deal — read-only, don't re-ask
+                // (Charles 2026-07-06 "enter your facility twice").
+                <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
+                  {facility || "From your proposal"}
+                </p>
+              ) : (
+                <>
+                  <Input
+                    id="oe-facility"
+                    list="oe-facility-options"
+                    value={facility}
+                    onChange={(e) => setFacility(e.target.value)}
+                    placeholder="Choose or type a facility"
+                  />
+                  <datalist id="oe-facility-options">
+                    {facilities.map((f) => (
+                      <option key={f.id} value={f.name} />
+                    ))}
+                  </datalist>
+                  <p className="text-xs text-muted-foreground">
+                    For your report only — choose a facility you serve or write
+                    in a new prospect. Not shared with the facility.
+                  </p>
+                </>
+              )}
             </div>
 
             <SliderControl

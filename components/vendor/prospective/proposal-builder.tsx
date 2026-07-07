@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react"
+import { useEffect, useMemo, useRef, useState, useCallback, forwardRef, useImperativeHandle } from "react"
 import { Separator } from "@/components/ui/separator"
 import { toast } from "sonner"
 import {
@@ -50,12 +50,33 @@ interface ProposalBuilderProps {
   facilities: { id: string; name: string }[]
   editingProposalId?: string | null
   onClose?: () => void
-  /** Called after a proposal is saved, with the created row — lets the parent
-   *  continue into the Deal Scorer pre-loaded ("save → next step"). */
+  /** Called after a proposal is saved via the explicit Save button, with the
+   *  created row — lets the parent continue into the Deal Scorer. */
   onProposalCreated?: (proposal: VendorProposal) => void
+  /**
+   * One-page flow (Charles 2026-07-06): hide the explicit Save button — the
+   * Deal Scorer's "Analyze deal" drives the save via the imperative handle so
+   * there is no mid-page commit. `onAutoAttach` fires when that bridge save
+   * lands, so the parent can attach the proposal WITHOUT collapsing the
+   * builder or resetting the form.
+   */
+  embedded?: boolean
+  onAutoAttach?: (proposal: VendorProposal) => void
 }
 
-export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClose, onProposalCreated }: ProposalBuilderProps) {
+/** Imperative surface for the one-page "Analyze deal" bridge. */
+export interface ProposalBuilderHandle {
+  submit: () => Promise<VendorProposal | null>
+  hasContent: () => boolean
+}
+
+export const ProposalBuilder = forwardRef<
+  ProposalBuilderHandle,
+  ProposalBuilderProps
+>(function ProposalBuilder(
+  { vendorId, facilities, editingProposalId, onClose, onProposalCreated, embedded = false, onAutoAttach },
+  ref,
+) {
   const createMutation = useCreateProposal()
   const updateMutation = useUpdateProposal()
   const { data: editDetail, isFetching: editDetailFetching } =
@@ -314,14 +335,13 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
     onClose?.()
   }
 
-  const submitProposal = async () => {
-    if (!newProposal.facilityId && !newProposal.isMultiFacility) {
-      // Allow submission without facility selection (manual entry)
-    }
-
+  // Core persist — validation + create/update. Returns the proposal (or null
+  // on a validation miss). No navigation side-effects, so both the explicit
+  // Save button AND the one-page "Analyze deal" bridge can call it.
+  const persist = async (): Promise<VendorProposal | null> => {
     if (!newProposal.productCategory && newProposal.productCategories.length === 0) {
       toast.error("Please select at least one product category")
-      return
+      return null
     }
 
     const facilityIds: string[] = []
@@ -345,7 +365,7 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
 
     if (pricingItems.length === 0) {
       toast.error("Please add at least one product with pricing")
-      return
+      return null
     }
 
     try {
@@ -408,15 +428,36 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
               ? vendorDivisionId || (myDivisions?.divisions[0]?.id ?? null)
               : null,
           })
-      // Continue into the Deal Scorer pre-loaded with this proposal ("save →
-      // next step"). onProposalCreated owns navigation; only reset the form
-      // here (calling handleResetAndClose would fire onClose and override it).
-      resetForm()
-      onProposalCreated?.(created)
+      return created
     } catch {
       // Error toast handled by mutation
+      return null
     }
   }
+
+  // Explicit Save button (non-embedded flow): persist, then reset + hand off.
+  const submitProposal = async () => {
+    const created = await persist()
+    if (!created) return
+    resetForm()
+    onProposalCreated?.(created)
+  }
+
+  // Imperative save for the one-page flow — the Deal Scorer's "Analyze deal"
+  // calls this so there is no separate mid-page Save button (Charles
+  // 2026-07-06 "it says to save the deal before the end"). Keeps the form
+  // intact (no reset) and attaches the proposal without collapsing.
+  useImperativeHandle(ref, () => ({
+    submit: async () => {
+      const created = await persist()
+      if (created) onAutoAttach?.(created)
+      return created
+    },
+    hasContent: () =>
+      newProposal.products.length > 0 ||
+      newProposal.productCategories.length > 0 ||
+      Boolean(newProposal.facilityId),
+  }))
 
   return (
     <div className="space-y-6">
@@ -504,13 +545,22 @@ export function ProposalBuilder({ vendorId, facilities, editingProposalId, onClo
 
         {score && <DealScoreView score={score} />}
 
-        <ProposalActions
-          editingProposalId={editingProposalId}
-          isPending={createMutation.isPending || updateMutation.isPending}
-          onCancel={handleResetAndClose}
-          onSubmit={submitProposal}
-        />
+        {embedded ? (
+          // One-page flow: no mid-page Save button. Filling this in and then
+          // clicking "Analyze deal" below persists + scores in one action.
+          <p className="text-right text-xs text-muted-foreground">
+            Fill this in, then <strong>Analyze deal</strong> below — it saves
+            and scores in one step.
+          </p>
+        ) : (
+          <ProposalActions
+            editingProposalId={editingProposalId}
+            isPending={createMutation.isPending || updateMutation.isPending}
+            onCancel={handleResetAndClose}
+            onSubmit={submitProposal}
+          />
+        )}
       </div>
     </div>
   )
-}
+})
