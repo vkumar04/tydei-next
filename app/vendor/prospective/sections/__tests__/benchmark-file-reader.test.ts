@@ -87,6 +87,29 @@ describe("mapBenchmarkRows — canonical SKU aliases", () => {
     expect(items[0]!.nationalAvgPrice).toBe(112.4)
   })
 
+  it("maps a 'Construct' product-identifier header (Charles's benchmark file, no Category column)", () => {
+    // Charles's real Benchmarks.xlsx: the product id column is "Construct" and
+    // there is NO Category column — verified on prod 2026-07-06.
+    const headers = ["Construct", "National Avg Price"]
+    const { items } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["Cemented Knee", "3300"]]),
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]!.vendorItemNo).toBe("Cemented Knee")
+    expect(items[0]!.category).toBeUndefined()
+  })
+
+  it("prefers a real SKU column over 'Construct' when both are present", () => {
+    // Canonical aliases win; "construct" is only the last-resort fallback.
+    const headers = ["Item Number", "Construct", "National Avg Price"]
+    const { items } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["SKU-99", "Cemented Knee", "3300"]]),
+    )
+    expect(items[0]!.vendorItemNo).toBe("SKU-99")
+  })
+
   it.each([["Catalog Item"], ["PROD CD"], ["Part Number"]])(
     "matches canonical alias %s",
     (skuHeader) => {

@@ -28,6 +28,19 @@ import {
 } from "@/components/shared/uploads/field-spec"
 import type { VendorBenchmarkImportInput } from "@/lib/actions/benchmarks"
 
+// Benchmark files often name the product-identifier column "Construct"
+// (the implant configuration being priced) — a benchmark-specific term that
+// does NOT belong in the global COG/pricing item-number aliases. Canonical
+// aliases come FIRST so a real SKU/catalog column still wins; "construct" is
+// the last-resort fallback so Charles's real benchmark file (headers:
+// Construct, National ASP, Hard Floor, …) auto-detects without a manual
+// column-map step (verified on prod 2026-07-06).
+const BENCHMARK_ITEM_NUMBER_ALIASES = [
+  ...ITEM_NUMBER_ALIASES,
+  "construct",
+  "constructs",
+]
+
 // ─── Benchmark-specific header aliases ───────────────────────────
 // Specific benchmark aliases come FIRST so a file that carries both a
 // "National Avg Price" column and a generic "Price" column maps the
@@ -80,7 +93,7 @@ const DATA_DATE_ALIASES = [
 // mapBenchmarkRows (droppedNoPrice), and the Benchmarks surface keys
 // its confirm copy + import gate off that result.
 export const BENCHMARK_UPLOAD_SPECS: UploadFieldSpec[] = [
-  { key: "itemNumber", label: "Item number", aliases: ITEM_NUMBER_ALIASES, required: true, kind: "text" },
+  { key: "itemNumber", label: "Item number", aliases: BENCHMARK_ITEM_NUMBER_ALIASES, required: true, kind: "text" },
   { key: "description", label: "Description", aliases: DESCRIPTION_ALIASES, kind: "text" },
   { key: "category", label: "Category", aliases: CATEGORY_ALIASES, kind: "text" },
   { key: "nationalAvgPrice", label: "National average price", aliases: NATIONAL_AVG_ALIASES, kind: "number" },
@@ -150,7 +163,7 @@ export function mapBenchmarkRows(
       ? overrideIndex(headers, mappingOverride, key)
       : findIndex(normHeaders, aliases)
 
-  const idxItem = idx("itemNumber", ITEM_NUMBER_ALIASES)
+  const idxItem = idx("itemNumber", BENCHMARK_ITEM_NUMBER_ALIASES)
   const idxDesc = idx("description", DESCRIPTION_ALIASES)
   const idxCat = idx("category", CATEGORY_ALIASES)
   const idxAvg = idx("nationalAvgPrice", NATIONAL_AVG_ALIASES)
