@@ -195,3 +195,98 @@ export function buildOpportunityNarrative(
 
   return paragraphs
 }
+
+// ─── Facility-facing proposal narrative ─────────────────────────
+
+/**
+ * The story for the report the vendor HANDS TO THE FACILITY (John's two-format
+ * ask, bugs.rtfd 2026-07-07). Deliberately excludes every vendor-internal
+ * lever — win probability, opportunity score, recommended offer, margins, and
+ * the Floor/Target negotiation ladder. The presented price per product is the
+ * ASK (the vendor's opening position), falling back to Target when no Ask was
+ * entered — the same rule `facilityProposalRows` uses, so the narrative and
+ * the table can't disagree.
+ */
+export interface FacilityProposalNarrativeInput {
+  scenario: NarrativeScenario
+  constructs?: NarrativeConstruct[] | null
+}
+
+/** The proposed (facility-visible) unit price for a construct: Ask when the
+ *  vendor entered one, else Target. */
+export function facilityProposedPrice(c: {
+  target: number
+  ask?: number
+}): number {
+  return c.ask != null && c.ask > 0 ? c.ask : c.target
+}
+
+export function buildFacilityProposalNarrative(
+  input: FacilityProposalNarrativeInput,
+): string[] {
+  const { scenario, constructs } = input
+  const paragraphs: string[] = []
+
+  const priceMove =
+    scenario.priceChangePct < 0
+      ? `pricing ${pct(-scenario.priceChangePct)} below current levels`
+      : scenario.priceChangePct > 0
+        ? `a ${pct(scenario.priceChangePct)} price adjustment`
+        : "pricing held at current levels"
+  paragraphs.push(
+    `${scenario.division} is pleased to present ${scenario.facility} with a ` +
+      `supply partnership proposal offering ${priceMove}.`,
+  )
+
+  if (constructs && constructs.length > 0) {
+    const withAsk = constructs as Array<
+      NarrativeConstruct & { ask?: number }
+    >
+    const totalVolume = withAsk.reduce((s, c) => s + c.annualVolume, 0)
+    const currentSpend = withAsk.reduce(
+      (s, c) => s + c.current * c.annualVolume,
+      0,
+    )
+    const proposedSpend = withAsk.reduce(
+      (s, c) => s + facilityProposedPrice(c) * c.annualVolume,
+      0,
+    )
+    const rebateValue = withAsk.reduce(
+      (s, c) =>
+        s +
+        facilityProposedPrice(c) * c.annualVolume * (c.rebatePercent / 100),
+      0,
+    )
+    const plural = withAsk.length === 1 ? "product" : "products"
+    let dealParagraph =
+      `The proposal covers ${withAsk.length} ${plural} across ` +
+      `${totalVolume.toLocaleString("en-US")} units per year.`
+    if (currentSpend > 0 && proposedSpend > 0) {
+      const savings = currentSpend - proposedSpend
+      dealParagraph +=
+        savings > 0
+          ? ` At proposed pricing, annual spend moves from ${usd(currentSpend)} to ` +
+            `${usd(proposedSpend)} — an estimated ${usd(savings)} ` +
+            `(${pct(savings / currentSpend)}) in annual savings.`
+          : ` At proposed pricing, annual spend on these products is ${usd(proposedSpend)}.`
+    }
+    if (rebateValue > 0) {
+      dealParagraph += ` Rebate terms add an estimated ${usd(rebateValue)} per year.`
+    }
+    paragraphs.push(dealParagraph)
+  }
+
+  if (scenario.targetShare > 0) {
+    paragraphs.push(
+      `The proposal is structured around a ${pct(scenario.targetShare)} category ` +
+        `commitment${
+          scenario.expectedVolumeGrowthPct !== 0
+            ? `, with pricing built to support ${pct(Math.abs(scenario.expectedVolumeGrowthPct))} ` +
+              `${scenario.expectedVolumeGrowthPct > 0 ? "expected category growth" : "anticipated category contraction"}`
+            : ""
+        }.`,
+    )
+  }
+
+  return paragraphs
+}

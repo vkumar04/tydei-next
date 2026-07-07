@@ -115,6 +115,9 @@ export function ProposalCards({
                 <div className="flex flex-col lg:flex-row">
                   <div className="flex-1 p-5 space-y-4">
                     <div className="flex flex-wrap items-center gap-2">
+                      {p.name ? (
+                        <span className="text-sm font-semibold">{p.name}</span>
+                      ) : null}
                       <span className="font-mono text-sm font-medium text-muted-foreground">
                         #{p.id.slice(0, 8)}
                       </span>
@@ -198,6 +201,13 @@ export function ProposalCards({
                             priceChangePct: p.dealHandoff!.priceChangePct,
                             targetSharePct: p.dealHandoff!.targetSharePct,
                             capitalRevenue: p.dealHandoff!.capitalRevenue,
+                            // The saved deal's own current revenue — keeps the
+                            // engine seeded from the deal, not book defaults
+                            // (bugs.rtfd 2026-07-07).
+                            currentRevenue:
+                              p.dealHandoff!.currentAnnualSpend > 0
+                                ? p.dealHandoff!.currentAnnualSpend
+                                : null,
                             constructs: p.dealHandoff!.constructs,
                           })
                         }

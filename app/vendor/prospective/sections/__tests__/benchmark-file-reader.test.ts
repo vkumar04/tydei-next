@@ -278,3 +278,21 @@ describe("mapBenchmarkRows — mappingOverride (uploader improvements 1, 2026-06
     expect(droppedNoPrice).toBe(1)
   })
 })
+
+describe("mapBenchmarkRows — Charles's real header set (2026-07-07)", () => {
+  it("maps Construct / National ASP / Hard Floor / Ceiling without an override", () => {
+    // "Bottom not coming over": Hard Floor (the bottom of the range) silently
+    // dropped because no min-price alias matched; National ASP likewise.
+    const headers = ["Construct", "National ASP", "Hard Floor", "Ceiling"]
+    const { items, withNationalAvg } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["Cemented Knee", "3300", "2800", "4100"]]),
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]!.vendorItemNo).toBe("Cemented Knee")
+    expect(items[0]!.nationalAvgPrice).toBe(3300)
+    expect(items[0]!.minPrice).toBe(2800)
+    expect(items[0]!.maxPrice).toBe(4100)
+    expect(withNationalAvg).toBe(1)
+  })
+})

@@ -1,6 +1,13 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { clamp } from "@/lib/math/clamp"
 import {
   Card,
@@ -37,16 +44,11 @@ import {
 } from "@/components/ui/popover"
 
 import { Button } from "@/components/ui/button"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Loader2, AlertTriangle, Download } from "lucide-react"
+import { Loader2, AlertTriangle } from "lucide-react"
 import {
   downloadOpportunityCsv,
   downloadOpportunityPdf,
+  type OpportunityReportAudience,
 } from "./export-opportunity"
 import { formatPercent } from "@/lib/formatting"
 import { cn } from "@/lib/utils"
@@ -120,8 +122,32 @@ export interface OppEngineHandoff {
    *  estimate they already entered (Charles 2026-07-06 "still asking these
    *  questions"; option B). Null when nothing was entered. */
   facilitySupplySpend?: number | null
+  /**
+   * The deal's OWN current revenue — construct Σ(current × volume), else the
+   * usage-file Σ. When present it drives the engine's current revenue/share
+   * seed so "Current" comes from the entered deal (usage file or manual
+   * entries), never the vendor's book-of-business or the default scenario
+   * (bugs.rtfd 2026-07-07). Null when the deal carried no current prices.
+   */
+  currentRevenue?: number | null
+  /** The Deal Scorer's manual "Current share %" entry (0–100), or null. */
+  currentSharePct?: number | null
   /** Per-construct deal rows — feeds the export's by-product breakdown. */
   constructs?: OppDealConstructRow[]
+}
+
+/**
+ * Imperative export surface — the one-page workspace renders the Export
+ * dropdown at the TOP of the page ("Export button should be at the top not in
+ * the middle", bugs.rtfd 2026-07-07) while the live engine/score/snapshot
+ * state stays in this section.
+ */
+export interface OpportunityEngineExportHandle {
+  exportPdf: (audience: OpportunityReportAudience) => Promise<void>
+  exportCsv: (audience: OpportunityReportAudience) => void
+  /** Persist the current run onto the attached proposal. Returns false when
+   *  no saved proposal is attached (caller should explain). */
+  saveToProposal: () => boolean
 }
 
 interface OpportunityEngineSectionProps {
@@ -159,12 +185,18 @@ function usd(n: number): string {
 
 // ─── Section ───────────────────────────────────────────────────
 
-export function OpportunityEngineSection({
-  vendorId,
-  facilities = [],
-  initialDeal = null,
-  lockedFacilityId = null,
-}: OpportunityEngineSectionProps) {
+export const OpportunityEngineSection = forwardRef<
+  OpportunityEngineExportHandle,
+  OpportunityEngineSectionProps
+>(function OpportunityEngineSection(
+  {
+    vendorId,
+    facilities = [],
+    initialDeal = null,
+    lockedFacilityId = null,
+  },
+  ref,
+) {
   // The pitching entity is the vendor's DIVISION; the target facility can be
   // chosen from related facilities OR written in (this only labels the
   // exported report — it is never shown to the facility). Vick 2026-06-22.
@@ -198,6 +230,13 @@ export function OpportunityEngineSection({
   // the (editable) "Facility supply spend" so it isn't re-asked (Charles
   // 2026-07-06 option B). Null → the panel keeps its own real/zero seed.
   const [dealSupplySpend, setDealSupplySpend] = useState<number | null>(null)
+  // The deal's own current revenue / manual share / blended current ASP —
+  // when a deal handoff is present these OWN the engine's current-state seed
+  // (usage file → "Current" spend; manual entries otherwise — bugs.rtfd
+  // 2026-07-07). Null until a deal arrives.
+  const [dealCurrentRevenue, setDealCurrentRevenue] = useState<number | null>(null)
+  const [dealCurrentSharePct, setDealCurrentSharePct] = useState<number | null>(null)
+  const [dealCurrentAsp, setDealCurrentAsp] = useState<number | null>(null)
   // The real proposal id (when reached from a saved proposal) — enables
   // saving this Opportunity run back onto the proposal so View shows it.
   const [savedProposalId, setSavedProposalId] = useState<string | null>(null)
@@ -219,6 +258,17 @@ export function OpportunityEngineSection({
     setSavedProposalId(initialDeal.savedProposalId ?? null)
     setCapitalRevenue(initialDeal.capitalRevenue ?? 0)
     setDealSupplySpend(initialDeal.facilitySupplySpend ?? null)
+    setDealCurrentRevenue(initialDeal.currentRevenue ?? null)
+    setDealCurrentSharePct(initialDeal.currentSharePct ?? null)
+    // Blended current unit price across the deal's constructs — the ASP the
+    // unit math should run on when the deal carries current prices.
+    const cons = initialDeal.constructs ?? []
+    const conVol = cons.reduce((s, c) => s + Math.max(0, c.annualVolume), 0)
+    const conSpend = cons.reduce(
+      (s, c) => s + Math.max(0, c.current) * Math.max(0, c.annualVolume),
+      0,
+    )
+    setDealCurrentAsp(conVol > 0 && conSpend > 0 ? conSpend / conVol : null)
     if (initialDeal.facilityId) {
       const f = facilities.find((x) => x.id === initialDeal.facilityId)
       if (f) setFacility(f.name)
@@ -265,22 +315,72 @@ export function OpportunityEngineSection({
   )
   const aiInsights = useVendorOpportunityInsights()
 
+  // Current-state seeds, resolved value + provenance TOGETHER so the scenario
+  // and the explain popovers can't drift. Priority (bugs.rtfd 2026-07-07 "when
+  // a usage file is entered that should serve as the Current spend; no usage /
+  // no two-way → only the manual entries"): the DEAL's own data (usage-file
+  // revenue, manual category spends, manual share) wins over the vendor's
+  // book-of-business seed, and the default scenario is the last resort only.
+  const seeds = useMemo(() => {
+    const seed = (value: number, source: OpportunityLeverSource) => ({
+      value,
+      source,
+    })
+    // Addressable spend = the facility's total category spend. Manual entries
+    // from the Deal Scorer first; else derive it from the deal's own revenue ÷
+    // manual share; else the vendor's real sales seed; else the deal's own
+    // revenue floor (better than a fabricated market); else the default.
+    const addressableSpend =
+      dealSupplySpend != null && dealSupplySpend > 0
+        ? seed(dealSupplySpend, "deal handoff")
+        : dealCurrentRevenue != null &&
+            dealCurrentRevenue > 0 &&
+            dealCurrentSharePct != null &&
+            dealCurrentSharePct > 0
+          ? seed(
+              dealCurrentRevenue / (Math.min(100, dealCurrentSharePct) / 100),
+              "deal handoff",
+            )
+          : dbData?.hasData && dbData.addressableSpend > 0
+            ? seed(dbData.addressableSpend, "your data")
+            : dealCurrentRevenue != null && dealCurrentRevenue > 0
+              ? seed(dealCurrentRevenue, "deal handoff")
+              : seed(DEFAULT_OPPORTUNITY_SCENARIO.addressableSpend, "default")
+    // Current share: the deal's revenue over the resolved addressable, else
+    // the manual entry (a typed 0 is a real answer), else book / default.
+    const currentShare =
+      dealCurrentRevenue != null && addressableSpend.value > 0
+        ? seed(
+            clamp(dealCurrentRevenue / addressableSpend.value, 0, 1),
+            "deal handoff",
+          )
+        : dealCurrentSharePct != null
+          ? seed(clamp(dealCurrentSharePct, 0, 100) / 100, "deal handoff")
+          : dbData?.hasData
+            ? seed(dbData.currentShare, "your data")
+            : seed(DEFAULT_OPPORTUNITY_SCENARIO.currentShare, "default")
+    // ASP: the deal's blended current unit price, else the vendor's real ASP.
+    const currentAsp =
+      dealCurrentAsp != null && dealCurrentAsp > 0
+        ? seed(dealCurrentAsp, "deal handoff")
+        : dbData?.hasData && dbData.currentAsp > 0
+          ? seed(dbData.currentAsp, "your data")
+          : seed(DEFAULT_OPPORTUNITY_SCENARIO.currentAsp, "default")
+    return { addressableSpend, currentShare, currentAsp }
+  }, [
+    dbData,
+    dealSupplySpend,
+    dealCurrentRevenue,
+    dealCurrentSharePct,
+    dealCurrentAsp,
+  ])
+
   const scenario = useMemo<OpportunityScenarioInput>(
     () => ({
       ...DEFAULT_OPPORTUNITY_SCENARIO,
-      // DB-seeded measurables (fall back to defaults when the vendor has no
-      // sales yet).
-      currentAsp:
-        dbData?.hasData && dbData.currentAsp > 0
-          ? dbData.currentAsp
-          : DEFAULT_OPPORTUNITY_SCENARIO.currentAsp,
-      addressableSpend:
-        dbData?.hasData && dbData.addressableSpend > 0
-          ? dbData.addressableSpend
-          : DEFAULT_OPPORTUNITY_SCENARIO.addressableSpend,
-      currentShare: dbData?.hasData
-        ? dbData.currentShare
-        : DEFAULT_OPPORTUNITY_SCENARIO.currentShare,
+      currentAsp: seeds.currentAsp.value,
+      addressableSpend: seeds.addressableSpend.value,
+      currentShare: seeds.currentShare.value,
       // Real incumbent signal: the top competitor's spend share (0–1
       // fraction) at the vendor's facilities, not the hardcoded default.
       incumbentStrength:
@@ -293,7 +393,7 @@ export function OpportunityEngineSection({
       targetShare,
       expectedVolumeGrowthPct,
     }),
-    [dbData, capitalRevenue, priceChangePct, targetShare, expectedVolumeGrowthPct],
+    [seeds, dbData, capitalRevenue, priceChangePct, targetShare, expectedVolumeGrowthPct],
   )
 
   const engine = useMemo(() => computeOpportunityEngine(scenario), [scenario])
@@ -339,18 +439,20 @@ export function OpportunityEngineSection({
           ),
         false,
       ),
-      currentShare: dataSource(dbData?.hasData === true),
+      // Current-state levers carry the provenance resolved WITH their values
+      // in the seeds memo (deal handoff > your data > default) so the popover
+      // badges can't drift from the numbers.
+      currentShare: seeds.currentShare.source,
       incumbentStrength: dataSource(
         dbData?.hasData === true && dbData.topCompetitorSharePct != null,
       ),
-      addressableSpend: dataSource(
-        dbData?.hasData === true && dbData.addressableSpend > 0,
-      ),
-      currentAsp: dataSource(dbData?.hasData === true && dbData.currentAsp > 0),
+      addressableSpend: seeds.addressableSpend.source,
+      currentAsp: seeds.currentAsp.source,
     }
     return explainOpportunityEngine(scenario, sources)
   }, [
     scenario,
+    seeds,
     dbData,
     initialDeal,
     priceChangePctInt,
@@ -409,6 +511,56 @@ export function OpportunityEngineSection({
     competitiveThreat: score.winProbability.competitiveThreat,
   }
 
+  // Top-of-page export (the stepper renders the dropdown; state lives here).
+  const scenarioMeta = {
+    division: effectiveDivision,
+    facility: facility.trim() || "Unspecified facility",
+    priceChangePct,
+    targetShare,
+    expectedVolumeGrowthPct,
+  }
+  useImperativeHandle(ref, () => ({
+    exportPdf: (audience: OpportunityReportAudience) =>
+      downloadOpportunityPdf(
+        engine,
+        score,
+        scenarioMeta,
+        facilitySnapshot,
+        dealConstructs,
+        audience,
+      ),
+    exportCsv: (audience: OpportunityReportAudience) =>
+      downloadOpportunityCsv(
+        engine,
+        score,
+        scenarioMeta,
+        facilitySnapshot,
+        dealConstructs,
+        audience,
+      ),
+    saveToProposal: () => {
+      if (!savedProposalId || saveOpportunity.isPending) return false
+      saveOpportunity.mutate({
+        proposalId: savedProposalId,
+        scenario: {
+          division: effectiveDivision,
+          facility: facility.trim() || "Unspecified facility",
+          priceChangePct,
+          targetShare,
+          expectedVolumeGrowthPct,
+          winProbability: engine.winProbability,
+          incrementalRevenue: engine.incrementalRevenue,
+          currentRevenue: engine.currentRevenue,
+          targetRevenue: engine.targetRevenue,
+          blendedMarketShare: engine.blendedMarketShare,
+          opportunityScore: score.overall,
+          savedAt: new Date().toISOString(),
+        },
+      })
+      return true
+    },
+  }))
+
   const ai = aiInsights.data
   const winColor =
     engine.winProbabilityBand === "likely"
@@ -417,94 +569,21 @@ export function OpportunityEngineSection({
 
   return (
     <div className="space-y-4">
-      {/* Heading block */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <h2 className="flex items-center gap-2 text-lg font-semibold">
-            <Rocket className="h-5 w-5 text-primary" />
-            Opportunity Engine
-          </h2>
-          <p className="max-w-3xl text-sm text-muted-foreground">
-            Score a prospective deal by ASP impact, category growth (in dollars
-            and market share), and net unit impact. Capital / robotic revenue is
-            separated because it does not carry recurring service that hits the
-            territory number.
-          </p>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="shrink-0 gap-1.5">
-              <Download className="h-4 w-4" />
-              Export
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {savedProposalId && (
-              <DropdownMenuItem
-                disabled={saveOpportunity.isPending}
-                onSelect={() =>
-                  saveOpportunity.mutate({
-                    proposalId: savedProposalId,
-                    scenario: {
-                      division: effectiveDivision,
-                      facility: facility.trim() || "Unspecified facility",
-                      priceChangePct,
-                      targetShare,
-                      expectedVolumeGrowthPct,
-                      winProbability: engine.winProbability,
-                      incrementalRevenue: engine.incrementalRevenue,
-                      currentRevenue: engine.currentRevenue,
-                      targetRevenue: engine.targetRevenue,
-                      blendedMarketShare: engine.blendedMarketShare,
-                      opportunityScore: score.overall,
-                      savedAt: new Date().toISOString(),
-                    },
-                  })
-                }
-              >
-                Save to proposal
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem
-              onSelect={() =>
-                void downloadOpportunityPdf(
-                  engine,
-                  score,
-                  {
-                    division: effectiveDivision,
-                    facility: facility.trim() || "Unspecified facility",
-                    priceChangePct,
-                    targetShare,
-                    expectedVolumeGrowthPct,
-                  },
-                  facilitySnapshot,
-                  dealConstructs,
-                )
-              }
-            >
-              Export PDF
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() =>
-                downloadOpportunityCsv(
-                  engine,
-                  score,
-                  {
-                    division: effectiveDivision,
-                    facility: facility.trim() || "Unspecified facility",
-                    priceChangePct,
-                    targetShare,
-                    expectedVolumeGrowthPct,
-                  },
-                  facilitySnapshot,
-                  dealConstructs,
-                )
-              }
-            >
-              Export CSV
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {/* Heading block. The Export dropdown moved to the TOP of the one-page
+          workspace (ProposalStepper toolbar, via the export handle) — "Export
+          button should be at the top not in the middle" (bugs.rtfd
+          2026-07-07). */}
+      <div className="space-y-1">
+        <h2 className="flex items-center gap-2 text-lg font-semibold">
+          <Rocket className="h-5 w-5 text-primary" />
+          Opportunity Engine
+        </h2>
+        <p className="max-w-3xl text-sm text-muted-foreground">
+          Score a prospective deal by ASP impact, category growth (in dollars
+          and market share), and net unit impact. Capital / robotic revenue is
+          separated because it does not carry recurring service that hits the
+          territory number.
+        </p>
       </div>
 
       {/* Facility Current State — the financial picture of the pitch target.
@@ -830,7 +909,7 @@ export function OpportunityEngineSection({
       </Card>
     </div>
   )
-}
+})
 
 // ─── Sub-components ────────────────────────────────────────────
 

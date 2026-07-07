@@ -95,6 +95,9 @@ export interface ProposalTermSummary {
 export interface VendorProposal {
   id: string
   vendorId: string
+  /** User-chosen proposal name (bugs.rtfd 2026-07-07). Absent on proposals
+   *  saved before the field existed — display falls back to #id. */
+  name?: string
   facilityIds: string[]
   status: "draft" | "submitted" | "accepted" | "rejected"
   /**
@@ -391,6 +394,9 @@ export async function getFinancialProjections(input: {
 export async function createProposal(input: {
   vendorId: string
   facilityIds: string[]
+  /** User-chosen proposal name ("It should let you name the proposal",
+   *  bugs.rtfd 2026-07-07). Blank → a generated item-count label. */
+  name?: string
   pricingItems: ProposedPricingItem[]
   terms: { contractLength: number; startDate: string; paymentTerms?: string; notes?: string }
   /** Charles 2026-04-26 #67: full proposal-builder state. Optional so the
@@ -452,7 +458,9 @@ export async function createProposal(input: {
       vendorName: vendor.name,
       facilityId: null,
       facilityName: null,
-      contractName: `Prospective proposal — ${input.pricingItems.length} item${input.pricingItems.length === 1 ? "" : "s"}`,
+      contractName:
+        input.name?.trim() ||
+        `Prospective proposal — ${input.pricingItems.length} item${input.pricingItems.length === 1 ? "" : "s"}`,
       status: "draft",
       vendorDivisionId: stampedDivisionId,
       totalValue: totalCost,
@@ -460,6 +468,7 @@ export async function createProposal(input: {
       pricingData: JSON.parse(
         JSON.stringify({
           kind: PROSPECTIVE_PROPOSAL_KIND,
+          name: input.name?.trim() || undefined,
           facilityIds: input.facilityIds,
           pricingItems: input.pricingItems,
           terms: input.terms,
@@ -514,6 +523,7 @@ export async function createProposal(input: {
   return serialize({
     id: row.id,
     vendorId: vendor.id,
+    name: input.name?.trim() || undefined,
     facilityIds: input.facilityIds,
     status: "draft",
     stage: "draft",
@@ -545,6 +555,8 @@ export async function createProposal(input: {
 export async function updateProposal(input: {
   proposalId: string
   facilityIds: string[]
+  /** User-chosen proposal name — blank keeps/regenerates the default label. */
+  name?: string
   pricingItems: ProposedPricingItem[]
   terms: { contractLength: number; startDate: string; paymentTerms?: string; notes?: string }
   productCategories?: string[]
@@ -579,6 +591,7 @@ export async function updateProposal(input: {
   const merged = {
     ...existing,
     kind: PROSPECTIVE_PROPOSAL_KIND,
+    name: input.name?.trim() || undefined,
     facilityIds: input.facilityIds,
     pricingItems: input.pricingItems,
     terms: input.terms,
@@ -596,7 +609,9 @@ export async function updateProposal(input: {
   const row = await prisma.pendingContract.update({
     where: { id: existingRow.id },
     data: {
-      contractName: `Prospective proposal — ${input.pricingItems.length} item${input.pricingItems.length === 1 ? "" : "s"}`,
+      contractName:
+        input.name?.trim() ||
+        `Prospective proposal — ${input.pricingItems.length} item${input.pricingItems.length === 1 ? "" : "s"}`,
       totalValue: totalCost,
       notes: input.aiNotes ?? input.terms.notes ?? null,
       pricingData: JSON.parse(JSON.stringify(merged)) as Prisma.InputJsonValue,
@@ -838,6 +853,10 @@ function payloadToProposal(
   return {
     id,
     vendorId,
+    name:
+      typeof meta.name === "string" && meta.name.trim()
+        ? meta.name.trim()
+        : undefined,
     facilityIds: (meta.facilityIds as string[]) ?? [],
     // Audit M7: these rows ARE drafts (vendor-internal analysis docs,
     // status "draft" in PendingContract; legacy alert rows were never

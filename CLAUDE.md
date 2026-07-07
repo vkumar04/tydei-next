@@ -374,6 +374,25 @@ grouped/pricing_only).
   both the PDF payload (`OpportunityReportPayload.narrative`) and the CSV —
   same story-first rule as the facility Analysis export. New figures on the
   Opportunity Engine must reach the narrative/exporters too.
+- **The Opportunity export has TWO audiences (John, bugs.rtfd 2026-07-07):**
+  `audience: "internal" | "facility"` on `buildOpportunityPdfPayload` /
+  `downloadOpportunityCsv` / `downloadOpportunityPdf`. "facility" is the
+  report the vendor HANDS TO THE FACILITY — `buildFacilityProposalNarrative`
+  + `facilityProposalTable` (the ONE builder shared by facility CSV + PDF).
+  It must NEVER leak vendor-internal levers: win probability, opportunity
+  score, recommended offer, margins, or the Floor/Target ladder (the presented
+  price is `facilityProposedPrice` = Ask, falling back to Target). The Export
+  dropdown lives at the TOP of the one-page workspace (`ProposalStepper`
+  toolbar, driven by `OpportunityEngineExportHandle`) — not mid-page.
+  Regression: `opportunity-narrative.test.ts`.
+- **Opportunity Engine current-state seeds come from the DEAL first.** The
+  section's `seeds` memo resolves currentAsp / addressableSpend / currentShare
+  as value+provenance together: deal handoff (usage-file `currentRevenue`,
+  manual category spends `facilitySupplySpend`, manual `currentSharePct`) >
+  vendor book-of-business (`getVendorOpportunityData`) > `DEFAULT_OPPORTUNITY_
+  SCENARIO` last. Never let the $10.5M default addressable present as a real
+  facility number when the vendor entered deal data (bugs.rtfd 2026-07-07
+  "not sure where these numbers are coming from").
 - **Every engine output is EXPLAINABLE.** `explainOpportunityEngine`
   (`lib/prospective-analysis/opportunity-explain.ts`, parity-tested against
   `computeOpportunityEngine`) produces formula + lever tables with source tags

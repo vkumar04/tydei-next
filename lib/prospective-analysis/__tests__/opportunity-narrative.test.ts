@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest"
 import {
   buildOpportunityNarrative,
+  buildFacilityProposalNarrative,
+  facilityProposedPrice,
   type OpportunityNarrativeInput,
 } from "@/lib/prospective-analysis/opportunity-narrative"
 
@@ -188,5 +190,46 @@ describe("buildOpportunityNarrative", () => {
     // Negative incremental keeps its sign — never a bogus "+-$500.0K".
     expect(paragraphs[2]).toContain("(-$500.0K)")
     expect(paragraphs[2]).not.toContain("+-")
+  })
+})
+
+// John's two-format ask (bugs.rtfd 2026-07-07): the facility-facing report
+// must carry NONE of the vendor-internal levers — no win probability, no
+// opportunity score, no recommended offer, no Floor/Target ladder.
+describe("buildFacilityProposalNarrative", () => {
+  it("tells the facility the offer story without any vendor-internal levers", () => {
+    const paragraphs = buildFacilityProposalNarrative({
+      scenario,
+      constructs,
+    })
+    const all = paragraphs.join(" ")
+    expect(all).toContain("Lighthouse Surgical Center")
+    expect(all).toContain("5.0% below current levels")
+    expect(all).toMatch(/annual savings/)
+    // Vendor-internal levers must never leak into the facility version.
+    expect(all).not.toMatch(/win probability/i)
+    expect(all).not.toMatch(/score/i)
+    expect(all).not.toMatch(/recommended (action|offer)/i)
+    expect(all).not.toMatch(/floor/i)
+    expect(all).not.toMatch(/margin/i)
+    expect(all).not.toMatch(/territory/i)
+  })
+
+  it("names the share commitment and handles a no-construct scenario", () => {
+    const paragraphs = buildFacilityProposalNarrative({
+      scenario,
+      constructs: [],
+    })
+    expect(paragraphs.join(" ")).toContain("50.0% category commitment")
+    // No constructs → no per-product paragraph, but the story still opens.
+    expect(paragraphs.length).toBe(2)
+  })
+})
+
+describe("facilityProposedPrice", () => {
+  it("presents the Ask (opening position) and falls back to Target", () => {
+    expect(facilityProposedPrice({ target: 2950, ask: 3100 })).toBe(3100)
+    expect(facilityProposedPrice({ target: 2950, ask: 0 })).toBe(2950)
+    expect(facilityProposedPrice({ target: 2950 })).toBe(2950)
   })
 })
