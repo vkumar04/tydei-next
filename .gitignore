@@ -70,3 +70,4 @@ graphify-out/
 
 # Tesseract OCR model (downloaded at runtime to tmpdir)
 *.traineddata
+scratch-e2e/
