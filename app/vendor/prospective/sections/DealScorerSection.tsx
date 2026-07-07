@@ -556,6 +556,15 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       return
     }
 
+    // The vendor's own facility-supply-spend estimate (Σ of the entered
+    // category spends) — carried in the handoff so the Opportunity Engine
+    // pre-fills its editable "Facility supply spend" instead of re-asking
+    // (Charles 2026-07-06 option B).
+    const categorySpendSum = categorySpends.reduce(
+      (acc, r) => acc + (r.spend ? Number(r.spend) : 0),
+      0,
+    )
+
     // Stepper auto-seed (PR 4/5): hand the just-analyzed deal to the Opportunity
     // Engine step — facility + blended Target-vs-Current price change + target
     // share. A fresh proposalId each Analyze so the engine re-applies the latest.
@@ -584,6 +593,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
         // shows real deal capital or nothing (was a hardcoded $1.3M default).
         capitalRevenue:
           isCapital && equipmentCost ? Number(equipmentCost) : null,
+        facilitySupplySpend: categorySpendSum > 0 ? categorySpendSum : null,
         constructs: constructs.map((c) => ({
           productName: c.productName.trim() || "(unnamed)",
           category: c.category.trim() || undefined,

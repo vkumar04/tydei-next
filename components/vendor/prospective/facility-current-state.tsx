@@ -78,6 +78,7 @@ export function FacilityCurrentStatePanel({
   facilities,
   syncFacilityId,
   locked = false,
+  seedSupplySpend = null,
   onSnapshotChange,
 }: {
   vendorId: string
@@ -95,6 +96,14 @@ export function FacilityCurrentStatePanel({
    * "asks you to enter your facility twice").
    */
   locked?: boolean
+  /**
+   * Vendor's facility-supply-spend estimate from the Deal Scorer. When set
+   * (one-page flow, post-Analyze), it pre-fills the editable "Facility supply
+   * spend" so the vendor doesn't re-type an estimate they already entered
+   * (Charles 2026-07-06 option B). Null → the panel keeps its own real/zero
+   * seed from the facility data query.
+   */
+  seedSupplySpend?: number | null
   /** Emits the current facility model so the parent export can include it. */
   onSnapshotChange?: (snapshot: FacilityCurrentStateSnapshot | null) => void
 }) {
@@ -190,8 +199,9 @@ export function FacilityCurrentStatePanel({
               </div>
             ) : null}
             <FacilityCurrentStateModel
-              key={facilityId}
+              key={`${facilityId}:${seedSupplySpend ?? ""}`}
               data={data}
+              seedSupplySpend={seedSupplySpend}
               onSnapshotChange={onSnapshotChange}
             />
           </>
@@ -212,13 +222,24 @@ export function FacilityCurrentStatePanel({
  */
 function FacilityCurrentStateModel({
   data,
+  seedSupplySpend = null,
   onSnapshotChange,
 }: {
   data: VendorFacilityCurrentState
+  /** Vendor's Deal-Scorer supply-spend estimate; pre-fills the editable spend
+   *  when the facility data query has none (option B). */
+  seedSupplySpend?: number | null
   onSnapshotChange?: (snapshot: FacilityCurrentStateSnapshot | null) => void
 }) {
   // Use the facility's REAL spend + case count — never a fabricated seed —
   // so a sparse facility shows honest (possibly zero) figures, not demo data.
+  // Exception: the vendor's OWN Deal-Scorer estimate (`seedSupplySpend`) may
+  // pre-fill the editable supply spend so they don't re-type it (option B);
+  // it's the vendor's own input, not a fabricated/cross-side number.
+  const seededSpend =
+    seedSupplySpend && seedSupplySpend > 0
+      ? seedSupplySpend
+      : data.currentVendorSpend
   const cases = data.annualCaseVolume
   const coveredAvg =
     data.reimbursementCoverage.withRate > 0
@@ -234,7 +255,7 @@ function FacilityCurrentStateModel({
   const [assumptions, setAssumptions] = useState<FacilityModelAssumptions>(
     () => ({
       ...DEFAULT_FACILITY_ASSUMPTIONS,
-      currentVendorSpend: data.currentVendorSpend,
+      currentVendorSpend: seededSpend,
       annualCaseVolume: cases,
     }),
   )
@@ -300,12 +321,17 @@ function FacilityCurrentStateModel({
   // hard coded … it says '1 way' so it should not be pulling anything from
   // the other side").
   const twoWay = data.mode === "two_way"
+  const seededFromDeal = Boolean(seedSupplySpend && seedSupplySpend > 0)
   const spendSublabel = twoWay
     ? "Facility total supply spend (two-way sync)"
-    : "Manual assumption — enter it under Financial Assumptions"
+    : seededFromDeal
+      ? "Pre-filled from your deal estimate — editable"
+      : "Manual assumption — enter it under Financial Assumptions"
   const spendSourceNote = twoWay
     ? "· facility data (two-way sync)"
-    : "· your estimate (one-way connection)"
+    : seededFromDeal
+      ? "· from your deal estimate (editable)"
+      : "· your estimate (one-way connection)"
   const assumptionsDescription = twoWay
     ? "Facility supply spend and case volume come from the facility's shared data (two-way connection); annual cases can be overridden. Set the few figures only you know — every number recalculates instantly."
     : "One-way connection — facility actuals are not shared with your organization. Enter your own assumptions; every number recalculates instantly."

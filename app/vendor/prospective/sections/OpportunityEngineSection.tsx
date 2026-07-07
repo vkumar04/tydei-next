@@ -114,6 +114,12 @@ export interface OppEngineHandoff {
   targetSharePct: number | null
   /** Capital/equipment revenue in the deal (equipment cost), or null. */
   capitalRevenue?: number | null
+  /** The vendor's own facility-supply-spend estimate from the Deal Scorer
+   *  (Σ of the entered category spends). Pre-fills the Opportunity Engine's
+   *  editable "Facility supply spend" so a one-way vendor doesn't re-type an
+   *  estimate they already entered (Charles 2026-07-06 "still asking these
+   *  questions"; option B). Null when nothing was entered. */
+  facilitySupplySpend?: number | null
   /** Per-construct deal rows — feeds the export's by-product breakdown. */
   constructs?: OppDealConstructRow[]
 }
@@ -188,6 +194,10 @@ export function OpportunityEngineSection({
   // Capital/equipment revenue from the deal — 0 when the deal has no capital
   // block (was a hardcoded $1.3M default for every deal).
   const [capitalRevenue, setCapitalRevenue] = useState(0)
+  // Vendor's facility-supply-spend estimate from the Deal Scorer — pre-fills
+  // the (editable) "Facility supply spend" so it isn't re-asked (Charles
+  // 2026-07-06 option B). Null → the panel keeps its own real/zero seed.
+  const [dealSupplySpend, setDealSupplySpend] = useState<number | null>(null)
   // The real proposal id (when reached from a saved proposal) — enables
   // saving this Opportunity run back onto the proposal so View shows it.
   const [savedProposalId, setSavedProposalId] = useState<string | null>(null)
@@ -208,6 +218,7 @@ export function OpportunityEngineSection({
     setDealConstructs(initialDeal.constructs ?? [])
     setSavedProposalId(initialDeal.savedProposalId ?? null)
     setCapitalRevenue(initialDeal.capitalRevenue ?? 0)
+    setDealSupplySpend(initialDeal.facilitySupplySpend ?? null)
     if (initialDeal.facilityId) {
       const f = facilities.find((x) => x.id === initialDeal.facilityId)
       if (f) setFacility(f.name)
@@ -507,6 +518,9 @@ export function OpportunityEngineSection({
         // Facility already chosen in the builder above (or a scored deal) → the
         // facility is known; lock it so it isn't re-asked (Charles 2026-07-06).
         locked={facilityLocked}
+        // Pre-fill the editable supply-spend from the vendor's Deal-Scorer
+        // estimate so it isn't re-asked (option B).
+        seedSupplySpend={dealSupplySpend}
         onSnapshotChange={setFacilitySnapshot}
       />
 
