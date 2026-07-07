@@ -67,6 +67,24 @@ export function ProposalStepper({
   )
   const opportunityDeal = analyzedDeal ?? initialDeal ?? null
 
+  // Live builder selection (categories + facility) streamed up from the
+  // ProposalBuilder so the Deal Scorer + Opportunity Engine below inherit them
+  // BEFORE "Analyze deal" persists anything (Charles 2026-07-06 "categories not
+  // coming over" / "entering facility twice" / "still asking these questions").
+  const [builderDraft, setBuilderDraft] = useState<{
+    productCategories: string[]
+    facilityId: string | null
+    facilityName: string | null
+  }>({ productCategories: [], facilityId: null, facilityName: null })
+  // The ONE workspace facility: the builder's live pick wins, falling back to a
+  // just-analyzed / externally-handed deal. Locks the Opportunity Engine's
+  // facility selectors so the facility is entered exactly once.
+  const workspaceFacilityId =
+    builderDraft.facilityId ??
+    analyzedDeal?.facilityId ??
+    initialDeal?.facilityId ??
+    null
+
   // External commands (edit / new) re-open the builder even when this
   // section is already mounted (the tab is forceMounted).
   useEffect(() => {
@@ -121,6 +139,7 @@ export function ProposalStepper({
               facilities={facilities}
               editingProposalId={editingProposalId}
               embedded
+              onDraftChange={setBuilderDraft}
               onAutoAttach={(p) => {
                 // Bridge save from "Analyze deal": attach the proposal WITHOUT
                 // collapsing/resetting the builder (Charles 2026-07-06).
@@ -147,6 +166,8 @@ export function ProposalStepper({
         vendorId={vendorId}
         facilities={facilities}
         proposals={proposals}
+        builderCategories={builderDraft.productCategories}
+        builderFacilityId={builderDraft.facilityId}
         onDealAnalyzed={(deal) => {
           setAnalyzedDeal(deal)
           // Bring the seeded Opportunity Engine into view — same page.
@@ -182,6 +203,7 @@ export function ProposalStepper({
           vendorId={vendorId}
           facilities={facilities}
           initialDeal={opportunityDeal}
+          lockedFacilityId={workspaceFacilityId}
         />
       </section>
     </div>

@@ -124,6 +124,13 @@ interface OpportunityEngineSectionProps {
   facilities?: FacilityOption[]
   /** When set, pre-fills facility + price/share sliders from a scored deal. */
   initialDeal?: OppEngineHandoff | null
+  /**
+   * One-page workspace (Charles 2026-07-06 "entering facility twice"): the ONE
+   * facility for this workspace, sourced LIVE from the ProposalBuilder above.
+   * When set it locks BOTH facility controls (Facility Current State + Deal
+   * Scenario) to it — the facility is entered once, up top, not re-asked here.
+   */
+  lockedFacilityId?: string | null
 }
 
 const BAND_SUBLABEL: Record<
@@ -150,6 +157,7 @@ export function OpportunityEngineSection({
   vendorId,
   facilities = [],
   initialDeal = null,
+  lockedFacilityId = null,
 }: OpportunityEngineSectionProps) {
   // The pitching entity is the vendor's DIVISION; the target facility can be
   // chosen from related facilities OR written in (this only labels the
@@ -215,6 +223,17 @@ export function OpportunityEngineSection({
       )
     }
   }, [initialDeal, facilities])
+
+  // One-page workspace: mirror the builder's LIVE facility into the field so
+  // scoping, the Facility Current State panel, and the export all follow it —
+  // and both facility controls render read-only (Charles 2026-07-06 "entering
+  // facility twice"). Follows changes as the vendor re-picks up top.
+  useEffect(() => {
+    if (!lockedFacilityId) return
+    const name = facilities.find((x) => x.id === lockedFacilityId)?.name
+    if (name) setFacility((prev) => (prev === name ? prev : name))
+  }, [lockedFacilityId, facilities])
+  const facilityLocked = Boolean(lockedFacilityId) || Boolean(initialDeal?.facilityId)
 
   const priceChangePct = priceChangePctInt / 100
   const targetShare = targetSharePctInt / 100
@@ -485,9 +504,9 @@ export function OpportunityEngineSection({
         vendorId={vendorId}
         facilities={facilities}
         syncFacilityId={scopedFacilityId}
-        // Deal came from the proposal above → the facility is already known;
-        // lock it so it isn't re-asked (Charles 2026-07-06).
-        locked={Boolean(initialDeal?.facilityId)}
+        // Facility already chosen in the builder above (or a scored deal) → the
+        // facility is known; lock it so it isn't re-asked (Charles 2026-07-06).
+        locked={facilityLocked}
         onSnapshotChange={setFacilitySnapshot}
       />
 
@@ -524,9 +543,9 @@ export function OpportunityEngineSection({
 
             <div className="space-y-2">
               <Label htmlFor="oe-facility">Facility</Label>
-              {initialDeal?.facilityId ? (
-                // Inherited from the proposal/deal — read-only, don't re-ask
-                // (Charles 2026-07-06 "enter your facility twice").
+              {facilityLocked ? (
+                // Inherited from the builder above / the scored deal — read-only,
+                // don't re-ask (Charles 2026-07-06 "enter your facility twice").
                 <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
                   {facility || "From your proposal"}
                 </p>
