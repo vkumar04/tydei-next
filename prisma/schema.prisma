@@ -2082,10 +2082,14 @@ model Connection {
   respondedBy    String?
   expiresAt      DateTime
   message        String?
-  // Settings/Users feature: vendor sets the interaction mode per
-  // facility connection. Defaults two_way so existing connections keep
-  // today's full-bidirectional behavior.
-  mode           ConnectionMode @default(two_way)
+  // Settings/Users feature: vendor sets the interaction mode per facility
+  // connection. FAIL-SECURE default (2026-07-06 launch hardening): a new
+  // connection is one_way — the facility's actuals do NOT flow to the vendor
+  // until someone explicitly opts into two_way (via setConnectionMode). Was
+  // two_way, which auto-shared facility purchasing actuals the moment a
+  // connection was accepted. Existing rows are unaffected (a @default only
+  // applies at INSERT); no connections are seeded, so nothing to backfill.
+  mode           ConnectionMode @default(one_way)
   // Optional division scope for the connection (vendor-wide when null).
   vendorDivisionId String?
 
