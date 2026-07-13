@@ -1,8 +1,5 @@
 import type { MetadataRoute } from "next"
-
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  "https://tydei-app-production.up.railway.app"
+import { siteUrl } from "@/lib/site-url"
 
 // Public, indexable routes only. The facility/vendor/admin portals and API
 // are auth-gated and excluded (also disallowed in robots.ts).
