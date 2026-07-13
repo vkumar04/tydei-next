@@ -3,10 +3,7 @@ import { ValueProps } from "@/components/marketing/value-props"
 import { FeaturesGrid } from "@/components/marketing/features-grid"
 import { CapabilitiesSection } from "@/components/marketing/capabilities-section"
 import { CtaSection } from "@/components/marketing/cta-section"
-
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  "https://tydei-app-production.up.railway.app"
+import { siteUrl } from "@/lib/site-url"
 
 // Rich-result structured data: Organization + the product as a
 // SoftwareApplication, so search engines understand what TYDEi is.

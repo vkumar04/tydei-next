@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import { Inter, Geist_Mono } from "next/font/google"
 import { Providers } from "@/components/providers"
+import { siteUrl } from "@/lib/site-url"
 import "./globals.css"
 
 const inter = Inter({
@@ -12,10 +13,6 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
 })
-
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL ||
-  "https://tydei-app-production.up.railway.app"
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

@@ -109,6 +109,9 @@ const trustedOrigins: string[] = [
   process.env.BETTER_AUTH_URL,
   process.env.NEXT_PUBLIC_SITE_URL,
   "http://localhost:3000",
+  "https://tydei.com",
+  "https://www.tydei.com",
+  // Legacy Railway domain — keep until all traffic is on tydei.com.
   "https://tydei-app-production.up.railway.app",
 ].filter((o): o is string => typeof o === "string" && o.length > 0)
 
