@@ -5,6 +5,7 @@ import { getStripe } from "@/lib/stripe"
 import { prisma } from "@/lib/db"
 import type { CreditTierId } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
+import { appUrl } from "@/lib/site-url"
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -165,8 +166,8 @@ export async function createCheckoutSession(input: {
   const session = await getStripe().checkout.sessions.create({
     mode: "subscription",
     line_items: [{ price: input.priceId, quantity: 1 }],
-    success_url: `${process.env.NEXT_PUBLIC_APP_URL}/admin/billing?success=true`,
-    cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/admin/billing?cancelled=true`,
+    success_url: `${appUrl}/admin/billing?success=true`,
+    cancel_url: `${appUrl}/admin/billing?cancelled=true`,
     metadata: { organizationId: input.organizationId },
   })
 
@@ -232,7 +233,7 @@ export async function createBillingPortalSession(input: {
 
   const session = await stripe.billingPortal.sessions.create({
     customer: customerId,
-    return_url: `${process.env.NEXT_PUBLIC_APP_URL}/admin/billing`,
+    return_url: `${appUrl}/admin/billing`,
   })
 
   return { url: session.url }
