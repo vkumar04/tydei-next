@@ -8,6 +8,8 @@
  * See: https://datatracker.ietf.org/doc/html/rfc5545
  */
 
+import { appUrl } from "@/lib/site-url"
+
 export interface RenewalEvent {
   contractId: string
   contractName: string
@@ -19,7 +21,7 @@ export interface RenewalEvent {
 
 const CRLF = "\r\n"
 const PRODID = "-//Tydei//Tydei Renewals//EN"
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tydei.com"
+const BASE_URL = appUrl
 
 /**
  * Escape a TEXT value per RFC 5545 §3.3.11.

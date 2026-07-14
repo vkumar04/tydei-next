@@ -1,3 +1,5 @@
+import { appUrl } from "@/lib/site-url"
+
 // ─── Shared Layout ──────────────────────────────────────────────
 
 function layout(title: string, body: string): string {
@@ -30,7 +32,7 @@ function layout(title: string, body: string): string {
           <tr>
             <td style="padding:24px 32px;border-top:1px solid #e4e4e7;color:#71717a;font-size:12px;">
               <p style="margin:0;">You are receiving this because you have email notifications enabled in your TYDEi settings.</p>
-              <p style="margin:8px 0 0;">To update your preferences, visit <a href="${process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tydei.com"}/dashboard/settings" style="color:#2563eb;text-decoration:none;">Notification Settings</a>.</p>
+              <p style="margin:8px 0 0;">To update your preferences, visit <a href="${appUrl}/dashboard/settings" style="color:#2563eb;text-decoration:none;">Notification Settings</a>.</p>
             </td>
           </tr>
         </table>
@@ -80,8 +82,6 @@ export function alertNotificationEmail(alert: AlertEmailInput): {
   }
 
   const typeLabel = typeLabels[alert.alertType] ?? alert.alertType
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tydei.com"
-
   const body = `
     <h2 style="margin:0 0 8px;font-size:20px;color:#18181b;">${alert.title}</h2>
     <p style="margin:0 0 16px;color:#71717a;font-size:14px;">
@@ -115,8 +115,6 @@ export function renewalReminderEmail(
 ): { subject: string; html: string } {
   const urgency =
     daysLeft <= 30 ? "high" : daysLeft <= 60 ? "medium" : "low"
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tydei.com"
-
   const body = `
     <h2 style="margin:0 0 8px;font-size:20px;color:#18181b;">Contract Expiring in ${daysLeft} Days</h2>
     <p style="margin:0 0 16px;">${severityBadge(urgency)}</p>
@@ -161,9 +159,7 @@ interface WeeklyDigestStats {
 export function weeklyDigestEmail(stats: WeeklyDigestStats): {
   subject: string
   html: string
-} {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tydei.com"
-  const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+} {  const fmt = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 
   const body = `
     <h2 style="margin:0 0 4px;font-size:20px;color:#18181b;">Weekly Summary</h2>
@@ -252,9 +248,7 @@ interface PendingContractEmailInput {
 
 export function pendingContractSubmittedEmail(
   input: PendingContractEmailInput,
-): { subject: string; html: string } {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tydei.com"
-  const body = `
+): { subject: string; html: string } {  const body = `
     <h2 style="margin:0 0 8px;font-size:20px;color:#18181b;">New contract submission from ${input.vendorName}</h2>
     <p style="margin:0 0 16px;color:#3f3f46;font-size:15px;line-height:1.6;">
       <strong>${input.vendorName}</strong> has submitted a contract for your review:
@@ -274,9 +268,7 @@ export function pendingContractDecisionEmail(
     decision: "approved" | "rejected" | "revision_requested"
     reviewNotes?: string | null
   },
-): { subject: string; html: string } {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.tydei.com"
-  const decisionLabel =
+): { subject: string; html: string } {  const decisionLabel =
     input.decision === "approved"
       ? "approved"
       : input.decision === "rejected"
