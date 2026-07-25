@@ -171,7 +171,7 @@ tydei-next/
 │       ├── upload/          # S3 presigned URL generation
 │       └── webhooks/stripe/ # Stripe webhook handler
 ├── components/
-│   ├── ui/                  # shadcn/ui components (29)
+│   ├── ui/                  # shadcn/ui components (32)
 │   ├── shared/              # Reusable across all portals
 │   │   ├── shells/          # PortalShell, SidebarNav, EntitySelector, UserMenu
 │   │   ├── tables/          # DataTable, TableActionMenu, TableFilters
@@ -189,13 +189,13 @@ tydei-next/
 │   ├── auth/                # Auth forms + demo login
 │   └── marketing/           # Landing page sections
 ├── lib/
-│   ├── actions/             # Server actions (38 files, grouped by entity)
+│   ├── actions/             # Server actions (157 files, grouped by entity)
 │   │   ├── auth.ts          # requireAuth, requireFacility, requireVendor, requireAdmin
 │   │   ├── contracts.ts     # Contract CRUD
 │   │   ├── alerts.ts        # Alert CRUD + generation
 │   │   ├── admin/           # Admin-scoped actions (6 files)
-│   │   └── ...              # 30+ more action files
-│   ├── validators/          # Zod schemas (20 files)
+│   │   └── ...              # 150+ more action files
+│   ├── validators/          # Zod schemas (19 files)
 │   ├── ai/                  # AI config, prompts, tools, schemas
 │   ├── alerts/              # Alert generation logic
 │   ├── analysis/            # MACRS depreciation, forecasting
@@ -210,9 +210,9 @@ tydei-next/
 │   ├── constants.ts         # Nav configs, status badge configs
 │   ├── query-keys.ts        # TanStack Query key factory
 │   └── utils.ts             # cn() helper
-├── hooks/                   # TanStack Query hooks (25 files)
+├── hooks/                   # TanStack Query hooks (36 files)
 ├── prisma/
-│   ├── schema.prisma        # 44 models, 24 enums
+│   ├── schema.prisma        # 73 models, 43 enums
 │   ├── prisma.config.ts     # Prisma 7 config with dotenv
 │   └── seed.ts              # Demo data seeder
 ├── proxy.ts                 # Next.js 16 route protection
@@ -241,7 +241,7 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 - **Tenant isolation is enforced per-query.** Every read/write that takes a client id is scoped to the caller's own facility/vendor via canonical helpers — `contractOwnershipWhere` / `contractsOwnedByFacility` (`lib/actions/contracts-auth.ts`) and `contractsOwnedByVendor` (`lib/actions/contracts-vendor-auth.ts`). A static guard, `lib/actions/__tests__/server-action-auth-scope-scanner.test.ts`, fails the build on any unscoped `where: { id }` in a `"use server"` file, preventing cross-tenant IDORs.
 - **File uploads** are bounded against decompression bombs — all `.xlsx` parsing flows through `parseXlsxMatrixBounded` (`lib/xlsx/parse-xlsx-bounded.ts`), which checks the ZIP's declared uncompressed size/ratio before decompressing.
 
-### Data Model (69 Prisma Models)
+### Data Model (73 Prisma Models)
 
 **Core:** HealthSystem, Facility, Vendor, Contract, ContractTerm, ContractTier, ContractPricing
 
@@ -264,8 +264,8 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 - **TanStack Query** for all data fetching with factory-pattern query keys — reads and invalidations both derive from the `lib/query-keys.ts` factory (never inline literals) so a query and the mutation that should refresh it can't drift apart
 - **Config-driven** status badges, nav items, alert types
 - **CSS vars** in oklch format — never wrap in `hsl()`
-- **Canonical reducers** — every business metric (rebates earned/collected, COG in-scope spend, vendor compliance, per-supply rebate, reimbursement backfill) has ONE helper that owns the filter; all surfaces call it so numbers can't drift. The full invariants table lives in `CLAUDE.md`.
-- **Stable list keys + atomic writes** — editable/reorderable lists key by a stable id (never the array index); multi-write server-action sequences run inside `prisma.$transaction`. See `CLAUDE.md` → "Client-side & data-access conventions".
+- **Canonical reducers** — every business metric (rebates earned/collected, COG in-scope spend, vendor compliance, per-supply rebate, reimbursement backfill) has ONE helper that owns the filter; all surfaces call it so numbers can't drift. Most are pinned by a parity test in `lib/**/__tests__/`; ask the knowledge graph which helper owns a given number (see [Project context](#project-context)).
+- **Stable list keys + atomic writes** — editable/reorderable lists key by a stable id (never the array index); multi-write server-action sequences run inside `prisma.$transaction`.
 
 ### Notable surfaces
 
@@ -293,16 +293,47 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 - Set `BETTER_AUTH_URL=https://${{RAILWAY_PUBLIC_DOMAIN}}`
 - Migrations in `preDeployCommand` (not start script)
 
+## Project context
+
+Design context — why a thing is built the way it is — lives in a graphify
+knowledge graph under `graphify-out/`, not in markdown specs. There is no
+`docs/` directory.
+
+```bash
+/graphify query "<question>"     # ask the graph
+graphify update .                # refresh after code changes (no API cost)
+```
+
+A human-readable summary sits at `graphify-out/GRAPH_REPORT.md`, which records
+the commit it was built from so you can tell when it's stale. `CLAUDE.md`
+carries the operational rules — the hard invariants, the verify checklist, and
+the conventions that are enforced by scanner tests.
+
+## Guard tests
+
+A handful of tests exist to fail the build on classes of mistake that are
+invisible to `tsc` and only surface in production:
+
+| Test (`lib/actions/__tests__/`) | Catches |
+|---|---|
+| `server-action-auth-scope-scanner` | unscoped `where: { id }` in a `"use server"` file — cross-tenant IDORs |
+| `use-server-async-export-scanner` | non-async exports from `"use server"` files, which kill every action in the file at prod module-load |
+| `read-only-mutation-guard-scanner` | mutating actions missing the read-only access-tier gate |
+| `prisma-select-schema-scanner` | `select` clauses referencing fields the schema doesn't have |
+| `typescript-version-pairing` | a `typescript@7` bump that would make `next build` die with a silent SIGSEGV |
+
+If one fails, fix the code — not the test.
+
 ## Stats
 
 | Metric | Count |
 |--------|-------|
-| TypeScript/TSX files | ~1,560 |
-| Pages | 63 |
-| Components | 506 |
-| Server Action files | 149 (424 exported actions) |
+| TypeScript/TSX files | ~1,520 |
+| Pages | 66 |
+| Components | 442 |
+| Server Action files | 157 |
 | API routes | 26 |
-| Hooks | 32 |
-| Prisma Models | 69 |
-| Prisma Enums | 41 |
-| Tests | 3,264 passing |
+| Hooks | 36 |
+| Prisma Models | 73 |
+| Prisma Enums | 43 |
+| Tests | 3,717 passing |
