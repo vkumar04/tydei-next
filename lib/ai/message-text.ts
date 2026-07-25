@@ -7,8 +7,7 @@
  * dependency from here. That keeps this module usable from server
  * actions, RSC, client components, and tests alike.
  *
- * Spec: `docs/superpowers/specs/2026-04-18-ai-agent-rewrite.md` §2, row
- * "Message render: join `text`-type parts from `message.parts[]`".
+ * Spec row: "Message render: join `text`-type parts from `message.parts[]`".
  */
 
 export interface ChatMessagePart {

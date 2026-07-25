@@ -5,8 +5,6 @@
  * already-loaded contract + tier + purchase data. Used by the
  * Calculations tab in the reports hub (facility-reports canonical §4)
  * and by the "explain this rebate" surface in the AI agent.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.0 + §4.4
  */
 
 export interface AuditContractInfo {

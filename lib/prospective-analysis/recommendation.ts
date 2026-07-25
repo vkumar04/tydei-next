@@ -1,6 +1,5 @@
 /**
  * Prospective analysis — recommendation engine (spec §subsystem-0,
- * docs/superpowers/specs/2026-04-18-prospective-analysis-rewrite.md §4.3).
  *
  * PURE FUNCTION: takes scores + commitment flags, returns verdict +
  * negotiation points + risks. No IO, no prisma imports.

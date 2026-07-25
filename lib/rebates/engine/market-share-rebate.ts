@@ -1,8 +1,6 @@
 /**
  * Unified rebate engine — MARKET_SHARE_REBATE (subsystem 5).
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-term-types-extension.md §4.5
- *
  * Pure function: given a MarketShareRebateConfig and a PeriodData snapshot,
  * returns a standardized RebateResult. Tier achievement is driven by
  * `marketSharePercent = (vendorCategorySpend / totalCategorySpend) × 100`;

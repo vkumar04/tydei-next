@@ -1,8 +1,6 @@
 /**
  * Tests for the real performance-history pure helper.
  *
- * Spec: docs/superpowers/specs/2026-04-18-renewals-rewrite.md §4.2.
- *
  * Guard rail: NO SYNTHESIS. Empty input → empty output; every compliance
  * null must remain null end-to-end.
  */

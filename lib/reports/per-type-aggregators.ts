@@ -9,7 +9,6 @@
  * matching builder here. Keeping derivation pure makes the math easy to
  * unit-test and lets us reuse it from CSV/XLSX export paths.
  *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.3
  * Reference (canonical metrics): docs/facility-reports.md §8.3
  */
 

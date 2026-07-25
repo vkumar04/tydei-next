@@ -41,8 +41,6 @@ import {
  * Note: the cron delivery of scheduled reports is not wired. The
  * non-dismissable banner at the top of the dialog makes this
  * clear to the user.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.5
  */
 export interface ReportsScheduleDialogProps {
   facilityId: string

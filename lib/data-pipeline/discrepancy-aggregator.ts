@@ -5,8 +5,6 @@
  * enriched COGRecord rows or InvoicePriceVariance rows) and buckets
  * them into multiple aggregation dimensions for the price-discrepancy
  * report.
- *
- * Reference: docs/superpowers/specs/2026-04-18-data-pipeline-rewrite.md §4.5
  */
 
 export interface DiscrepancyRecord {

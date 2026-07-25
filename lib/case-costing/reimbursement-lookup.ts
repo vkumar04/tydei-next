@@ -5,7 +5,6 @@
  * reimbursement amount from a lookup table (e.g., PayorContract rows
  * pre-loaded by the server action). No DB; caller loads the rates.
  *
- * Reference: docs/superpowers/specs/2026-04-18-case-costing-rewrite.md
  * (subsystem 1 — cases list page uses per-case reimbursement).
  */
 

@@ -4,8 +4,6 @@
  * Fetches the three composite payloads in parallel via the dashboard-
  * rewrite server actions and passes the snapshot to the client
  * orchestrator for hydration + subsequent TanStack Query refetches.
- *
- * Reference: docs/superpowers/specs/2026-04-18-facility-dashboard-rewrite.md
  */
 
 import { Suspense } from "react"

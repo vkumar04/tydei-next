@@ -6,8 +6,6 @@
  * to produce the canonical KPI shape consumed by the dashboard UI.
  *
  * No Prisma imports here — these functions are pure and unit-testable.
- *
- * Reference: docs/superpowers/specs/2026-04-18-facility-dashboard-rewrite.md
  */
 
 import { clamp01 } from "@/lib/math/clamp"

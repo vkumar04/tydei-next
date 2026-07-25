@@ -1,8 +1,6 @@
 /**
  * Unified rebate engine — tie-in capital amortization schedule (subsystem 8).
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-term-types-extension.md §4.8
- *
  * Pure function: given amortization parameters (capitalCost, interestRate,
  * termMonths, period), returns a fully-built schedule of AmortizationEntry
  * rows — one per period — using the standard PMT formula:

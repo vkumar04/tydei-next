@@ -3,8 +3,6 @@
 /**
  * AI agent — report generator server action.
  *
- * Per docs/superpowers/specs/2026-04-18-ai-agent-rewrite.md §4.4.
- *
  * Wraps the pure report classifier + column template + streaming Claude
  * call. Returns a structured GeneratedReport for the UI to render + export.
  */

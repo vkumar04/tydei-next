@@ -10,8 +10,6 @@ import { Skeleton } from "@/components/ui/skeleton"
  * orchestrator. The hub itself is streamed with a Suspense fallback
  * so initial paint is responsive while the per-tab server actions
  * resolve on the client via TanStack Query.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.1
  */
 export default async function ReportsPage() {
   const { facility } = await requireFacility()

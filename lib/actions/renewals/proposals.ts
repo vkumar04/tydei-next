@@ -3,8 +3,6 @@
 /**
  * Renewals — vendor proposal server actions.
  *
- * Reference: docs/superpowers/specs/2026-04-18-renewals-rewrite.md §4.2
- *
  * Persists renewal proposals into `ContractChangeProposal`. The spec
  * describes a `proposalType: "renewal"` + `status: "submitted"` shape,
  * but the current Prisma enum vocabulary is narrower

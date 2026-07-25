@@ -12,8 +12,6 @@
  *   3. Delegates the math to the pure engines (ROI, clause-risk
  *      adjustment, narrative builder).
  *   4. Serializes Decimals/Dates before returning to the client.
- *
- * Reference: docs/superpowers/specs/2026-04-18-financial-analysis-rewrite.md
  */
 
 import { prisma } from "@/lib/db"

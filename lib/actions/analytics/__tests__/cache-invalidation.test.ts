@@ -1,6 +1,5 @@
 /**
- * Cache Components rollout — task 7 of
- * docs/superpowers/plans/2026-04-26-cache-components-rollout.md.
+ * Cache Components rollout — task 7.
  *
  * Verifies the round-trip between the cached READ in _cached.ts and
  * the WRITE-side invalidator in _cache.ts. Both must use the same

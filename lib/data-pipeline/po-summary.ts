@@ -1,8 +1,6 @@
 /**
  * Data pipeline — PO-level on-contract summary.
  *
- * Reference: docs/superpowers/specs/2026-04-18-data-pipeline-rewrite.md §4.4
- *
  * Pure function: takes enriched PO line items (already carrying
  * `isOnContract` via `lib/contracts/po-enrichment.ts`) and produces the
  * PO-level aggregate stats rendered on the PO list + detail pages.

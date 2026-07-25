@@ -321,8 +321,7 @@ describe("generateRenewalBrief server action", () => {
 describe.skip("@ai integration — live Claude call", () => {
   it("returns a schema-valid response for a real contract fixture", async () => {
     // Intentionally skipped. Unskip locally when you want to burn tokens to
-    // validate the prompt + schema against the live API. See
-    // docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §6.
+    // validate the prompt + schema against the live API.
     expect(true).toBe(true)
   })
 })

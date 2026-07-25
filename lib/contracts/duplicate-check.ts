@@ -1,8 +1,6 @@
 /**
  * Contract duplicate prevention.
  *
- * Per docs/superpowers/specs/2026-04-18-platform-data-model-reconciliation.md §4.10.
- *
  * A new contract is a duplicate of an existing one when, for the same vendor
  * and contract type, an ACTIVE existing contract covers at least one of the
  * same facilities AND its effective window overlaps the new one's.

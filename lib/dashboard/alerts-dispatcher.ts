@@ -6,8 +6,6 @@
  * lib/alerts/priority-ranker.ts), it clips the feed to a dashboard
  * widget size, optionally filtering by alertType, and reports how many
  * alerts were dropped so the UI can render a "+N more" link.
- *
- * Reference: docs/superpowers/specs/2026-04-18-facility-dashboard-rewrite.md §5
  */
 
 import type { RankedAlert } from "@/lib/alerts/priority-ranker"

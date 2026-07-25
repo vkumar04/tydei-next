@@ -1,8 +1,6 @@
 /**
  * COG import history formatter.
  *
- * Reference: docs/superpowers/specs/2026-04-18-cog-data-rewrite.md §4.5
- *
  * Pure function: takes FileImport rows from the DB and formats them
  * into the UI-friendly shape used by the COG page's "Import History"
  * section. No DB access; caller loads the rows.

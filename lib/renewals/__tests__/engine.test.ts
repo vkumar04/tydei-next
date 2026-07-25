@@ -1,6 +1,5 @@
 /**
  * Tests for the pure renewals calculation engine (lib/renewals/engine.ts).
- * Spec: docs/superpowers/specs/2026-04-18-renewals-rewrite.md §§4, 14, 15.
  */
 
 import { describe, it, expect } from "vitest"

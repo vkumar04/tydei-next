@@ -3,8 +3,6 @@
 /**
  * Case Costing — top-level tab dispatch.
  *
- * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4 subsystems 2-5.
- *
  * Pure presentational; receives fully-resolved props from the orchestrator
  * and hands each tab its slice. (Exception: the Payor Contracts tab is
  * self-fetching — PayorContractsManager owns its own TanStack Query

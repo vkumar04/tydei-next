@@ -3,8 +3,7 @@
 /**
  * Case-costing — surgeons tab server actions.
  *
- * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4.0 (Subsystem 0)
- * and §4.2 (Subsystem 2 — Surgeons tab).
+ * Subsystem 0 and Subsystem 2 (Surgeons tab).
  *
  * Thin wrappers around pure helpers:
  *   - `deriveSurgeons` (lib/case-costing/surgeon-derivation.ts)

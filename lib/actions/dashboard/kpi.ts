@@ -12,8 +12,6 @@
  *   - `summarizeAlerts`      → severity / by-type aggregate
  *   - `rankAlerts`           → top-5 ranked alerts (via the same
  *                              metadata mapping as `getRankedAlerts`)
- *
- * Reference: docs/superpowers/specs/2026-04-18-facility-dashboard-rewrite.md
  */
 
 import { prisma } from "@/lib/db"

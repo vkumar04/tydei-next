@@ -1,8 +1,6 @@
 /**
  * Alerts — status workflow helpers.
  *
- * Reference: docs/superpowers/specs/2026-04-18-alerts-rewrite.md §4.4
- *
  * Pure functions — no DB, no side effects. Encapsulates the legal
  * status transition rules so server actions in subsystem 4 (and the UI
  * in subsystem 2) can rely on one source of truth.

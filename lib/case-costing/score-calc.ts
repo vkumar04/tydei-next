@@ -1,7 +1,6 @@
 /**
  * Case costing — surgeon score + margin + auxiliary helpers.
  *
- * Reference: docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4.0
  * plus v0 spec (docs/contract-calculations.md §8 +
  * docs/facility-case-costing-functionality.md).
  *

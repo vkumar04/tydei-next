@@ -1,8 +1,6 @@
 /**
  * Rebate Optimizer — alert generator.
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-optimizer-rewrite.md
- *
  * PURE function. Produces human-readable `RebateAlert` text for surfaces
  * like the dashboard and alerts page when a contract is close to, or past,
  * a tier threshold. This is distinct from the opportunity-detection engine

@@ -1,7 +1,6 @@
 /**
  * Case costing — surgeon derivation.
  *
- * Reference: docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4.0
  * (Subsystem 0 — surgeon derivation engine).
  *
  * Pure function — groups raw case rows by surgeon name and produces aggregated

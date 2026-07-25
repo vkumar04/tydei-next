@@ -1,6 +1,5 @@
 /**
  * Prospective analysis — dynamic rebate tier generator (spec §subsystem-0,
- * docs/superpowers/specs/2026-04-18-prospective-analysis-rewrite.md).
  *
  * PURE FUNCTION: synthesizes a 3-tier rebate structure from the
  * facility's baseline spend and the vendor's proposed top-tier rate.

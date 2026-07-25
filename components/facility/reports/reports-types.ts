@@ -1,7 +1,5 @@
 /**
  * Shared types for the Reports Hub UI.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.1
  */
 
 export interface ReportsDateRange {

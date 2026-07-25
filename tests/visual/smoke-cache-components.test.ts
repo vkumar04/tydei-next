@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db"
 /**
  * Cache Components rollout — full route compatibility smoke.
  *
- * Per docs/superpowers/plans/2026-04-26-cache-components-rollout.md
  * tasks 5 + 6, expanded to 100% page-route coverage. Hits every
  * page.tsx in app/ and asserts a < 500 status + no "Application
  * error" overlay. Catches the class of regression where enabling

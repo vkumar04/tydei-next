@@ -3,7 +3,6 @@
  * RebateAccrual rows to the UI shape consumed by the renewals timeline
  * / history card.
  *
- * Spec: docs/superpowers/specs/2026-04-18-renewals-rewrite.md §4.2
  * (subsystem 1, spec §13).
  *
  * NO SYNTHESIS. If source data is absent we return an empty array, and

@@ -3,7 +3,6 @@
 /**
  * Case-costing — compliance server action.
  *
- * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md
  * (Subsystem 0 — contract compliance rollup).
  *
  * Thin wrapper around the pure helpers in `lib/case-costing/compliance.ts`.

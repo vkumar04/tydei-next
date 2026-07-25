@@ -3,8 +3,6 @@
 /**
  * Renewals — renewal-note server actions.
  *
- * Reference: docs/superpowers/specs/2026-04-18-renewals-rewrite.md §4.2
- *
  * Wires the pure helpers in `lib/renewals/renewal-notes.ts` to Prisma +
  * facility ownership guards + audit log. All write paths emit audit rows
  * so deletes/creates are traceable.

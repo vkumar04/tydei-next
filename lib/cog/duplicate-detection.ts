@@ -26,7 +26,6 @@
  * `matchKey === "both"` and `isExactMatch === true`.
  *
  * Aligns with canonical COG doc §7 and the W1.W bug-cluster plan
- * `docs/superpowers/plans/2026-04-20-charles-w1w-bug-cluster.md`.
  */
 
 export interface COGRecordForDedup {

@@ -1,8 +1,6 @@
 /**
  * Reports hub — CSV export helpers.
  *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.6
- *
  * Pure serialization: takes typed rows + columns, returns a CSV-safe
  * string. No file I/O; the caller writes/downloads the result.
  *

@@ -3,8 +3,6 @@
 /**
  * Case Costing — client orchestrator (≤250 lines).
  *
- * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4 subsystems 1-5.
- *
  * Renders the "hero + tabs" pattern (matching Analysis, Rebate Optimizer,
  * Contracts, Dashboard):
  *   - CaseCostingHero: 4 KPIs sourced from facility averages + compliance

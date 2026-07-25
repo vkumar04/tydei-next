@@ -3,7 +3,7 @@
  *
  * ─── Why this file exists ───────────────────────────────────────
  *
- * The W1.U retro (`docs/superpowers/retros/2026-04-19-w1u-retrospective.md`)
+ * The W1.U retro
  * found that our 1831 passing tests verified each reducer in isolation, but
  * NOTHING asserted cross-surface numeric agreement. Two reducers on the same
  * invariant silently drifted:

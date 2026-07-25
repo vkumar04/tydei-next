@@ -1,7 +1,6 @@
 /**
  * Case costing — pure case-list sort helpers.
  *
- * Reference: docs/superpowers/specs/2026-04-18-case-costing-rewrite.md
  * Subsystem 1 — Cases list tab (canonical §7/§8 sort).
  *
  * Pure — non-mutating, stable sort. No DB, no side effects.

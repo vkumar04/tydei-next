@@ -1,8 +1,6 @@
 /**
  * Renewals — notes validation + sort helpers.
  *
- * Reference: docs/superpowers/specs/2026-04-18-renewals-rewrite.md §4.2
- *
  * Pure — no DB calls. Used by `listRenewalNotes` / `createRenewalNote`
  * server actions for shape validation + sort.
  */

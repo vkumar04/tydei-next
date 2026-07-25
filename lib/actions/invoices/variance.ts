@@ -17,7 +17,6 @@ import { normalizeSku } from "@/lib/contracts/normalize-sku"
 // callers a single entry point to trigger or backfill variance
 // detection for an invoice (or every invoice at a facility).
 //
-// Spec: docs/superpowers/specs/2026-04-18-data-pipeline-rewrite.md §4.1
 
 type Direction = "overcharge" | "undercharge" | "at_price"
 

@@ -3,8 +3,7 @@
  * byte-identical across two sequential loads.
  *
  * Charles reported: "every time I enter a contract I am getting a
- * different result on terms and conditions." Diagnostic in
- * `docs/superpowers/diagnostics/2026-04-22-w2b-terms-locate.md`
+ * different result on terms and conditions." The W2.B diagnostic
  * classifies the most likely cause as **Class C — missing `orderBy`**
  * on the `products` include in `getContractTerms`:
  *

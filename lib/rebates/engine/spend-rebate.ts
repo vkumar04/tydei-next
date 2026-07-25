@@ -1,8 +1,6 @@
 /**
  * Unified rebate engine — SPEND_REBATE (subsystem 2).
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-term-types-extension.md §4.2
- *
  * Pure function: given a SpendRebateConfig and a PeriodData snapshot,
  * returns a standardized RebateResult. Applies spend-basis filtering,
  * optional growth-baseline math, then dispatches to the cumulative or

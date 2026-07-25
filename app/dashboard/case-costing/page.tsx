@@ -1,8 +1,6 @@
 /**
  * Case Costing — page shell (server component).
  *
- * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4 (subsystem 1-5).
- *
  * This is the facility-scoped entry point for:
  *   - Cases list (with date-range + surgeon + CPT filters)
  *   - Surgeon scorecards + payor mix

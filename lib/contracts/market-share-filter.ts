@@ -13,7 +13,6 @@
  * this helper. Server actions own Prisma fetching + auth + the
  * commitment overlay; this helper owns the math.
  *
- * See: `docs/superpowers/specs/2026-04-26-v0-parity-engines-design.md`
  * Bucket A1.
  */
 

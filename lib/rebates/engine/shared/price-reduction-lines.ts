@@ -1,8 +1,6 @@
 /**
  * Shared utility — per-line price-reduction breakdown.
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-term-types-extension.md §4.4
- *
  * ─── [A7] Per-line effectiveUnitPrice (no single aggregate) ──────
  *
  * Earlier designs collapsed "effective unit price" into a single scalar

@@ -1,8 +1,6 @@
 /**
  * Alerts — bulk action planners.
  *
- * Reference: docs/superpowers/specs/2026-04-18-alerts-rewrite.md §4.4
- *
  * Pure planners: given a set of selected alerts + a target action,
  * return the subset that can legally be processed plus per-alert
  * rationale for any that can't. The server action layer consumes this

@@ -1,7 +1,6 @@
 /**
  * Case costing — pure case-list filter helpers.
  *
- * Reference: docs/superpowers/specs/2026-04-18-case-costing-rewrite.md
  * Subsystem 1 — Cases list tab (canonical §7 filters).
  *
  * Pure functions — no DB, no side effects.

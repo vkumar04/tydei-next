@@ -79,7 +79,7 @@ const config: NextConfig = {
   //      lib/actions/analytics/_cached.ts read helpers
   //   4. Flip this flag
   // Estimated 4–6 hours focused, not appropriate for a bundled audit
-  // PR. Worth a docs/superpowers/specs/ entry when prioritised.
+  // PR. Worth a design doc when prioritised.
   // cacheComponents: true,
   experimental: {
     // Bug 2026-05-18 (Vick "XLS not working for loading COGS"):

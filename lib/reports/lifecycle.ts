@@ -4,8 +4,6 @@
  * Pure function: given a list of contract rows, bucket them into
  * active / expiring / expired based on expirationDate vs a reference
  * date (defaults to `new Date()`).
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.0
  */
 
 export interface ContractForLifecycle {

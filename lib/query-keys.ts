@@ -177,8 +177,7 @@ export const queryKeys = {
     // `lib/actions/dashboard.ts`. Dashboard now reads the canonical
     // composite keys below (kpiSummary + charts + contractStats), which
     // route through matchStatus-based filters consistent with the COG
-    // Data page. See docs/superpowers/specs/2026-04-18-facility-
-    // dashboard-rewrite.md.
+    // Data page.
     kpiSummary: (facilityId: string) =>
       ["dashboard", "kpiSummary", facilityId] as const,
     charts: (facilityId: string, months: number) =>

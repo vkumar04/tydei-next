@@ -1,8 +1,6 @@
 /**
  * Financial analysis — clause risk adjustment to NPV.
  *
- * Reference: docs/superpowers/specs/2026-04-18-financial-analysis-rewrite.md §4.7
- *
  * Takes a base NPV + a clause analysis (from prospective-analysis subsystem 7)
  * and returns a risk-adjusted NPV with per-adjustment audit trail.
  *

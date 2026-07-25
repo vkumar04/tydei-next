@@ -8,8 +8,6 @@
  * module-scoped fixtures, reset in beforeEach. Only the call surface
  * each action actually uses is mocked; anything else stays undefined
  * to catch drift.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.0
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 

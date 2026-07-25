@@ -1,6 +1,6 @@
 /**
  * Prospective analysis — PDF contract clause analyzer
- * (spec §subsystem-7, docs/superpowers/specs/2026-04-18-prospective-analysis-rewrite.md).
+ * (spec §subsystem-7).
  *
  * DETERMINISTIC FIRST PASS: runs the CLAUSE_LIBRARY regex patterns against
  * PDF text and produces a structured ClauseAnalysis:

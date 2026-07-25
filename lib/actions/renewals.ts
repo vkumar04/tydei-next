@@ -386,6 +386,4 @@ export async function getContractPerformanceHistory(
 // dialog, which actually wants to *submit a proposal*, not clone a
 // contract. That flow has been rewired to
 // `lib/actions/renewals/proposals.ts::submitRenewalProposal`, which
-// persists a `ContractChangeProposal` (spec: docs/superpowers/specs/
-// 2026-04-18-renewals-rewrite.md §4.2). See plan entry W1.4 in
-// docs/superpowers/plans/2026-04-19-renewals-v0-parity.md.
+// persists a `ContractChangeProposal` (renewals rewrite §4.2, plan W1.4).

@@ -25,8 +25,6 @@ import type { ReportsDateRange } from "./reports-types"
 /**
  * Overview tab: lifecycle pie chart + monthly spend/rebate bar chart +
  * top-line stats. All data pulled from `getReportsOverview`.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.2
  */
 export interface ReportsOverviewTabProps {
   facilityId: string

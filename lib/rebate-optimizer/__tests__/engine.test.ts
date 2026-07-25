@@ -1,8 +1,7 @@
 /**
  * Rebate Optimizer — engine tests (subsystem 0).
  *
- * Covers the acceptance criteria from
- * docs/superpowers/specs/2026-04-18-rebate-optimizer-rewrite.md §4.0:
+ * Covers the acceptance criteria:
  *
  *   - Engine returns typed opportunities sorted by ROI descending.
  *   - tier-at-max (no next tier → excluded)

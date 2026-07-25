@@ -38,8 +38,6 @@ import type {
  *
  * Per-tab data fetching lives inside each tab component so the hub
  * stays focused on composition.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.1
  */
 export interface ReportsClientProps {
   facilityId: string

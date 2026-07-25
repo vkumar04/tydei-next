@@ -24,8 +24,6 @@ import type { ReportsDateRange, ReportsContract } from "./reports-types"
  * Generic per-contract-type tab. Fetches contract+period data via
  * the existing `getReportData` action and renders a type-specific
  * column set.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.3
  */
 
 export type PerTypeTab =

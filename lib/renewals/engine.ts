@@ -4,8 +4,6 @@
  * Pure functions only — no Prisma imports, no I/O, no synthesis of unknown
  * data. Consumers (server actions, components) feed it real data loaded
  * elsewhere.
- *
- * Spec: docs/superpowers/specs/2026-04-18-renewals-rewrite.md §§4, 13, 14, 15.
  */
 
 /** Renewal status classification (spec §4). */

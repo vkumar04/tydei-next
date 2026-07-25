@@ -40,8 +40,6 @@ import type { ReportsContract } from "./reports-types"
  * Calculations tab — full rebate calculation audit trail.
  * Renders contract info, tier structure, formula, included POs,
  * excluded POs (grouped by category), and a tier-progress projection.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.4
  */
 export interface ReportsCalculationsTabProps {
   contracts: ReportsContract[]

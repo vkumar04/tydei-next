@@ -1,8 +1,6 @@
 /**
  * Canonical COG → Contract match algorithm.
  *
- * Per docs/superpowers/specs/2026-04-18-platform-data-model-reconciliation.md §4.9.
- *
  * ─── Sign convention (§4.11, LOCKED IN) ─────────────────────────────
  *
  *   savings > 0            → facility paid LESS than list (WIN)
@@ -93,8 +91,7 @@ export type ContractForMatch = {
   referenceNumbers?: string[]
   /**
    * Optional — when omitted the matcher falls back to pre-W1.W
-   * behavior (no category scoping). See
-   * docs/superpowers/plans/2026-04-20-charles-w1w-bug-cluster.md C4.
+   * behavior (no category scoping). See W1.W bug cluster C4.
    */
   terms?: ContractTermScopeForMatch[]
 }

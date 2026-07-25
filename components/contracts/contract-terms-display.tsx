@@ -44,8 +44,7 @@ interface ContractTermsDisplayProps {
   /**
    * Contract-level qualification metrics, threaded through to the per-term
    * tier qualifier so market_share / compliance_rebate terms compare
-   * against the right metric (not dollar spend). Bug Cluster B fix —
-   * spec: docs/superpowers/specs/2026-05-24-rebate-optimizer-tier-drift-design.md
+   * against the right metric (not dollar spend). Bug Cluster B fix.
    */
   currentMarketShare?: number | null
   complianceRate?: number | null
@@ -78,7 +77,7 @@ function TierProgressCard({
   // market-share term with tier.spendMin in market-share-percent units
   // (column-reuse pattern) gets qualified against dollar spend that is
   // orders of magnitude larger → engine picks the top tier on every
-  // contract. Spec: docs/superpowers/specs/2026-05-24-rebate-optimizer-tier-drift-design.md
+  // contract.
   const metric = pickThresholdMetric(term.termType, {
     currentSpend,
     currentMarketShare: currentMarketShare ?? null,

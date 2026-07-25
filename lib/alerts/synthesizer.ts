@@ -1,6 +1,5 @@
 /**
  * Alert synthesizer — pure rules engine (spec §subsystem-1,
- * docs/superpowers/specs/2026-04-18-alerts-rewrite.md).
  *
  * PURE FUNCTION: takes all data shapes as params, returns un-persisted
  * alert rows + a `toResolve` list of existing-alert ids whose underlying
