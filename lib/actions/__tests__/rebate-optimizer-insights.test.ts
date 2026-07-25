@@ -304,8 +304,7 @@ describe("rebate-optimizer-insights server action", () => {
 describe.skip("@ai integration — live Claude call", () => {
   it("returns a schema-valid response for a fixture facility", async () => {
     // Intentionally skipped. Unskip locally when you want to burn tokens to
-    // validate prompt structure against the live API. See
-    // docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §6.
+    // validate prompt structure against the live API.
     expect(true).toBe(true)
   })
 })

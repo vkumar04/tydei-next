@@ -13,7 +13,6 @@
  *   - An admin is turning on enrichment for the first time against
  *     historical rows.
  *
- * Spec: docs/superpowers/specs/2026-04-18-cog-data-rewrite.md §
  * "Subsystem 3 — COG import pipeline".
  */
 

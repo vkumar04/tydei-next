@@ -1,8 +1,6 @@
 /**
  * Pure date-range and facility-set overlap helpers.
  *
- * Per docs/superpowers/specs/2026-04-18-platform-data-model-reconciliation.md §4.10.
- *
  * Used by `isContractDuplicate` and any other callers that need to reason about
  * contract effective-window overlap or shared facility coverage.
  *

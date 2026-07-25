@@ -1,6 +1,5 @@
 /**
  * Prospective analysis — pricing-file analyzer (spec §subsystem-2,
- * docs/superpowers/specs/2026-04-18-prospective-analysis-rewrite.md).
  *
  * PURE FUNCTION: takes a list of pricing-file items (already joined
  * with COG current prices by the caller) and emits per-line variance +

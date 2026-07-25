@@ -1,8 +1,6 @@
 /**
  * Unified rebate engine — CARVE_OUT (subsystem 7).
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-term-types-extension.md §4.7
- *
  * Pure function: given a CarveOutConfig and a PeriodData snapshot, returns
  * a standardized RebateResult. Carve-outs apply a per-reference-number
  * rate (PERCENT_OF_SPEND or FIXED_PER_UNIT) to purchases matching each

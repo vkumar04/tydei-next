@@ -8,8 +8,6 @@
  *
  * No Prisma/date-fns imports. Month strings use the canonical YYYY-MM
  * format so inputs are storage-agnostic.
- *
- * Reference: docs/superpowers/specs/2026-04-18-facility-dashboard-rewrite.md §6
  */
 
 export interface MonthlySpendObservation {

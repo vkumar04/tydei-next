@@ -5,11 +5,8 @@
  * responsible for loading benchmarks, contracts, COG data, and
  * shaping the input.
  *
- * Ported from Charles canonical Prospective Analysis Engine 2026-04-18.
- * See:
- *   - docs/superpowers/charles-canonical-engines/prospective-analysis.ts
- *   - docs/superpowers/audits/2026-05-04-prospective-analysis-audit.md
- *     (gap #1 — vendor-side analyzer was the entire missing piece)
+ * Ported from Charles canonical Prospective Analysis Engine 2026-04-18
+ * (gap #1 — vendor-side analyzer was the entire missing piece).
  *
  * The engine answers FOUR questions for a vendor evaluating a proposal:
  *

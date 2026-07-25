@@ -5,8 +5,6 @@
  * rows, buckets by YYYY-MM, returns a series covering the last N months
  * (default 12). Fills missing months with zero so the resulting chart
  * shape is continuous.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.0
  */
 
 export interface SpendRecord {

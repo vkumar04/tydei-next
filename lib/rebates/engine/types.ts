@@ -1,8 +1,6 @@
 /**
  * Unified rebate engine — shared types.
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-term-types-extension.md §4
- *
  * The engine is pure: zero Prisma imports, zero side effects. Callers
  * load data from the DB and build typed RebateConfig objects per term;
  * the engine returns standardized RebateResult.

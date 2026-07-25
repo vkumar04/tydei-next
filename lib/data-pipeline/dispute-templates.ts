@@ -1,8 +1,6 @@
 /**
  * Data pipeline — invoice dispute note templates.
  *
- * Reference: docs/superpowers/specs/2026-04-18-data-pipeline-rewrite.md §4.3
- *
  * Pure string builders that produce standardized dispute note prefixes
  * so every dispute has a consistent, scannable format for the vendor
  * + audit log.

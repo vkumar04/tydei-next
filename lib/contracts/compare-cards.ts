@@ -3,7 +3,6 @@
  * loaded contract (+ optional metrics) into the 5 card shapes rendered by
  * the side-by-side comparison view.
  *
- * Spec: docs/superpowers/specs/2026-04-18-contracts-list-closure.md
  * subsystem 4 — the 5-card comparison UI.
  *
  * No Prisma, no I/O, no formatting dependencies. Callers load contracts and

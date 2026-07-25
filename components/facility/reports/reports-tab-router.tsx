@@ -11,8 +11,6 @@ import type { ReportTabKey, ReportsContract } from "./reports-types"
  *   - "all" contracts → every tab visible.
  *   - Specific contract → only Overview, Calculations, and the tab
  *     matching the contract's type.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.1
  */
 export interface ReportsTabRouterProps {
   selectedContract: ReportsContract | null

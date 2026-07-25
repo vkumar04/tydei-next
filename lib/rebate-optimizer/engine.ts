@@ -1,8 +1,6 @@
 /**
  * Rebate Optimizer — opportunity-detection engine (subsystem 0).
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-optimizer-rewrite.md §4.0
- *
  * PURE FUNCTIONS only. No Prisma imports. No side effects. Callers load
  * data from the DB, shape it into the typed inputs below, and feed the
  * engine. The engine returns:

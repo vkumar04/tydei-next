@@ -11,8 +11,6 @@
  * upsert expects. Keeping this in the data-pipeline module means
  * `lib/actions/invoices.ts` only depends on a pure, well-typed helper —
  * easy to unit test without touching the database.
- *
- * Reference: docs/superpowers/specs/2026-04-18-data-pipeline-rewrite.md §4.1
  */
 
 import {

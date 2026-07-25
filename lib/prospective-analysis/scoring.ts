@@ -1,6 +1,5 @@
 /**
  * Prospective analysis — proposal scoring engine (spec §subsystem-0,
- * docs/superpowers/specs/2026-04-18-prospective-analysis-rewrite.md).
  *
  * PURE FUNCTION: takes a ProposalInput, returns 5-dimension scores +
  * weighted overall score (all in 0..10). No IO, no prisma imports.

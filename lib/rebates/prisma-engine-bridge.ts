@@ -6,10 +6,8 @@
  * in `lib/rebates/engine/*` can run on real data without each caller
  * hand-stitching the conversion.
  *
- * Provenance: required by Charles canonical engine wiring 2026-05-05.
- * See:
- *   - docs/superpowers/audits/2026-05-04-vendor-rebate-audit.md gap #8
- *   - docs/superpowers/audits/2026-05-05-v0-cross-check-pending-items.md
+ * Provenance: required by Charles canonical engine wiring 2026-05-05
+ * (vendor rebate audit, gap #8).
  *
  * Returns `null` when the term doesn't fit any engine config pattern;
  * callers should fall back to their existing hand-rolled path and

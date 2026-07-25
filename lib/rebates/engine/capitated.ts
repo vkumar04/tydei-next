@@ -1,8 +1,6 @@
 /**
  * Unified rebate engine — CAPITATED (subsystem 6).
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-term-types-extension.md §4.6
- *
  * Pure function: given a CapitatedConfig and a PeriodData snapshot, returns
  * a standardized RebateResult. Capitated terms wrap a sub-engine (optional
  * SpendRebate or TierPriceReduction) whose evaluation is bounded by a

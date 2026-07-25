@@ -1,8 +1,6 @@
 /**
  * Unified rebate engine — VOLUME_REBATE (subsystem 3).
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-term-types-extension.md §4.3
- *
  * Pure function: given a VolumeRebateConfig and a PeriodData snapshot,
  * returns a standardized RebateResult. Counts CPT-code occurrences among
  * purchases (deduplicated per [A5]), optionally applies an occurrence-

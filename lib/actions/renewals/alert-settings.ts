@@ -3,8 +3,6 @@
 /**
  * Renewals — alert-settings server actions.
  *
- * Reference: docs/superpowers/specs/2026-04-18-renewals-rewrite.md §4.2
- *
  * Wraps the pure validator in `lib/renewals/alert-settings.ts` around a
  * per-user upsert, one row per `userId` (the `@unique` constraint on the
  * Prisma model enforces that invariant).

@@ -52,8 +52,7 @@ export function useContractPerformanceHistory(contractId: string | null) {
  *
  * Writes a `ContractChangeProposal` (proposalType `contract_edit`,
  * status `pending`, semantic `kind: "renewal"` in `changes`). Replaces
- * the legacy `useInitiateRenewal` mutation — see plan W1.4 in
- * docs/superpowers/plans/2026-04-19-renewals-v0-parity.md.
+ * the legacy `useInitiateRenewal` mutation (plan W1.4).
  */
 export function useSubmitRenewalProposal() {
   return useToastMutation(

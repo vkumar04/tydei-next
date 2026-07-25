@@ -1,6 +1,5 @@
 /**
  * Prospective analysis — COG spend-pattern analyzer (spec §subsystem-8,
- * docs/superpowers/specs/2026-04-18-prospective-analysis-rewrite.md).
  *
  * PURE FUNCTION: takes vendor purchases + pricing-file rows and returns a
  * SpendPatternAnalysis. No IO, no prisma imports. Runs alongside Charles's

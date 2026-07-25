@@ -75,8 +75,7 @@ function addMonthsUTC(d: Date, n: number): Date {
 // percent and divides by 100; PO tiers store dollars-per-PO. Wiring
 // here would require either a new engine flag or a per-tier scaling
 // pass that multiplies by 100 to undo the engine's /100. Skipped per
-// "DO NOT change engine math; just call it." See audit gap #1 in
-// docs/superpowers/audits/2026-05-04-vendor-rebate-audit.md.
+// "DO NOT change engine math; just call it." (audit gap #1).
 function computePoRebate(
   count: number,
   tiers: RebateTier[],

@@ -1,8 +1,6 @@
 /**
  * Unified rebate engine — TIER_PRICE_REDUCTION (subsystem 4).
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-term-types-extension.md §4.4
- *
  * Pure function: given a TierPriceReductionConfig and a PeriodData
  * snapshot, returns a standardized RebateResult populated with
  * `priceReductionValue` and `priceReductionLines[]`. Tier achievement is

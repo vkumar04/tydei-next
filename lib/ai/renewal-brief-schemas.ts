@@ -3,8 +3,7 @@ import { z } from "zod"
 /**
  * Renewal Brief — AI-generated negotiation primer (Tier 4).
  *
- * Shape is locked by the spec:
- *   docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §4.2
+ * Shape is locked by the rebate-optimizer AI design spec §4.2.
  *
  * Notes on constraints: Anthropic's JSON Schema validator rejects
  * `minimum`/`maximum` keywords on numeric leaves. Zod 4's `.int()` emits

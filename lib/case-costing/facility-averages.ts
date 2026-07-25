@@ -1,7 +1,6 @@
 /**
  * Case costing — facility baseline averages.
  *
- * Reference: docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4.0
  * (Subsystem 0 — baseline metrics).
  *
  * Pure function — computes facility-wide averages used as a comparison

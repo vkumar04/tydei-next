@@ -3,7 +3,6 @@
 /**
  * Case-costing — payor-mix server action.
  *
- * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md
  * (Subsystem 0 — payor-mix summary used by surgeon scorecards and reports).
  *
  * Thin wrapper around `computePayorMix` in `lib/case-costing/payor-mix.ts`.

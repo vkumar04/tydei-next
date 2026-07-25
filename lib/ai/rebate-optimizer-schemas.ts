@@ -3,8 +3,7 @@ import { z } from "zod"
 /**
  * Rebate Optimizer — AI Smart Recommendations schemas.
  *
- * Shape is locked by the spec:
- *   docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §4.1
+ * Shape is locked by the rebate-optimizer AI design spec §4.1.
  *
  * Notes on constraints: Anthropic's Messages API rejects `minimum`/`maximum`
  * keywords on numeric leaves. Zod 4's `.int()` emits both `type: "integer"` AND

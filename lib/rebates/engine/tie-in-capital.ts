@@ -1,8 +1,6 @@
 /**
  * Unified rebate engine — TIE_IN_CAPITAL (subsystem 8).
  *
- * Reference: docs/superpowers/specs/2026-04-18-rebate-term-types-extension.md §4.8
- *
  * Pure function: given a TieInCapitalConfig and PeriodData for a single
  * period, returns a RebateResult with the current-period amortization
  * schedule row attached and a signed true-up adjustment ([A10]) vs the

@@ -7,7 +7,6 @@
  * shared review UI (see `components/shared/ai/`, landing in subsystem 4)
  * can render any proposal without special-casing per feature.
  *
- * See spec `docs/superpowers/specs/2026-04-18-ai-integration-foundation.md`,
  * §2.7 (the review surface pattern) for the full UX rationale.
  */
 

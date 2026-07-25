@@ -15,9 +15,6 @@
  *      `cacheControl: ephemeral` for prompt caching. 12K max output tokens.
  *   5. Validate against `renewalBriefSchema`, persist cache row, return.
  *
- * Spec: docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §4.2
- * Plan: docs/superpowers/plans/2026-04-19-rebate-optimizer-ai-implementation.md §2
- *
  * Reference implementation: `lib/actions/rebate-optimizer-insights.ts` (Wave 1).
  */
 

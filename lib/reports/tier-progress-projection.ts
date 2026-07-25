@@ -9,7 +9,6 @@
  *
  * Reference:
  *   - docs/facility-reports.md §4.6
- *   - docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md subsystem 4
  */
 
 export interface TierRow {

@@ -3,8 +3,6 @@
  *
  * Pure aggregation over Alert rows. The server-action layer passes the
  * trimmed-down row projection in; this file has no Prisma imports.
- *
- * Reference: docs/superpowers/specs/2026-04-18-facility-dashboard-rewrite.md
  */
 
 export type AlertPriority = "high" | "medium" | "low"

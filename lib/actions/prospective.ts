@@ -245,8 +245,7 @@ const opportunityScenarioSchema = z.object({
 // `ItemComparison` / `ProposalAnalysis` types) were removed on
 // 2026-05-04. The canonical 5-dimension 0-10 engine lives at
 // `lib/actions/prospective-analysis.ts` and is the only `analyzeProposal`
-// export in the codebase. See
-// `docs/superpowers/audits/2026-05-04-prospective-analysis-audit.md`.
+// export in the codebase.
 
 // NOTE: the facility-gated `scoreDeal` action (a pure weighted average
 // with zero consumers) was removed on 2026-06-10 (audit H2). Vendor

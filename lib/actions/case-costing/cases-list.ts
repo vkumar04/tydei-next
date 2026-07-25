@@ -3,7 +3,6 @@
 /**
  * Case-costing — cases list server action.
  *
- * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4.1.
  * Loads a facility's cases with enough data to render the list page
  * (supplies for margin, procedures for CPT display, payor for
  * reimbursement lookup). Consumers pair this with:

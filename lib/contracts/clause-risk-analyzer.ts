@@ -3,8 +3,7 @@
  *
  * Implements Charles Weidman's `analyzePDFContract(clauses, side, variant, name)`
  * spec from the prospective-analysis canonical engine (email 2026-04-18).
- * Header summary: docs/superpowers/charles-canonical-engines/prospective-analysis.ts
- * Audit gap closed: docs/superpowers/audits/2026-05-04-prospective-analysis-audit.md
+ * Closes the 2026-05-04 prospective-analysis audit gap.
  *
  * This module is intentionally separate from
  * `lib/prospective-analysis/clause-library.ts` and `pdf-clause-analyzer.ts`
@@ -175,8 +174,7 @@ export interface PDFContractAnalysisResult {
  * 2026-04-18 canonical email. Where his exact prose was not committed to
  * the in-repo snapshot, entries below use industry-standard healthcare
  * contracting language reviewed against the audit doc. Replace with his
- * verbatim text when the full source lands in
- * `docs/superpowers/charles-canonical-engines/`.
+ * verbatim text when the full source lands.
  */
 export const CLAUSE_RISK_LIBRARY: Record<ClauseCategory, ClauseLibraryEntry> = {
   PRICING: {

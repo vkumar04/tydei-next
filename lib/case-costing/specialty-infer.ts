@@ -1,7 +1,6 @@
 /**
  * Case costing — CPT-prefix-based specialty inference.
  *
- * Reference: docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4.0
  * (and canonical case-costing doc).
  *
  * Pure function — takes a CPT code string, returns a specialty label

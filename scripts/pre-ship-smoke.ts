@@ -2,8 +2,7 @@
  * pre-ship-smoke — the minimum a human would do before saying "ship it".
  *
  * Exists because the 2026-04-19 W1.U deep-test subagent gave a green light
- * minutes before Charles hit 8 bugs. See the retro at
- * docs/superpowers/retros/2026-04-19-w1u-retrospective.md for full context.
+ * minutes before Charles hit 8 bugs.
  *
  * What this does (in order — halts on first red):
  *

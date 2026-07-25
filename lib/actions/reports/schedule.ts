@@ -9,8 +9,6 @@
  *
  * Delivery (cron-based dispatch) is out of scope — see the spec §5 and
  * the non-dismissable banner in the UI. This module is settings-only.
- *
- * Reference: docs/superpowers/specs/2026-04-18-reports-hub-rewrite.md §4.0
  */
 import { z } from "zod"
 import { prisma } from "@/lib/db"

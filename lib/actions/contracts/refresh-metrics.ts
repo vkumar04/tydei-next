@@ -3,7 +3,7 @@
 /**
  * Persist the canonically-derived metrics back onto the Contract row.
  *
- * Strategic-direction Plan #1 (`docs/superpowers/specs/2026-04-28-strategic-direction.md`):
+ * Strategic-direction Plan #1:
  * Contract.complianceRate, Contract.currentMarketShare, and
  * Contract.annualValue should all be COMPUTED, not manually entered.
  * The form still shows them today as a transition step; this action

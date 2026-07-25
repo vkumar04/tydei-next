@@ -1,8 +1,6 @@
 /**
  * Renewals — vendor proposal review helpers.
  *
- * Reference: docs/superpowers/specs/2026-04-18-renewals-rewrite.md §4.2
- *
  * Pure helpers for the vendor-side "submit renewal proposal" flow +
  * facility-side "review renewal proposal" flow. No DB; server action
  * wiring persists through `ContractChangeProposal` (see

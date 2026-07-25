@@ -94,8 +94,7 @@ function endOfDay(d: Date): Date {
 // `calculateRebate(VOLUME_REBATE)` engine treats `rebateValue` as
 // percent and divides by 100; invoice tiers store dollars-per-invoice.
 // Wiring requires an engine semantic flag or a per-tier scaling pass.
-// Skipped per "DO NOT change engine math; just call it." See audit
-// gap #1 in docs/superpowers/audits/2026-05-04-vendor-rebate-audit.md.
+// Skipped per "DO NOT change engine math; just call it." (audit gap #1).
 function computeInvoiceRebate(
   count: number,
   tiers: RebateTier[],

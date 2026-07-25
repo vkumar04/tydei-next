@@ -3,7 +3,6 @@
 /**
  * Dashboard — contract lifecycle + spend/rebate trend composite.
  *
- * Per docs/superpowers/specs/2026-04-18-facility-dashboard-rewrite.md.
  * Single action returning the two chart payloads used on the dashboard:
  *   - Contract lifecycle pie (active/expiring/expired/other)
  *   - Monthly spend + rebate bar (12 months)

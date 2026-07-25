@@ -24,7 +24,7 @@
  *   - "wired"      — at least one action test covers the full
  *                    Prisma-to-engine path for this function.
  *   - "unwired"    — engine exists but no display-facing action reaches
- *                    it. See `docs/superpowers/audits/2026-04-19-engine-param-coverage.md`.
+ *                    it.
  *                    (Per the audit resolution, the `calculateRebate`
  *                    dispatcher and `buildConfigFromPrismaTerm` bridge
  *                    were removed — so "dispatched" is no longer a

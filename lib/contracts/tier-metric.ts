@@ -1,7 +1,6 @@
 /**
  * Canonical "which contract-level metric qualifies tier thresholds for
- * this term type" picker. Single source of truth so readers don't drift
- * — see `docs/superpowers/specs/2026-05-24-rebate-optimizer-tier-drift-design.md`.
+ * this term type" picker. Single source of truth so readers don't drift.
  *
  * Background: the rebate engine uses a column-reuse pattern. For every
  * term type, `tier.spendMin` is the threshold the engine compares

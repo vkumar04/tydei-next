@@ -3,7 +3,6 @@
 /**
  * Case Costing — Financial tab.
  *
- * Per docs/superpowers/specs/2026-04-18-case-costing-rewrite.md §4 (subsystem 3).
  * Surfaces:
  *   - Facility baseline averages (avg case cost / reimb / margin %)
  *   - A per-surgeon margin-percent comparison bar chart

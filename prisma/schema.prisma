@@ -2275,7 +2275,6 @@ model RebateInsightFlag {
 // Per-contract 1-hour cache for generateRenewalBrief. Briefs change less
 // frequently than Tier 1 rebate insights (contract-level history, not
 // daily spend), so a longer TTL is cheaper without hurting freshness.
-// Spec: docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §4.2
 
 model RenewalBriefCache {
   id         String   @id @default(cuid())

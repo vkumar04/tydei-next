@@ -1,7 +1,6 @@
 /**
  * Case costing — date-range preset resolver.
  *
- * Reference: docs/superpowers/specs/2026-04-18-case-costing-rewrite.md
  * Canonical facility-case-costing §7 (date range filter, shared with
  * reports-hub-rewrite.md).
  *

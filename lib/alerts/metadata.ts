@@ -1,6 +1,5 @@
 /**
  * Typed metadata shapes for each alert type per spec §3
- * (docs/superpowers/specs/2026-04-18-alerts-rewrite.md).
  *
  * These live separately from the synthesizer so the UI / detail-page
  * components can import them without pulling in the engine.

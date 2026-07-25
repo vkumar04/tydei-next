@@ -259,11 +259,11 @@ async function scanFile(
 const BASELINE_HITS = new Set<string>([
   // ai/document-index.ts: indexStatus updates (by id) in helpers called from
   // gated AI actions only. The ownership read at the top is now a single scoped
-  // findFirst (contract: contractsOwnedByFacility) — auto-exempt. Lines bumped
-  // 2026-06-21 after that fold-in added a few lines above these updates.
-  "lib/actions/ai/document-index.ts:59",
-  "lib/actions/ai/document-index.ts:84",
-  "lib/actions/ai/document-index.ts:105",
+  // findFirst (contract: contractsOwnedByFacility) — auto-exempt. Lines shifted
+  // -2 on 2026-07-25 when dead doc-citation comments were swept out of the file.
+  "lib/actions/ai/document-index.ts:57",
+  "lib/actions/ai/document-index.ts:82",
+  "lib/actions/ai/document-index.ts:103",
   // ai-credits.ts: FIXED 2026-06-09 (audit BLOCKER) — all actions now
   // session-tenant-scoped via sessionTenant()/requireOwnedCredit; the
   // remaining by-id ops carry auth-scope-scanner-skip comments.
@@ -377,8 +377,8 @@ const BASELINE_HITS = new Set<string>([
   // renewals: post-fetch facility ownership equality check
   // (bumped 2026-06-09 after the M9 group-vendor OR clauses in
   // listRenewalNotesForVendor / submitRenewalProposal shifted lines)
-  "lib/actions/renewals/notes.ts:187",
-  "lib/actions/renewals/proposals.ts:223",
+  "lib/actions/renewals/notes.ts:185",
+  "lib/actions/renewals/proposals.ts:221",
   // report-scheduling.ts: DELETED 2026-06-17 (was a duplicate, vulnerable
   // ReportSchedule CRUD module with unscoped where:{id} IDORs + a
   // client-trusted facilityId on create — the allowlist comment claimed an
@@ -387,9 +387,9 @@ const BASELINE_HITS = new Set<string>([
   // reports/schedule.ts: facility-scoped — each mutation runs a
   // findFirst({id, facilityId}) ownership check before the bare-id
   // update/delete the scanner sees (update 223, delete 254, toggle 270).
-  "lib/actions/reports/schedule.ts:226",
-  "lib/actions/reports/schedule.ts:258",
-  "lib/actions/reports/schedule.ts:275",
+  "lib/actions/reports/schedule.ts:224",
+  "lib/actions/reports/schedule.ts:256",
+  "lib/actions/reports/schedule.ts:273",
   // settings.ts: all session-derived / assertCallerCanManage member
   // lookups now carry inline `// auth-scope-scanner-skip:` comments
   // (line-number baseline removed 2026-06-19 — the Settings/Users feature

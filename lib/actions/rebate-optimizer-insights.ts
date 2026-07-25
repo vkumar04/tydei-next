@@ -18,9 +18,6 @@
  * Also exposes `flagRebateInsight` / `listRebateInsightFlags` /
  * `clearRebateInsightFlag` for the "Flag for review" follow-ups feed.
  *
- * Spec: docs/superpowers/specs/2026-04-19-rebate-optimizer-ai-design.md §4.1
- * Plan: docs/superpowers/plans/2026-04-19-rebate-optimizer-ai-implementation.md §1.3
- *
  * Note on SDK choice: this file uses the Vercel AI SDK's
  * `generateText` + `Output.object({ schema })` pattern against the
  * project-wide Claude model resolved in `lib/ai/config.ts` (string

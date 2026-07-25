@@ -1,6 +1,6 @@
 /**
  * Prospective analysis — PDF contract clause detection library
- * (spec §subsystem-7, docs/superpowers/specs/2026-04-18-prospective-analysis-rewrite.md).
+ * (spec §subsystem-7).
  *
  * Ports Charles's 25+ clause-category pattern library. Each entry maps a
  * ClauseCategory to a conservative set of regex patterns (2-5 per rule),

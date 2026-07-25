@@ -327,8 +327,7 @@ ${text.trim()}`,
 
     // Route PDF through the simpler legacy schema — the rich schema has
     // >16 union-typed fields which Anthropic's tool-input JSON Schema
-    // validator rejects. See docs/superpowers/qa/2026-04-19-contracts-sweep.md
-    // bug new-1.
+    // validator rejects.
     if (!extracted) try {
       const userContent: Array<
         | { type: "text"; text: string }

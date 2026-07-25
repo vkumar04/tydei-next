@@ -1,8 +1,6 @@
 /**
  * Alerts — priority ranking helper.
  *
- * Reference: docs/superpowers/specs/2026-04-18-alerts-rewrite.md §4.5
- *
  * Pure function: takes un-ranked alerts and scores them by severity +
  * type weight + dollar impact + age, producing a ranked list where the
  * most actionable alerts surface first.

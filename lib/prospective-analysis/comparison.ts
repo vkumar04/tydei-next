@@ -1,6 +1,5 @@
 /**
  * Prospective analysis — proposal comparison (spec §subsystem-4,
- * docs/superpowers/specs/2026-04-18-prospective-analysis-rewrite.md).
  *
  * PURE FUNCTION: takes N already-scored proposals and returns a
  * comparison matrix (best/worst per dimension, overall winner, savings

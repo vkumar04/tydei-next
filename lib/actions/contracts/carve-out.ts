@@ -13,7 +13,6 @@
  * units, and line rebate. Zero-rate / zero-spend lines omitted
  * upstream by the engine.
  *
- * Reference: `docs/superpowers/specs/2026-04-20-canonical-rebate-engine-gap-design.md`
  * track W1.Z-A.
  */
 import { prisma } from "@/lib/db"

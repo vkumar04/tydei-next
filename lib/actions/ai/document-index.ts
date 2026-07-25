@@ -3,8 +3,6 @@
 /**
  * AI agent — document indexing server action.
  *
- * Per docs/superpowers/specs/2026-04-18-ai-agent-rewrite.md subsystem 2.
- *
  * Given an uploaded ContractDocument row with extracted text (raw PDF
  * text, ideally with form-feed-delimited pages), split + normalize +
  * persist ContractDocumentPage rows + flip indexStatus: processing →
