@@ -50,13 +50,18 @@ vi.mock("@/lib/actions/auth", () => ({
 vi.mock("@/lib/email", () => ({
   sendEmail: vi.fn().mockResolvedValue(undefined),
 }))
-vi.mock("@/lib/email-templates", () => ({
-  alertNotificationEmail: () => ({ subject: "", html: "" }),
-  renewalReminderEmail: () => ({ subject: "", html: "" }),
-  weeklyDigestEmail: () => ({ subject: "", html: "" }),
-  pendingContractSubmittedEmail: () => ({ subject: "", html: "" }),
-  pendingContractDecisionEmail: () => ({ subject: "", html: "" }),
-}))
+// Builders are async now (React Email's render() awaits the server
+// renderer), so each mock must resolve rather than return.
+vi.mock("@/lib/emails/render", () => {
+  const rendered = async () => ({ subject: "", html: "", text: "" })
+  return {
+    alertNotificationEmail: rendered,
+    renewalReminderEmail: rendered,
+    weeklyDigestEmail: rendered,
+    pendingContractSubmittedEmail: rendered,
+    pendingContractDecisionEmail: rendered,
+  }
+})
 // 2026-06-09 settings audit: shouldSendEmail now reads prefs through the
 // server-internal lib/notifications/prefs helper (the settings.ts RPC is
 // session-scoped and no longer accepts foreign entity ids).

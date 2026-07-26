@@ -29,7 +29,9 @@
     "test:integration": "RUN_INTEGRATION=1 bunx vitest run integration.test --exclude '**/.claude/**' --exclude '**/.worktrees/**'",
     "test:e2e": "bunx playwright test --project=e2e-setup --project=e2e",
     "test:visual": "bunx playwright test --project=visual-setup --project=visual",
-    "test:all": "bun run test:unit && bun run test:integration && bun run test:e2e"
+    "test:all": "bun run test:unit && bun run test:integration && bun run test:e2e",
+    "email:dev": "email dev --dir emails --port 3001",
+    "email:test": "bun run scripts/send-test-emails.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.8",
@@ -40,10 +42,12 @@
     "@hookform/resolvers": "^5.4.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@react-email/components": "^1.0.12",
+    "@react-email/render": "^2.1.0",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-table": "^8.21.3",
     "ai": "^7.0.15",
-    "better-auth": "^1.6.23",
+    "better-auth": "^1.6.25",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -86,6 +90,7 @@
     "@types/react-dom": "^19.2.3",
     "oxlint": "^1.72.0",
     "postcss": "^8.5.16",
+    "react-email": "^6.9.1",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
