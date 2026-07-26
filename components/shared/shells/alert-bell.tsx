@@ -23,8 +23,16 @@ export function AlertBell({
   vendorId,
   initialCount = 0,
 }: AlertBellProps) {
+  // `admin` is neither a facility nor a vendor. This collapsed it to
+  // "facility", so an admin would call getOpenAlertCount({portalType:
+  // "facility"}) -> requireFacility() -> redirect() and get bounced off the
+  // page. It is inert today only because the admin layout happens to pass no
+  // facilityId, leaving entityId empty and the query disabled — an accident,
+  // not a guard. Make it explicit: the operator console has no alert scope.
+  // (Same root cause as the NotificationBell bug, audit 2026-07-26.)
   const portalType = role === "vendor" ? "vendor" : "facility"
   const entityId = (role === "vendor" ? vendorId : facilityId) ?? ""
+  const scopedToAnEntity = role !== "admin" && !!entityId
 
   const { data: count } = useQuery({
     queryKey: queryKeys.alerts.unreadCount(portalType, entityId),
@@ -36,7 +44,7 @@ export function AlertBell({
       }),
     refetchInterval: 30_000,
     initialData: initialCount,
-    enabled: !!entityId,
+    enabled: scopedToAnEntity,
   })
 
   const prevCountRef = useRef(initialCount)

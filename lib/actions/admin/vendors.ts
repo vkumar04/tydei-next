@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAdmin } from "@/lib/actions/auth"
+import { logAudit } from "@/lib/audit"
 import type { AdminCreateVendorInput, AdminUpdateVendorInput } from "@/lib/validators/admin"
 import { serialize } from "@/lib/serialize"
 
@@ -83,8 +84,51 @@ export async function adminUpdateVendor(id: string, input: AdminUpdateVendorInpu
 
 // ─── Delete Vendor ──────────────────────────────────────────────
 
+/**
+ * Same shape as adminDeleteFacility (audit 2026-07-26). Vendor FKs split:
+ *   RESTRICT  contract, invoice, purchase_order, pricing_file, connection,
+ *             vendor_cog_record  -> raw Prisma FK error reached the operator
+ *   SET NULL  cog_record, alert, ai_credit, file_import, product_benchmark,
+ *             vendor_name_mapping -> silently orphans COG spend, which then
+ *             stops attributing to any vendor
+ *   CASCADE   pending_contract, vendor_division
+ */
 export async function adminDeleteVendor(id: string) {
-  await requireAdmin()
+  const session = await requireAdmin()
+
+  const [contracts, cogRecords, invoices, pos] = await Promise.all([
+    prisma.contract.count({ where: { vendorId: id } }),
+    prisma.cOGRecord.count({ where: { vendorId: id } }),
+    prisma.invoice.count({ where: { vendorId: id } }),
+    prisma.purchaseOrder.count({ where: { vendorId: id } }),
+  ])
+
+  const blocking = [
+    contracts && `${contracts} contract(s)`,
+    cogRecords && `${cogRecords} COG record(s)`,
+    invoices && `${invoices} invoice(s)`,
+    pos && `${pos} purchase order(s)`,
+  ].filter(Boolean) as string[]
+
+  if (blocking.length > 0) {
+    throw new Error(
+      `This vendor still has ${blocking.join(", ")}. Deleting it would ` +
+        `orphan or destroy that data. Move or remove it first.`,
+    )
+  }
+
+  const target = await prisma.vendor.findUnique({
+    where: { id },
+    select: { name: true },
+  })
 
   await prisma.vendor.delete({ where: { id } })
+
+  await logAudit({
+    userId: session.user.id,
+    action: "vendor.deleted",
+    entityType: "vendor",
+    entityId: id,
+    metadata: { name: target?.name },
+  })
 }
