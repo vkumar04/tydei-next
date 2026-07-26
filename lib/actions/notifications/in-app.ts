@@ -13,7 +13,7 @@
  * current user. Listing is descending by createdAt with a sane cap.
  */
 import { prisma } from "@/lib/db"
-import { requireFacility, requireVendor } from "@/lib/actions/auth"
+import { requireAuth } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 
 export interface NotificationRow {
@@ -105,16 +105,31 @@ export async function markAllNotificationsRead(): Promise<{ updated: number }> {
 }
 
 /**
- * Either role works — bell appears in both portals. The two
- * `requireX()` helpers throw on cross-role mismatch so we wrap the
- * vendor attempt in a try/catch and fall back to facility.
+ * The signed-in user's id. Notifications are scoped by `userId` alone —
+ * `where: { userId }` in every query here — so no facility/vendor lookup is
+ * needed, and requiring one was actively harmful.
+ *
+ * What this replaced, and why it mattered:
+ *
+ *     try { return (await requireFacility()).user.id }
+ *     catch { return (await requireVendor()).user.id }
+ *
+ * `requireRole` signals a role mismatch with `redirect()`, and `redirect()`
+ * works by THROWING a NEXT_REDIRECT control-flow exception. So for an admin:
+ * requireFacility() threw a redirect, the `catch` SWALLOWED it, requireVendor()
+ * threw another, and that one escaped — turning every call into a 303 to
+ * `roleConfig["admin"].defaultRedirect`, i.e. /admin/dashboard.
+ *
+ * <NotificationBell> renders in every portal shell with no `enabled` guard, so
+ * this fired on every admin page load. On /admin/dashboard it redirected to
+ * itself and was invisible; on /admin/users it bounced the operator straight
+ * back to the dashboard — the reported "clicking Users goes back to the
+ * dashboard" (2026-07-26).
+ *
+ * Never wrap a `requireX()` guard in try/catch: catching NEXT_REDIRECT
+ * converts an intended navigation into whatever the fallback path does.
  */
 async function currentUserIdOrThrow(): Promise<string> {
-  try {
-    const { user } = await requireFacility()
-    return user.id
-  } catch {
-    const { user } = await requireVendor()
-    return user.id
-  }
+  const session = await requireAuth()
+  return session.user.id
 }

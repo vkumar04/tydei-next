@@ -239,18 +239,86 @@ export async function adminUpdateUser(id: string, input: AdminUpdateUserInput) {
 
 // ─── Delete User ────────────────────────────────────────────────
 
+/**
+ * Platform-admin deletion is a one-way door with no recovery path, so it
+ * carries two guards the org-level equivalent already had
+ * (`_hookBeforeRemoveMember` in lib/auth-server.ts) but this did not:
+ *
+ *  - You cannot delete yourself. The session survives momentarily, then every
+ *    subsequent request 302s to /login with no way back in.
+ *  - You cannot remove the last platform admin. `/admin` is gated on
+ *    `UserRole: admin`, so zero admins means the operator console is
+ *    permanently unreachable — there is no self-service way to mint a new one.
+ *
+ * That second case is not hypothetical: production currently has exactly ONE
+ * admin, and it is the seeded demo account that launch hardening says to
+ * delete. Doing so without this guard would brick the console (audit
+ * 2026-07-26).
+ */
+async function assertUserIsDeletable(
+  ids: string[],
+  callerId: string,
+): Promise<void> {
+  if (ids.includes(callerId)) {
+    throw new Error("You cannot delete your own account.")
+  }
+
+  const targets = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, role: true },
+  })
+  const removingAdmins = targets.filter((u) => u.role === "admin").length
+  if (removingAdmins === 0) return
+
+  const totalAdmins = await prisma.user.count({ where: { role: "admin" } })
+  if (totalAdmins - removingAdmins < 1) {
+    throw new Error(
+      "This would remove the last platform admin and lock everyone out of " +
+        "the admin console. Create another admin first.",
+    )
+  }
+}
+
 export async function adminDeleteUser(id: string) {
-  await requireAdmin()
+  const session = await requireAdmin()
+  await assertUserIsDeletable([id], session.user.id)
+
+  const target = await prisma.user.findUnique({
+    where: { id },
+    select: { email: true, role: true },
+  })
 
   await prisma.user.delete({ where: { id } })
+
+  // Deletion was the only admin mutation with no audit trail — the most
+  // destructive one, and the least recoverable.
+  await logAudit({
+    userId: session.user.id,
+    action: "user.deleted",
+    entityType: "user",
+    entityId: id,
+    metadata: { email: target?.email, role: target?.role },
+  })
 }
 
 // ─── Bulk Delete Users ──────────────────────────────────────────
 
 export async function adminBulkDeleteUsers(ids: string[]) {
-  await requireAdmin()
+  const session = await requireAdmin()
+  // Same guards as the single delete. A Server Action is reachable by anyone
+  // who can POST to it, so "the UI doesn't expose bulk delete" is not a
+  // control — the check has to live here.
+  await assertUserIsDeletable(ids, session.user.id)
 
   const result = await prisma.user.deleteMany({ where: { id: { in: ids } } })
+
+  await logAudit({
+    userId: session.user.id,
+    action: "user.bulk_deleted",
+    entityType: "user",
+    entityId: ids.join(","),
+    metadata: { count: result.count, ids },
+  })
 
   return { deleted: result.count }
 }

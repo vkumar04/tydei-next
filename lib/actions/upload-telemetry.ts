@@ -70,9 +70,10 @@ export async function logUploadHeaderEvent(
       },
     })
   } catch (err) {
-    // Telemetry must never break an upload — log server-side and move on
-    // (also swallows requireAuth's NEXT_REDIRECT for unauthenticated
-    // callers; an anonymous header event is just dropped).
+    // redirect-swallow-skip: telemetry must never break an upload. This
+    // deliberately swallows requireAuth's NEXT_REDIRECT for unauthenticated
+    // callers — an anonymous header event is simply dropped, and bouncing a
+    // visitor to /login because a telemetry write failed would be far worse.
     console.error("[upload-telemetry] logUploadHeaderEvent failed", err)
   }
 }

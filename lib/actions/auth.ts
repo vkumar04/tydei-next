@@ -8,8 +8,43 @@ import { rateLimit } from "@/lib/rate-limit"
 import { clientIp } from "@/lib/actions/request-ip"
 import type { UserRole } from "@/lib/generated/prisma/client"
 import { roleConfig } from "@/lib/constants"
+// Not declared here: this file is "use server", where every export must be an
+// async function (see lib/auth/access-denied.ts).
+import { AccessDeniedError } from "@/lib/auth/access-denied"
 
 // ─── Session Guards ──────────────────────────────────────────────
+
+/**
+ * Is this a page/layout render, or a Server Action invocation?
+ *
+ * Denial has to mean different things in the two cases:
+ *
+ *   render  -> redirect(). Bouncing someone off a page they may not see is
+ *              exactly right, and it is how every portal boundary works.
+ *   action  -> throw. A Server Action is a data call. Per the Next docs a
+ *              redirect from one "navigates the router", so a background
+ *              read that happens to fail its guard YANKS THE USER OFF THE
+ *              PAGE — seconds after it rendered, with no explanation. That
+ *              is precisely how the notification-bell bug presented: an
+ *              operator clicked Users, landed, and got thrown back to the
+ *              dashboard by a poll they never saw.
+ *
+ * Detection uses the `Next-Action` header that the client dispatcher sets on
+ * every Server Action POST. Verified empirically against a running dev
+ * server: present on 11/11 action calls, absent on 17/17 page renders.
+ *
+ * `forbidden()` from next/navigation is the framework's own answer here, but
+ * it needs `experimental.authInterrupts` and the Next docs say plainly it is
+ * "not recommended for production" — not a trade worth making on the auth
+ * path of a PHI application. Revisit when it stabilises.
+ *
+ * SECURITY NOTE: this only chooses the SHAPE of a denial. Access is refused
+ * either way, so a wrong answer here can never grant access — the worst case
+ * is an error where a redirect would have been nicer, or vice versa.
+ */
+async function denyingARender(): Promise<boolean> {
+  return !(await headers()).has("next-action")
+}
 
 export async function requireAuth() {
   const session = await auth.api.getSession({
@@ -17,7 +52,8 @@ export async function requireAuth() {
   })
 
   if (!session) {
-    redirect("/login")
+    if (await denyingARender()) redirect("/login")
+    throw new AccessDeniedError("Your session has expired. Please sign in again.")
   }
 
   return session
@@ -33,7 +69,11 @@ export async function requireRole(role: UserRole) {
 
   if (!user || user.role !== role) {
     const userRole = user?.role ?? "facility"
-    redirect(roleConfig[userRole].defaultRedirect)
+    if (await denyingARender()) redirect(roleConfig[userRole].defaultRedirect)
+    throw new AccessDeniedError(
+      "You don't have access to this area. If you think that's wrong, sign " +
+        "out and back in.",
+    )
   }
 
   return session
@@ -53,7 +93,12 @@ export async function requireFacility() {
 
   const facility = member?.organization?.facility
   if (!facility) {
-    redirect("/login")
+    // Authenticated with the right role but no facility linked — a data
+    // problem, not a credentials one. Same render/action split as above.
+    if (await denyingARender()) redirect("/login")
+    throw new AccessDeniedError(
+      "Your account isn't linked to a facility yet. Contact your administrator.",
+    )
   }
 
   return { ...session, facility }
@@ -73,7 +118,12 @@ export async function requireVendor() {
 
   const vendor = member?.organization?.vendor
   if (!vendor) {
-    redirect("/login")
+    // Authenticated with the right role but no vendor linked — a data
+    // problem, not a credentials one. Same render/action split as above.
+    if (await denyingARender()) redirect("/login")
+    throw new AccessDeniedError(
+      "Your account isn't linked to a vendor yet. Contact your administrator.",
+    )
   }
 
   return { ...session, vendor }
