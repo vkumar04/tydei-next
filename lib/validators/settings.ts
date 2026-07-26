@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { emailSchema, optionalEmailSchema } from "@/lib/validators/email"
 import { FacilityTypeSchema } from "@/lib/validators"
 
 // ─── Facility Profile ────────────────────────────────────────────
@@ -11,7 +12,7 @@ export const updateFacilityProfileSchema = z.object({
   state: z.string().optional(),
   zip: z.string().optional(),
   beds: z.number().int().min(0).optional(),
-  contactEmail: z.email().optional(),
+  contactEmail: optionalEmailSchema(),
   contactPhone: z.string().optional(),
 })
 
@@ -24,7 +25,7 @@ export const updateVendorProfileSchema = z.object({
   displayName: z.string().optional(),
   logoUrl: z.url().optional().or(z.literal("")),
   contactName: z.string().optional(),
-  contactEmail: z.email().optional().or(z.literal("")),
+  contactEmail: optionalEmailSchema(),
   contactPhone: z.string().optional(),
   website: z.url().optional().or(z.literal("")),
   address: z.string().optional(),
@@ -52,7 +53,7 @@ export type NotificationPreferences = z.infer<typeof notificationPreferencesSche
 // ─── Invite Team Member ──────────────────────────────────────────
 
 export const inviteTeamMemberSchema = z.object({
-  email: z.email("Valid email is required"),
+  email: emailSchema("Valid email is required"),
   role: z.string().min(1, "Role is required"),
 })
 
