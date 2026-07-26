@@ -47,8 +47,15 @@ export type AdminUpdateVendorInput = z.infer<typeof adminUpdateVendorSchema>
 export const adminCreateUserSchema = z.object({
   name: z.string().min(2, "Name is required"),
   email: emailSchema("Invalid email"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
   role: UserRoleSchema,
+  // Access step. Which ids are meaningful depends on `role`: facility users
+  // get facilityIds, vendor users vendorIds, platform admins neither.
+  facilityIds: z.array(z.string()).default([]),
+  vendorIds: z.array(z.string()).default([]),
+  // NOTE: `password` was REMOVED 2026-07-26. An admin setting someone else's
+  // password means communicating it out of band and knowing it afterwards.
+  // The account is created with no credential and the invite email carries a
+  // set-password link instead.
   // NOTE: `organizationId` was removed 2026-07-26 — the User model has no
   // such column (org membership lives on Member), so passing it through to
   // prisma.user.create would have thrown. The admin form never sent it.
