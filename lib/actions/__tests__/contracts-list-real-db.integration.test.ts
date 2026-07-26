@@ -30,17 +30,27 @@ const d = skip ? describe.skip : describe
 
 let ctx: Awaited<ReturnType<typeof setupTestDb>>
 let prisma: PrismaClient
+// Module-scoped so afterAll can close it. The pool is created HERE, not by
+// Prisma, so `prisma.$disconnect()` does not end it — it only releases
+// Prisma's handle. Leaving the pool open meant its idle connections were
+// still attached when the container stopped, and Postgres killed them with
+// `57P01: terminating connection due to administrator command`. Vitest
+// surfaced that as an unhandled error and exited 1 even though all tests
+// passed.
+let pool: Pool | undefined
 
 d("getContracts trailing-12mo cascade (real Postgres)", () => {
   beforeAll(async () => {
     ctx = await setupTestDb()
-    const pool = new Pool({ connectionString: ctx.databaseUrl })
+    pool = new Pool({ connectionString: ctx.databaseUrl })
     const adapter = new PrismaPg(pool)
     prisma = new PrismaClient({ adapter })
   }, 90_000)
 
   afterAll(async () => {
+    // Order matters: release Prisma, drain the pool, THEN stop the container.
     await prisma?.$disconnect()
+    await pool?.end()
     if (ctx) await teardownTestDb(ctx)
   })
 
