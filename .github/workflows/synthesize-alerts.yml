@@ -1,0 +1,78 @@
+name: Synthesize alerts
+
+# Time-driven alerts (expiring_contract, rebate_due, vendor_inactive) only
+# exist if something asks for them on a clock. Nothing did: production's
+# newest alert was five weeks old and /api/cron/synthesize-alerts had no
+# caller, exactly the failure its own docstring warns about.
+#
+# Railway cron can't do this — a cron schedule REPLACES a service's normal
+# run mode, so it cannot run alongside the web service (a separate
+# short-lived service would work, at the cost of another service). GitHub
+# Actions is what the route was written to expect.
+#
+# The endpoint is idempotent: three consecutive production runs created 0
+# alerts and left the count unchanged, so a missed or doubled tick is
+# harmless.
+#
+# Two things to know about GitHub's scheduler:
+#   - schedules are best-effort and can lag under load, sometimes by tens of
+#     minutes. Fine here; nothing is minute-sensitive.
+#   - scheduled workflows are DISABLED automatically after 60 days with no
+#     repository activity. If alerts ever go quiet again, check that first.
+
+on:
+  schedule:
+    # Hourly, on the hour (UTC). The run takes ~1s.
+    - cron: "0 * * * *"
+  # Lets you trigger a run by hand from the Actions tab.
+  workflow_dispatch:
+
+# Never let two runs overlap; skip the new one instead of queueing.
+concurrency:
+  group: synthesize-alerts
+  cancel-in-progress: false
+
+jobs:
+  synthesize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call the alert synthesizer
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://tydei.com' }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "::error::CRON_SECRET repository secret is not set."
+            echo "The route returns 404 when the server has no secret and 401"
+            echo "when the caller's token is wrong — either way alerts stop"
+            echo "refreshing silently. Set it under Settings > Secrets."
+            exit 1
+          fi
+
+          # GET, not POST — the route exports GET only.
+          echo "Calling ${APP_URL}/api/cron/synthesize-alerts"
+          http_code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            --max-time 240 --retry 2 --retry-delay 10 --retry-all-errors \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/cron/synthesize-alerts")
+
+          echo "HTTP ${http_code}"
+          cat /tmp/out.json
+          echo
+
+          if [ "${http_code}" != "200" ]; then
+            echo "::error::Alert synthesis failed with HTTP ${http_code}"
+            exit 1
+          fi
+
+          # The route reports per-facility failures in its body rather than a
+          # non-200, so a green tick alone would hide a partial outage.
+          if grep -q '"failures":\[\]' /tmp/out.json; then
+            echo "All facilities synthesized cleanly."
+          else
+            echo "::error::Some facilities failed to synthesize — see the body above."
+            exit 1
+          fi
