@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireAdmin } from "@/lib/actions/auth"
 import { logAudit } from "@/lib/audit"
 import type { AdminCreateVendorInput, AdminUpdateVendorInput } from "@/lib/validators/admin"
@@ -19,6 +20,8 @@ export interface AdminVendorRow {
   contractCount: number
   repCount: number
   createdAt: string
+  /** False when the tenant has no Organization, so it cannot have users. */
+  canHaveUsers: boolean
 }
 
 // ─── List Vendors ───────────────────────────────────────────────
@@ -52,6 +55,10 @@ export async function adminGetVendors(input: {
       id: v.id,
       name: v.name,
       code: v.code,
+      // A tenant with no Organization cannot have Members, so it cannot have
+      // users. Surfaced so the Access picker can disable it with a reason
+      // rather than failing at submit (audit 2026-07-26).
+      canHaveUsers: v.organizationId !== null,
       contactName: v.contactName,
       contactEmail: v.contactEmail,
       status: v.status,
@@ -66,10 +73,62 @@ export async function adminGetVendors(input: {
 
 // ─── Create Vendor ──────────────────────────────────────────────
 
-export async function adminCreateVendor(input: AdminCreateVendorInput) {
-  await requireAdmin()
+/**
+ * Every tenant needs an Organization, because that is what `Member` links a
+ * user to. Creating a Facility or Vendor without one produces a tenant that
+ * can never have a single user — silently, until someone tries to invite one.
+ *
+ * Production shows how easily that happens: 1 of 2 facilities and 199 of 200
+ * vendors had no organization (audit 2026-07-26). Most of those vendors are
+ * catalog rows rather than tenants, which is fine — but the ones created
+ * through this UI are meant to be real, and were dead on arrival.
+ *
+ * Slug must be unique; derive from the name and disambiguate on collision.
+ */
+async function provisionOrganization(
+  tx: Prisma.TransactionClient,
+  name: string,
+): Promise<string> {
+  const base =
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 40) || "org"
 
-  const vendor = await prisma.vendor.create({ data: input })
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const slug = attempt === 0 ? base : `${base}-${attempt + 1}`
+    const clash = await tx.organization.findUnique({
+      where: { slug },
+      select: { id: true },
+    })
+    if (clash) continue
+    const org = await tx.organization.create({ data: { name, slug } })
+    return org.id
+  }
+  throw new Error(
+    `Could not derive a unique organization slug from "${name}". Rename it slightly.`,
+  )
+}
+
+export async function adminCreateVendor(input: AdminCreateVendorInput) {
+  const session = await requireAdmin()
+
+  // Organization + tenant row land together — a tenant with no organization
+  // cannot have users at all (see provisionOrganization).
+  const vendor = await prisma.$transaction(async (tx) => {
+    const organizationId = await provisionOrganization(tx, input.name)
+    return tx.vendor.create({ data: { ...input, organizationId } })
+  })
+
+  await logAudit({
+    userId: session.user.id,
+    action: "vendor.created",
+    entityType: "vendor",
+    entityId: vendor.id,
+    metadata: { name: vendor.name },
+  })
+
   return serialize(vendor)
 }
 

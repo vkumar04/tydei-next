@@ -3,17 +3,17 @@
 import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Plus, Users, CheckCircle, Building2, Truck, Mail, XCircle, Loader2 } from "lucide-react"
+import { Plus, Users, CheckCircle, Building2, Truck, Loader2 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { FormDialog } from "@/components/shared/forms/form-dialog"
+import { Stepper } from "@/components/shared/forms/stepper"
 import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -37,29 +37,13 @@ import {
   adminCreateUser,
   adminUpdateUser,
   adminDeleteUser,
+  adminSetUserActive,
   type AdminUserRow,
 } from "@/lib/actions/admin/users"
 import { adminGetFacilities } from "@/lib/actions/admin/facilities"
 import { adminGetVendors } from "@/lib/actions/admin/vendors"
 import type { UserRole } from "@/lib/generated/prisma/client"
 import { queryKeys } from "@/lib/query-keys"
-
-// ─── Notification preference keys ───────────────────────────────
-const NOTIFICATION_PREFS = [
-  { key: "contractAlerts", label: "Contract Alerts" },
-  { key: "rebateNotifications", label: "Rebate Notifications" },
-  { key: "complianceAlerts", label: "Compliance Alerts" },
-  { key: "systemUpdates", label: "System Updates" },
-] as const
-
-type NotificationPrefs = Record<string, boolean>
-
-const defaultNotificationPrefs: NotificationPrefs = {
-  contractAlerts: true,
-  rebateNotifications: true,
-  complianceAlerts: true,
-  systemUpdates: false,
-}
 
 export function UserTable() {
   const qc = useQueryClient()
@@ -72,13 +56,10 @@ export function UserTable() {
 
   // ─── Add dialog state ───────────────────────────────────────────
   const [addOpen, setAddOpen] = useState(false)
-  const [addTab, setAddTab] = useState("basic")
+  const [addStep, setAddStep] = useState(1)
   const [addFormData, setAddFormData] = useState<Record<string, string>>({})
   const [selectedFacilities, setSelectedFacilities] = useState<string[]>([])
   const [selectedVendors, setSelectedVendors] = useState<string[]>([])
-  const [notificationEmails, setNotificationEmails] = useState<string[]>([])
-  const [newNotificationEmail, setNewNotificationEmail] = useState("")
-  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>(defaultNotificationPrefs)
 
   const filters =
     roleFilter === "all"
@@ -112,7 +93,7 @@ export function UserTable() {
 
   const createMut = useMutation({
     mutationFn: adminCreateUser,
-    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.usersBase }); resetAddForm(); toast.success("User created") },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.usersBase }); resetAddForm(); toast.success("User created — invite sent") },
     onError: onMutationError("create"),
   })
 
@@ -122,16 +103,47 @@ export function UserTable() {
     onError: onMutationError("update"),
   })
 
+  const toggleActiveMut = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      adminSetUserActive(id, active),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.usersBase })
+      toast.success(v.active ? "User reactivated" : "User deactivated — sessions ended")
+    },
+    onError: onMutationError("update"),
+  })
+
   const deleteMut = useMutation({
     mutationFn: adminDeleteUser,
     onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.usersBase }); setDeleting(null); toast.success("User deleted") },
     onError: onMutationError("delete"),
   })
 
+
+  // ─── Add-user stepper ───────────────────────────────────────────
+  const addRole = (addFormData.role ?? "facility") as UserRole
+  const isVendorRole = addRole === "vendor"
+  /** Platform admins aren't tenant-scoped, so there is nothing to assign. */
+  const needsAccessStep = addRole !== "admin"
+  const facilityOptions = facilityData?.facilities ?? []
+  const vendorOptions = vendorData?.vendors ?? []
+  const selectedAccessIds = isVendorRole ? selectedVendors : selectedFacilities
+
+  const step1Complete =
+    (addFormData.name ?? "").trim().length >= 2 &&
+    /.+@.+\..+/.test(addFormData.email ?? "")
+  // A scoped user with no organization can't load a portal at all, so the
+  // access step is required for them — but not for admins.
+  const canSubmit = step1Complete && (!needsAccessStep || selectedAccessIds.length > 0)
+
+  const STEP_LABELS = ["Details", needsAccessStep ? "Access" : "Review"]
+
   // ─── Columns ────────────────────────────────────────────────────
   const columns = getUserColumns(
     (u) => { setEditing(u); setEditFormData({ name: u.name, email: u.email, role: u.role }) },
-    (u) => setDeleting(u)
+    (u) => setDeleting(u),
+    (u) =>
+      toggleActiveMut.mutate({ id: u.id, active: !!u.deactivatedAt }),
   )
 
   // ─── Handlers ───────────────────────────────────────────────────
@@ -148,21 +160,21 @@ export function UserTable() {
       await createMut.mutateAsync({
         name: addFormData.name ?? "",
         email: addFormData.email ?? "",
-        password: addFormData.password ?? "",
-        role: (addFormData.role ?? "facility") as UserRole,
+        role: addRole,
+        // Previously collected and thrown away — these now actually grant
+        // access (Member + FacilityAssignment rows).
+        facilityIds: isVendorRole || addRole === "admin" ? [] : selectedFacilities,
+        vendorIds: isVendorRole ? selectedVendors : [],
       })
     } catch { /* surfaced via onError toast */ }
   }
 
   const resetAddForm = () => {
     setAddOpen(false)
-    setAddTab("basic")
+    setAddStep(1)
     setAddFormData({})
     setSelectedFacilities([])
     setSelectedVendors([])
-    setNotificationEmails([])
-    setNewNotificationEmail("")
-    setNotificationPrefs(defaultNotificationPrefs)
   }
 
   const toggleFacility = (id: string) => {
@@ -177,33 +189,15 @@ export function UserTable() {
     )
   }
 
-  const addNotificationEmail = () => {
-    const email = newNotificationEmail.trim().toLowerCase()
-    if (!email || !email.includes("@")) {
-      toast.error("Please enter a valid email address")
-      return
-    }
-    if (notificationEmails.includes(email)) {
-      toast.error("This email is already added")
-      return
-    }
-    setNotificationEmails((prev) => [...prev, email])
-    setNewNotificationEmail("")
-  }
 
-  const removeNotificationEmail = (email: string) => {
-    setNotificationEmails((prev) => prev.filter((e) => e !== email))
-  }
 
   // ─── Derived ────────────────────────────────────────────────────
   const users = data?.users ?? []
-  const activeUsers = users.filter((u) => u.role !== "admin")
+  // Was `u.role !== "admin"`, i.e. it counted non-admins and called them
+  // "Active". Now that deactivation exists the label can mean what it says.
+  const activeUsers = users.filter((u) => !u.deactivatedAt)
   const facilityUsers = users.filter((u) => u.role === "facility")
   const vendorUsers = users.filter((u) => u.role === "vendor")
-  const facilities = facilityData?.facilities ?? []
-  const vendors = vendorData?.vendors ?? []
-
-  const userType = addFormData.role === "vendor" ? "vendor" : "facility"
 
   return (
     <>
@@ -286,26 +280,36 @@ export function UserTable() {
         }
       />
 
-      {/* ─── Add User Dialog (multi-tab) ─────────────────────────── */}
+      {/* ─── Add User (2-step stepper) ───────────────────────────── */}
+      {/*
+        Was a 3-tab form with a password field. Two problems it had:
+          - the admin chose someone else's password, which then had to be
+            communicated out of band and stayed known to the admin;
+          - Access Management and Notifications collected input that
+            handleAddSubmit never sent, so ticking facilities did nothing.
+        Now: two steps that BOTH persist, and the person sets their own
+        password from the invite link. Notification prefs are organization-
+        scoped (Organization.metadata), so they stay in Settings rather than
+        pretending to be a per-user choice here.
+      */}
       <Dialog open={addOpen} onOpenChange={(open) => { if (!open) resetAddForm() }}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
             <DialogDescription>
-              Create a new user account and assign organization access
+              {addStep === 1
+                ? "Who are they, and what kind of account is this?"
+                : needsAccessStep
+                  ? "Choose which organizations they can access."
+                  : "Review and send the invite."}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-auto">
-            <Tabs value={addTab} onValueChange={setAddTab}>
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                <TabsTrigger value="access">Access Management</TabsTrigger>
-                <TabsTrigger value="notifications">Notifications</TabsTrigger>
-              </TabsList>
+          <Stepper current={addStep} steps={STEP_LABELS} />
 
-              {/* ── Tab 1: Basic Info ────────────────────────────── */}
-              <TabsContent value="basic" className="mt-4 space-y-4">
+          <div className="flex-1 overflow-auto px-1">
+            {addStep === 1 && (
+              <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Full Name <span className="text-destructive">*</span></Label>
@@ -325,195 +329,112 @@ export function UserTable() {
                     />
                   </div>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Role <span className="text-destructive">*</span></Label>
+                  <Select
+                    value={addFormData.role ?? "facility"}
+                    onValueChange={(v) => {
+                      // Switching role invalidates the other side's picks.
+                      setAddFormData({ ...addFormData, role: v })
+                      setSelectedFacilities([])
+                      setSelectedVendors([])
+                    }}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="facility">Facility</SelectItem>
+                      <SelectItem value="vendor">Vendor</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="rounded-lg border border-border bg-muted/50 p-3 text-sm text-muted-foreground">
+                  No password here — we email an invite and they choose their
+                  own. The link is valid for 7 days.
+                </p>
+              </div>
+            )}
+
+            {addStep === 2 && needsAccessStep && (
+              <div className="space-y-3">
+                <Label>
+                  {isVendorRole ? "Vendors" : "Facilities"}{" "}
+                  <span className="text-destructive">*</span>
+                </Label>
+                <ScrollArea className="h-64 rounded-md border p-3">
                   <div className="space-y-2">
-                    <Label>Password <span className="text-destructive">*</span></Label>
-                    <Input
-                      type="password"
-                      placeholder="Min. 8 characters"
-                      value={addFormData.password ?? ""}
-                      onChange={(e) => setAddFormData({ ...addFormData, password: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Role <span className="text-destructive">*</span></Label>
-                    <Select
-                      value={addFormData.role ?? "facility"}
-                      onValueChange={(v) => setAddFormData({ ...addFormData, role: v })}
-                    >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="facility">Facility</SelectItem>
-                        <SelectItem value="vendor">Vendor</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </TabsContent>
-
-              {/* ── Tab 2: Access Management ─────────────────────── */}
-              <TabsContent value="access" className="mt-4 space-y-4">
-                {userType === "facility" ? (
-                  <div className="space-y-3">
-                    <Label className="flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Facility Access
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Select facilities this user can access
-                    </p>
-                    <ScrollArea className="h-[280px] rounded-md border p-3">
-                      <div className="space-y-2">
-                        {facilities.length === 0 && (
-                          <p className="text-sm text-muted-foreground py-4 text-center">No facilities found</p>
-                        )}
-                        {facilities.map((f) => (
-                          <div key={f.id} className="flex items-center gap-3">
-                            <Checkbox
-                              id={`fac-${f.id}`}
-                              checked={selectedFacilities.includes(f.id)}
-                              onCheckedChange={() => toggleFacility(f.id)}
-                            />
-                            <label htmlFor={`fac-${f.id}`} className="flex-1 cursor-pointer">
-                              <div className="font-medium text-sm">{f.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {[f.city, f.state].filter(Boolean).join(", ") || f.type}
-                                {f.healthSystemName && ` - ${f.healthSystemName}`}
-                              </div>
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                    {selectedFacilities.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        {selectedFacilities.length} facilit{selectedFacilities.length === 1 ? "y" : "ies"} selected
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <Label className="flex items-center gap-2">
-                      <Truck className="h-4 w-4" />
-                      Vendor Access
-                    </Label>
-                    <p className="text-xs text-muted-foreground">
-                      Select vendor companies this user can access
-                    </p>
-                    <ScrollArea className="h-[280px] rounded-md border p-3">
-                      <div className="space-y-2">
-                        {vendors.length === 0 && (
-                          <p className="text-sm text-muted-foreground py-4 text-center">No vendors found</p>
-                        )}
-                        {vendors.map((v) => (
-                          <div key={v.id} className="flex items-center gap-3">
-                            <Checkbox
-                              id={`ven-${v.id}`}
-                              checked={selectedVendors.includes(v.id)}
-                              onCheckedChange={() => toggleVendor(v.id)}
-                            />
-                            <label htmlFor={`ven-${v.id}`} className="flex-1 cursor-pointer">
-                              <div className="font-medium text-sm">{v.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {v.code ? `${v.code} - ` : ""}{v.tier} tier - {v.contractCount} contracts
-                              </div>
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                    {selectedVendors.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        {selectedVendors.length} vendor{selectedVendors.length === 1 ? "" : "s"} selected
-                      </p>
-                    )}
-                  </div>
-                )}
-              </TabsContent>
-
-              {/* ── Tab 3: Notification Settings ─────────────────── */}
-              <TabsContent value="notifications" className="mt-4 space-y-4">
-                <div>
-                  <Label className="flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    Notification Settings
-                  </Label>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Configure email addresses and notification preferences for this user
-                  </p>
-                </div>
-
-                {/* Notification Emails */}
-                <div className="space-y-3">
-                  <Label className="text-sm">Notification Emails</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Add additional email addresses to receive notifications (e.g., team inboxes, assistants)
-                  </p>
-                  <div className="flex gap-2">
-                    <Input
-                      type="email"
-                      placeholder="Enter email address"
-                      value={newNotificationEmail}
-                      onChange={(e) => setNewNotificationEmail(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addNotificationEmail() } }}
-                      className="flex-1"
-                    />
-                    <Button type="button" variant="outline" onClick={addNotificationEmail}>
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  {notificationEmails.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {notificationEmails.map((email) => (
-                        <Badge key={email} variant="secondary" className="gap-1 pl-2">
-                          <Mail className="h-3 w-3" />
-                          {email}
-                          <button
-                            type="button"
-                            onClick={() => removeNotificationEmail(email)}
-                            className="ml-1 hover:bg-destructive/20 rounded p-0.5"
-                          >
-                            <XCircle className="h-3 w-3" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Notification Preferences */}
-                <div className="space-y-3">
-                  <Label className="text-sm">Notification Types</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    {NOTIFICATION_PREFS.map(({ key, label }) => (
-                      <div key={key} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`notif-${key}`}
-                          checked={notificationPrefs[key] ?? false}
-                          onCheckedChange={(checked) =>
-                            setNotificationPrefs((prev) => ({ ...prev, [key]: !!checked }))
+                    {(isVendorRole ? vendorOptions : facilityOptions).map((o) => {
+                      // Without an Organization there is nothing for a Member
+                      // row to point at, so the account could never sign in.
+                      // Disable with the reason visible rather than hiding the
+                      // entry — an admin hunting for a name they can see in
+                      // the Vendors list would just think it was missing.
+                      const selectable = o.canHaveUsers
+                      return (
+                        <label
+                          key={o.id}
+                          className={
+                            selectable
+                              ? "flex cursor-pointer items-center gap-2 rounded p-1 hover:bg-muted"
+                              : "flex items-center gap-2 rounded p-1 opacity-60"
                           }
-                        />
-                        <label htmlFor={`notif-${key}`} className="text-sm cursor-pointer">
-                          {label}
+                        >
+                          <Checkbox
+                            disabled={!selectable}
+                            checked={(isVendorRole ? selectedVendors : selectedFacilities).includes(o.id)}
+                            onCheckedChange={() =>
+                              isVendorRole ? toggleVendor(o.id) : toggleFacility(o.id)
+                            }
+                          />
+                          <span className="text-sm">{o.name}</span>
+                          {!selectable && (
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              no organization yet
+                            </span>
+                          )}
                         </label>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
+                </ScrollArea>
+                <p className="text-xs text-muted-foreground">
+                  {selectedAccessIds.length} selected. The first grants
+                  organization membership; any others add scoped access.
+                </p>
+              </div>
+            )}
+
+            {addStep === 2 && !needsAccessStep && (
+              <div className="space-y-3 text-sm">
+                <p className="text-muted-foreground">
+                  Platform admins aren&apos;t scoped to a facility or vendor —
+                  they see every tenant, so there is nothing to assign.
+                </p>
+                <div className="rounded-lg border border-border bg-muted/50 p-3">
+                  <p><span className="text-muted-foreground">Name:</span> {addFormData.name}</p>
+                  <p><span className="text-muted-foreground">Email:</span> {addFormData.email}</p>
+                  <p><span className="text-muted-foreground">Role:</span> Admin</p>
                 </div>
-              </TabsContent>
-            </Tabs>
+              </div>
+            )}
           </div>
 
-          <DialogFooter className="border-t pt-4">
-            <Button variant="outline" onClick={resetAddForm}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddSubmit} disabled={createMut.isPending}>
-              {createMut.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Create User
-            </Button>
+          <DialogFooter className="gap-2">
+            {addStep === 1 ? (
+              <Button variant="outline" onClick={resetAddForm}>Cancel</Button>
+            ) : (
+              <Button variant="outline" onClick={() => setAddStep(1)}>Back</Button>
+            )}
+            {addStep === 1 ? (
+              <Button onClick={() => setAddStep(2)} disabled={!step1Complete}>
+                Next
+              </Button>
+            ) : (
+              <Button onClick={handleAddSubmit} disabled={createMut.isPending || !canSubmit}>
+                {createMut.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+                Create user & send invite
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

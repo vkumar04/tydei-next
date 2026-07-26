@@ -26,6 +26,17 @@ const FIXTURES: { name: string; build: () => Promise<RenderedEmail> }[] = [
       }),
   },
   {
+    name: "account-invite",
+    build: () =>
+      E.accountInviteEmail({
+        url: "https://tydei.com/reset-password?token=demo&invite=1",
+        userName: "Vick",
+        invitedByName: "Admin Demo",
+        roleLabel: "Facility",
+        organizations: ["Lighthouse Surgical Center", "Summit General Hospital"],
+      }),
+  },
+  {
     name: "verify-email",
     build: () =>
       E.verifyEmailEmail({

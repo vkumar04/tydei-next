@@ -1,6 +1,14 @@
 import { render } from "@react-email/render"
 import { createElement, type ReactElement } from "react"
 
+import AccountInvite, {
+  subject as accountInviteSubject,
+  type AccountInviteProps,
+} from "@/emails/account-invite"
+import AdminEmailChanged, {
+  subject as adminEmailChangedSubject,
+  type AdminEmailChangedProps,
+} from "@/emails/admin-email-changed"
 import AlertNotification, {
   subject as alertSubject,
   type AlertNotificationProps,
@@ -108,6 +116,14 @@ export function verifyEmailEmail(props: VerifyEmailProps) {
 
 export function contactFormEmail(props: ContactFormProps) {
   return build(createElement(ContactForm, props), contactSubject(props))
+}
+
+export function accountInviteEmail(props: AccountInviteProps) {
+  return build(createElement(AccountInvite, props), accountInviteSubject)
+}
+
+export function adminEmailChangedEmail(props: AdminEmailChangedProps) {
+  return build(createElement(AdminEmailChanged, props), adminEmailChangedSubject)
 }
 
 export function changeEmailConfirmationEmail(props: ChangeEmailConfirmationProps) {

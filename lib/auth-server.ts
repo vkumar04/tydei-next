@@ -210,6 +210,38 @@ export const auth = betterAuth({
       })
     },
   },
+  /**
+   * Deactivated accounts cannot start a session.
+   *
+   * Hooked at SESSION creation rather than in the credential sign-in path, so
+   * it covers every provider — anything that would mint a session for this
+   * user is refused, including flows added later. Existing sessions are
+   * revoked at the moment of deactivation (adminSetUserActive); this stops
+   * new ones.
+   *
+   * Deactivation exists because hard-deleting a user is both blocked and
+   * wrong here: audit_log.userId is RESTRICT, and the actor behind a
+   * financial/PHI audit trail has to stay resolvable.
+   */
+  databaseHooks: {
+    session: {
+      create: {
+        before: async (session) => {
+          const user = await prisma.user.findUnique({
+            where: { id: session.userId },
+            select: { deactivatedAt: true },
+          })
+          if (user?.deactivatedAt) {
+            throw new APIError("FORBIDDEN", {
+              message:
+                "This account has been deactivated. Contact your administrator.",
+            })
+          }
+          return { data: session }
+        },
+      },
+    },
+  },
   user: {
     /**
      * Email change, gated behind BOTH addresses.

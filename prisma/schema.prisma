@@ -367,6 +367,12 @@ model User {
   image         String?
   role          UserRole @default(facility)
   lastLoginAt   DateTime?
+  // Offboarding without destroying provenance. A user who has performed
+  // audited actions must not be hard-deleted: audit_log.userId is RESTRICT,
+  // so the delete throws, and losing the actor behind a financial/PHI audit
+  // trail is the opposite of what this system is for. Deactivating blocks
+  // sign-in and revokes live sessions while leaving history intact.
+  deactivatedAt DateTime?
   // Surfaced via the @better-auth/stripe plugin. Lets the plugin
   // join the Stripe customer when reading user state (e.g. inside
   // findUserByEmail) so the experimental.joins fast path doesn't
