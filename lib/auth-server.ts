@@ -23,6 +23,20 @@ const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
   : null
 
+/** From-address for account/transactional mail (reset, verify, invite). */
+const AUTH_FROM = "TYDEi <noreply@tydei.com>"
+
+/**
+ * Human label for an org role. Vendor roles are stored colon-concatenated
+ * ("admin:owner") — see `inviteVendorTeamMember` — so show the base segment
+ * only, title-cased.
+ */
+export function roleLabelFor(role: string): string | undefined {
+  const base = role.split(":")[0]?.trim()
+  if (!base) return undefined
+  return base.charAt(0).toUpperCase() + base.slice(1)
+}
+
 // ─── Org-plugin defense-in-depth ─────────────────────────────────
 //
 // These hooks are the platform-wide belt for the suspenders that
@@ -176,31 +190,154 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       if (!resend) {
-        throw new Error("Resend not configured: RESEND_API_KEY missing")
+        console.error(
+          "[auth-server.sendResetPassword] RESEND_API_KEY missing — no reset email sent",
+          { userId: user.id },
+        )
+        throw new Error("Email delivery is not configured. Contact support.")
       }
+      const { resetPasswordEmail } = await import("@/lib/emails/render")
+      const { subject, html, text } = await resetPasswordEmail({
+        url,
+        userName: user.name,
+      })
       await resend.emails.send({
-        from: "TYDEi <noreply@tydei.com>",
+        from: AUTH_FROM,
         to: user.email,
-        subject: "Reset your password",
-        html: `<a href="${url}">Reset password</a>`,
+        subject,
+        html,
+        text,
       })
     },
   },
+  user: {
+    /**
+     * Email change, gated behind BOTH addresses.
+     *
+     * Why this exists: the Settings → Profile "Change email" button shipped
+     * on both portals (`components/shared/settings/account-profile-card.tsx`)
+     * while this option was absent, so better-auth threw
+     * CHANGE_EMAIL_DISABLED on every attempt — the button never worked
+     * (audit 2026-07-26).
+     *
+     * Flow: `sendChangeEmailConfirmation` goes to the CURRENT address for
+     * approval; only after that does better-auth send the standard
+     * verification link to the NEW address. Both must be clicked, so a
+     * hijacked session cannot silently move the account to an attacker's
+     * inbox and then password-reset into it.
+     */
+    changeEmail: {
+      enabled: true,
+      sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+        if (!resend) {
+          console.error(
+            "[auth-server.sendChangeEmailConfirmation] RESEND_API_KEY missing — email change cannot be confirmed",
+            { userId: user.id },
+          )
+          return
+        }
+        try {
+          const { changeEmailConfirmationEmail } = await import("@/lib/emails/render")
+          const { subject, html, text } = await changeEmailConfirmationEmail({
+            url,
+            newEmail,
+            userName: user.name,
+          })
+          await resend.emails.send({
+            from: AUTH_FROM,
+            to: user.email,
+            subject,
+            html,
+            text,
+          })
+        } catch (err) {
+          console.error("[auth-server.sendChangeEmailConfirmation]", err, {
+            userId: user.id,
+          })
+        }
+      },
+    },
+  },
   emailVerification: {
+    // Re-send the verification link whenever an unverified user tries to
+    // sign in. Without this, `requireEmailVerification: true` permanently
+    // locks out anyone who loses the original email — there is no other
+    // resend path in the product (audit 2026-07-26). Reaching this branch
+    // requires a VALID password (sign-in.mjs rejects bad credentials
+    // first), so it is not an open mail relay.
+    sendOnSignIn: true,
     sendVerificationEmail: async ({ user, url }) => {
       if (!resend) {
-        throw new Error("Resend not configured: RESEND_API_KEY missing")
+        console.error(
+          "[auth-server.sendVerificationEmail] RESEND_API_KEY missing — no verification email sent",
+          { userId: user.id },
+        )
+        throw new Error("Email delivery is not configured. Contact support.")
       }
+      const { verifyEmailEmail } = await import("@/lib/emails/render")
+      const { subject, html, text } = await verifyEmailEmail({
+        url,
+        userName: user.name,
+      })
       await resend.emails.send({
-        from: "TYDEi <noreply@tydei.com>",
+        from: AUTH_FROM,
         to: user.email,
-        subject: "Verify your email",
-        html: `<a href="${url}">Verify email</a>`,
+        subject,
+        html,
+        text,
       })
     },
   },
   plugins: [
     organization({
+      /**
+       * Deliver the invitation email.
+       *
+       * Why this exists: before 2026-07-26 this option was absent, so
+       * `inviteTeamMember` / `inviteVendorTeamMember` wrote an Invitation
+       * row via `auth.api.createInvitation` and NOBODY was ever emailed —
+       * the dialog reported "Sending…" and the invitee heard nothing. The
+       * `teamInviteEmail` template existed but had no caller.
+       *
+       * better-auth calls this for both create and resend, and runs it in
+       * the background, so a mail failure cannot roll back the invitation
+       * row — log loudly rather than throwing into the void.
+       */
+      sendInvitationEmail: async (data) => {
+        if (!resend) {
+          console.error(
+            "[auth-server.sendInvitationEmail] RESEND_API_KEY missing — invitation created but no email sent",
+            { invitationId: data.id, email: data.email },
+          )
+          return
+        }
+        try {
+          const { teamInviteEmail } = await import("@/lib/emails/render")
+          const { appUrl } = await import("@/lib/site-url")
+          const { subject, html, text } = await teamInviteEmail({
+            inviterName:
+              data.inviter.user.name || data.inviter.user.email || "A teammate",
+            orgName: data.organization.name,
+            inviteUrl: `${appUrl}/accept-invitation?id=${data.id}`,
+            // Vendor sub-roles are stored colon-concatenated ("admin:owner");
+            // show only the base segment.
+            roleLabel: roleLabelFor(data.role),
+          })
+          await resend.emails.send({
+            from: AUTH_FROM,
+            to: data.email,
+            subject,
+            html,
+            text,
+          })
+        } catch (err) {
+          console.error("[auth-server.sendInvitationEmail]", err, {
+            invitationId: data.id,
+            email: data.email,
+            organizationId: data.organization.id,
+          })
+        }
+      },
       organizationHooks: {
         beforeCreateInvitation: async ({ invitation }) => {
           await _hookBeforeCreateInvitation(invitation.role)
