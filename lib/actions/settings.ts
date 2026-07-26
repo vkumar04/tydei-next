@@ -19,8 +19,13 @@ import {
 } from "@/lib/validators/settings"
 import { parseNotificationPrefs } from "@/lib/notifications/prefs"
 import { serialize } from "@/lib/serialize"
+import { rateLimit } from "@/lib/rate-limit"
 import { requireCan } from "@/lib/actions/auth-permissions"
 import { ACCESS_TIERS, type AccessTier } from "@/lib/auth/permissions"
+
+/** Invitations per organization per hour (mail-cannon guard). */
+const INVITE_LIMIT_PER_HOUR = 20
+
 
 // Access tier (Settings/Users feature). Only a Super user may change a
 // member's tier (gated by requireCan("members.manage")). Mirrors the
@@ -445,6 +450,19 @@ export async function inviteTeamMember(input: {
   const session = await requireAuth()
   await requireCan("members.manage")
   await assertCallerCanManage(session.user.id, parsed.organizationId)
+  // Invitations now SEND EMAIL (sendInvitationEmail wired 2026-07-26), so an
+  // authenticated Super could use this as a mail cannon. Cap per org.
+  const { success: withinInviteLimit } = rateLimit(
+    `invite:${parsed.organizationId}`,
+    INVITE_LIMIT_PER_HOUR,
+    60 * 60_000,
+  )
+  if (!withinInviteLimit) {
+    throw new Error(
+      "Too many invitations sent in the last hour — please try again later.",
+    )
+  }
+
 
   await auth.api.createInvitation({
     body: {
@@ -632,6 +650,19 @@ export async function inviteVendorTeamMember(input: {
   const session = await requireAuth()
   await requireCan("members.manage")
   await assertCallerCanManage(session.user.id, parsed.organizationId)
+  // Invitations now SEND EMAIL (sendInvitationEmail wired 2026-07-26), so an
+  // authenticated Super could use this as a mail cannon. Cap per org.
+  const { success: withinInviteLimit } = rateLimit(
+    `invite:${parsed.organizationId}`,
+    INVITE_LIMIT_PER_HOUR,
+    60 * 60_000,
+  )
+  if (!withinInviteLimit) {
+    throw new Error(
+      "Too many invitations sent in the last hour — please try again later.",
+    )
+  }
+
 
   // Sub-role is concatenated into the stored role with a colon — the
   // beforeCreateInvitation hook splits on `:` and validates the base

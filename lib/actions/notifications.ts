@@ -10,7 +10,7 @@ import {
   weeklyDigestEmail,
   pendingContractSubmittedEmail,
   pendingContractDecisionEmail,
-} from "@/lib/email-templates"
+} from "@/lib/emails/render"
 import { readNotificationPrefsForEntity } from "@/lib/notifications/prefs"
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ export async function sendAlertNotification(alertId: string): Promise<void> {
   const emails = await getFacilityMemberEmails(alert.facilityId)
   if (emails.length === 0) return
 
-  const { subject, html } = alertNotificationEmail({
+  const { subject, html, text } = await alertNotificationEmail({
     title: alert.title,
     description: alert.description,
     severity: alert.severity,
@@ -172,7 +172,7 @@ export async function sendAlertNotification(alertId: string): Promise<void> {
   })
 
   await Promise.allSettled(
-    emails.map((to) => sendEmail({ to, subject, html }))
+    emails.map((to) => sendEmail({ to, subject, html, text }))
   )
 }
 
@@ -223,7 +223,7 @@ export async function sendRenewalReminders(): Promise<{
       const emails = await getFacilityMemberEmails(contract.facilityId)
       if (emails.length === 0) continue
 
-      const { subject, html } = renewalReminderEmail(
+      const { subject, html, text } = await renewalReminderEmail(
         {
           contractName: contract.name,
           vendorName: contract.vendor.name,
@@ -236,7 +236,7 @@ export async function sendRenewalReminders(): Promise<{
       )
 
       await Promise.allSettled(
-        emails.map((to) => sendEmail({ to, subject, html }))
+        emails.map((to) => sendEmail({ to, subject, html, text }))
       )
       sent += emails.length
     }
@@ -314,7 +314,7 @@ export async function sendWeeklyDigest(
     }),
   ])
 
-  const { subject, html } = weeklyDigestEmail({
+  const { subject, html, text } = await weeklyDigestEmail({
     facilityName: facility?.name ?? "Your Facility",
     newAlerts,
     activeContracts,
@@ -325,7 +325,7 @@ export async function sendWeeklyDigest(
   })
 
   await Promise.allSettled(
-    emails.map((to) => sendEmail({ to, subject, html }))
+    emails.map((to) => sendEmail({ to, subject, html, text }))
   )
 
   return { sent: emails.length }
@@ -368,14 +368,14 @@ export async function notifyFacilityOfPendingContract(input: {
     }
     const emails = await getFacilityMemberEmails(input.facilityId)
     if (emails.length === 0) return { sent: 0 }
-    const { subject, html } = pendingContractSubmittedEmail({
+    const { subject, html, text } = await pendingContractSubmittedEmail({
       contractName: input.contractName,
       vendorName: input.vendorName,
       facilityName: input.facilityName,
       pendingId: input.pendingId,
     })
     await Promise.allSettled(
-      emails.map((to) => sendEmail({ to, subject, html })),
+      emails.map((to) => sendEmail({ to, subject, html, text })),
     )
     return { sent: emails.length }
   } catch (err) {
@@ -454,7 +454,7 @@ export async function notifyVendorOfPendingDecision(input: {
     }
     const emails = await getVendorMemberEmails(vendorId)
     if (emails.length === 0) return { sent: 0 }
-    const { subject, html } = pendingContractDecisionEmail({
+    const { subject, html, text } = await pendingContractDecisionEmail({
       contractName: input.contractName,
       vendorName: input.vendorName,
       facilityName: input.facilityName,
@@ -463,7 +463,7 @@ export async function notifyVendorOfPendingDecision(input: {
       reviewNotes: input.reviewNotes,
     })
     await Promise.allSettled(
-      emails.map((to) => sendEmail({ to, subject, html })),
+      emails.map((to) => sendEmail({ to, subject, html, text })),
     )
     return { sent: emails.length }
   } catch (err) {

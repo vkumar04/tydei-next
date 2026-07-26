@@ -1,21 +1,16 @@
 "use server"
 
-import { headers } from "next/headers"
 import { contactSchema, type ContactInput } from "@/lib/validators"
 import { sendEmail } from "@/lib/email"
 import { rateLimit } from "@/lib/rate-limit"
+import { clientIp } from "@/lib/actions/request-ip"
 
 const SUPPORT_INBOX = "support@tydei.com"
 
-/** Escape user-supplied text before interpolating into the notification HTML. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;")
-}
+// The hand-rolled escapeHtml() that used to live here is gone: the
+// contact-form body is now a React Email template, and React escapes
+// interpolated text by construction. Do not reintroduce string-built
+// HTML for attacker-supplied input.
 
 export interface ContactResult {
   ok: boolean
@@ -31,12 +26,7 @@ export interface ContactResult {
 export async function submitContactForm(input: ContactInput): Promise<ContactResult> {
   // Public, unauthenticated surface that sends email on every call — rate
   // limit by client IP to blunt spam / Resend-quota abuse (2026-06-18 audit).
-  const hdrs = await headers()
-  const ip =
-    hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    hdrs.get("x-real-ip") ||
-    "unknown"
-  const { success } = rateLimit(`contact:${ip}`, 3, 60_000)
+  const { success } = rateLimit(`contact:${await clientIp()}`, 3, 60_000)
   if (!success) {
     return {
       ok: false,
@@ -56,18 +46,14 @@ export async function submitContactForm(input: ContactInput): Promise<ContactRes
   const { name, email, company, message } = parsed.data
 
   try {
-    await sendEmail({
-      to: SUPPORT_INBOX,
-      subject: `New contact form message from ${name}`,
-      html: `
-        <h2>New contact form submission</h2>
-        <p><strong>Name:</strong> ${escapeHtml(name)}</p>
-        <p><strong>Email:</strong> ${escapeHtml(email)}</p>
-        ${company ? `<p><strong>Company:</strong> ${escapeHtml(company)}</p>` : ""}
-        <p><strong>Message:</strong></p>
-        <p style="white-space:pre-wrap">${escapeHtml(message)}</p>
-      `,
+    const { contactFormEmail } = await import("@/lib/emails/render")
+    const { subject, html, text } = await contactFormEmail({
+      name,
+      email,
+      company,
+      message,
     })
+    await sendEmail({ to: SUPPORT_INBOX, subject, html, text })
     return { ok: true }
   } catch (err) {
     console.error("[submitContactForm]", err, { email, company })
