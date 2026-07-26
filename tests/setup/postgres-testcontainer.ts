@@ -28,8 +28,71 @@ interface TestDbContext {
   databaseUrl: string
 }
 
+/** Postgres image the container runs; Ryuk is testcontainers' own reaper. */
+const POSTGRES_IMAGE = "postgres:16-alpine"
+const RYUK_IMAGE = "testcontainers/ryuk:0.14.0"
+
+/**
+ * Fail fast when an image testcontainers needs isn't cached locally.
+ *
+ * Why this exists (2026-07-26): `docker pull` on this project's machines
+ * can hang indefinitely inside the `desktop` credential helper — the
+ * binary is a valid symlink into Docker.app but never returns, so docker
+ * eventually kills it and reports
+ *
+ *     error getting credentials - err: signal: terminated, out: ``
+ *
+ * testcontainers pulls Ryuk BEFORE it starts anything, so the hang landed
+ * inside `.start()`. All the test suite showed was
+ *
+ *     Error: Hook timed out in 90000ms
+ *
+ * which names neither Docker, nor Ryuk, nor credentials, and cost a long
+ * debugging session to trace. Worse, `postgres:16-alpine` was already
+ * cached, so plain `docker run` worked fine and made Docker look healthy.
+ *
+ * A cached image never touches the credential helper, so checking for one
+ * is both the diagnosis and the workaround. This turns a 90s silent hang
+ * into an immediate, actionable error.
+ */
+function assertImagesCached(): void {
+  const missing: string[] = []
+  for (const image of [POSTGRES_IMAGE, RYUK_IMAGE]) {
+    try {
+      execSync(`docker image inspect ${image}`, { stdio: "ignore", timeout: 15_000 })
+    } catch {
+      missing.push(image)
+    }
+  }
+  if (missing.length === 0) return
+
+  throw new Error(
+    [
+      `testcontainers needs these images cached locally, and they are not:`,
+      ...missing.map((m) => `  - ${m}`),
+      ``,
+      `They are NOT pulled automatically here: if the Docker credential`,
+      `helper hangs, the pull hangs with it and testcontainers stalls`,
+      `until the hook times out.`,
+      ``,
+      `Pull them without going through the credential helper:`,
+      ``,
+      `  mkdir -p /tmp/dockercfg && echo '{}' > /tmp/dockercfg/config.json`,
+      missing
+        .map((m) => `  DOCKER_CONFIG=/tmp/dockercfg docker pull ${m}`)
+        .join("\n"),
+      ``,
+      `That leaves ~/.docker/config.json untouched. If pulls hang for`,
+      `other images too, restart Docker Desktop — its credential service`,
+      `is the thing that stops responding.`,
+    ].join("\n"),
+  )
+}
+
 export async function setupTestDb(): Promise<TestDbContext> {
-  const container = await new PostgreSqlContainer("postgres:16-alpine")
+  assertImagesCached()
+
+  const container = await new PostgreSqlContainer(POSTGRES_IMAGE)
     .withDatabase("tydei_test")
     .withUsername("test")
     .withPassword("test")
