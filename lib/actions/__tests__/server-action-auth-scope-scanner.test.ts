@@ -277,7 +277,9 @@ const BASELINE_HITS = new Set<string>([
   // caller}] }` findFirst/findMany. The former allowlist entry was removed;
   // the create/update/delete/bulkImport MUTATIONS are requireAdmin (auto-
   // exempt).
-  // bundles.ts: updateBundle (292) / deleteBundle (333) run
+  // bundles.ts: updateBundle (309) / deleteBundle (354) run
+  // Lines shifted +17/+21 on 2026-07-26 when unstable_rethrow() guards were
+  // added to every catch block in this file (see redirect-swallow-scanner).
   // assertBundleOwnedByFacility(facility.id, bundleId) — which findFirst's
   // the bundle via `primaryContract: contractsOwnedByFacility(...)` — IMMEDIATELY
   // before the bare-id update/delete the scanner sees (2026-06-17 security
@@ -285,8 +287,8 @@ const BASELINE_HITS = new Set<string>([
   // below; the static scanner can't follow the helper call. (The PRIOR
   // allowlist here claimed a "post-fetch facility equality check" that did
   // NOT exist and hid a real IDOR — these entries are the genuine fix.)
-  "lib/actions/bundles.ts:295",
-  "lib/actions/bundles.ts:337",
+  "lib/actions/bundles.ts:312",
+  "lib/actions/bundles.ts:358",
   // categories.ts: requireAdmin gates via admin-only UI; scanner
   // already exempts requireAdmin functions but these are public
   // reads / user-create paths

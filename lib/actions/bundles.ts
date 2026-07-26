@@ -6,6 +6,7 @@ import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { revalidatePath } from "next/cache"
+import { unstable_rethrow } from "next/navigation"
 import { computeBundleStatus } from "@/lib/contracts/bundle-compute"
 import { reportServerError } from "@/lib/errors/report"
 import { z } from "zod"
@@ -103,6 +104,10 @@ export async function listBundles() {
     })
     return serialize(bundles)
   } catch (err) {
+    // redirect()/notFound() signal via a thrown control-flow exception. The
+    // requireX() guards above use redirect(), so wrapping err in a new Error
+    // below would swallow the navigation and surface a bogus failure instead.
+    unstable_rethrow(err)
     console.error("[listBundles]", err)
     throw err
   }
@@ -144,6 +149,10 @@ export async function getBundle(bundleId: string) {
     const status = await computeBundleStatus(prisma, bundleId, facility.id)
     return serialize({ bundle, status })
   } catch (err) {
+    // redirect()/notFound() signal via a thrown control-flow exception. The
+    // requireX() guards above use redirect(), so wrapping err in a new Error
+    // below would swallow the navigation and surface a bogus failure instead.
+    unstable_rethrow(err)
     console.error("[getBundle]", err, { bundleId })
     throw err
   }
@@ -191,6 +200,10 @@ export async function getBundleMembershipsForContract(contractId: string) {
     }))
     return serialize(rows)
   } catch (err) {
+    // redirect()/notFound() signal via a thrown control-flow exception. The
+    // requireX() guards above use redirect(), so wrapping err in a new Error
+    // below would swallow the navigation and surface a bogus failure instead.
+    unstable_rethrow(err)
     console.error("[getBundleMembershipsForContract]", err, { contractId })
     throw err
   }
@@ -255,6 +268,10 @@ export async function createBundle(input: CreateBundleInput) {
     revalidatePath("/dashboard/contracts/bundles")
     return serialize(bundle)
   } catch (err) {
+    // redirect()/notFound() signal via a thrown control-flow exception. The
+    // requireX() guards above use redirect(), so wrapping err in a new Error
+    // below would swallow the navigation and surface a bogus failure instead.
+    unstable_rethrow(err)
     const { errorId } = reportServerError("createBundle", err, {
       primaryContractId: input.primaryContractId,
       complianceMode: input.complianceMode,
@@ -317,6 +334,10 @@ export async function updateBundle(input: UpdateBundleInput) {
     revalidatePath("/dashboard/contracts/bundles")
     revalidatePath(`/dashboard/contracts/bundles/${data.bundleId}`)
   } catch (err) {
+    // redirect()/notFound() signal via a thrown control-flow exception. The
+    // requireX() guards above use redirect(), so wrapping err in a new Error
+    // below would swallow the navigation and surface a bogus failure instead.
+    unstable_rethrow(err)
     const { errorId } = reportServerError("updateBundle", err, {
       bundleId: input.bundleId,
     })
@@ -337,6 +358,10 @@ export async function deleteBundle(bundleId: string) {
     await prisma.tieInBundle.delete({ where: { id: bundleId } })
     revalidatePath("/dashboard/contracts/bundles")
   } catch (err) {
+    // redirect()/notFound() signal via a thrown control-flow exception. The
+    // requireX() guards above use redirect(), so wrapping err in a new Error
+    // below would swallow the navigation and surface a bogus failure instead.
+    unstable_rethrow(err)
     const { errorId } = reportServerError("deleteBundle", err, { bundleId })
     throw new Error(
       err instanceof Error
