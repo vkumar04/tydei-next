@@ -37,6 +37,7 @@ import {
   adminCreateUser,
   adminUpdateUser,
   adminDeleteUser,
+  adminSetUserActive,
   type AdminUserRow,
 } from "@/lib/actions/admin/users"
 import { adminGetFacilities } from "@/lib/actions/admin/facilities"
@@ -102,6 +103,16 @@ export function UserTable() {
     onError: onMutationError("update"),
   })
 
+  const toggleActiveMut = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      adminSetUserActive(id, active),
+    onSuccess: (_d, v) => {
+      qc.invalidateQueries({ queryKey: queryKeys.admin.usersBase })
+      toast.success(v.active ? "User reactivated" : "User deactivated — sessions ended")
+    },
+    onError: onMutationError("update"),
+  })
+
   const deleteMut = useMutation({
     mutationFn: adminDeleteUser,
     onSuccess: () => { qc.invalidateQueries({ queryKey: queryKeys.admin.usersBase }); setDeleting(null); toast.success("User deleted") },
@@ -130,7 +141,9 @@ export function UserTable() {
   // ─── Columns ────────────────────────────────────────────────────
   const columns = getUserColumns(
     (u) => { setEditing(u); setEditFormData({ name: u.name, email: u.email, role: u.role }) },
-    (u) => setDeleting(u)
+    (u) => setDeleting(u),
+    (u) =>
+      toggleActiveMut.mutate({ id: u.id, active: !!u.deactivatedAt }),
   )
 
   // ─── Handlers ───────────────────────────────────────────────────
@@ -180,7 +193,9 @@ export function UserTable() {
 
   // ─── Derived ────────────────────────────────────────────────────
   const users = data?.users ?? []
-  const activeUsers = users.filter((u) => u.role !== "admin")
+  // Was `u.role !== "admin"`, i.e. it counted non-admins and called them
+  // "Active". Now that deactivation exists the label can mean what it says.
+  const activeUsers = users.filter((u) => !u.deactivatedAt)
   const facilityUsers = users.filter((u) => u.role === "facility")
   const vendorUsers = users.filter((u) => u.role === "vendor")
 
@@ -348,20 +363,38 @@ export function UserTable() {
                 </Label>
                 <ScrollArea className="h-64 rounded-md border p-3">
                   <div className="space-y-2">
-                    {(isVendorRole ? vendorOptions : facilityOptions).map((o) => (
-                      <label
-                        key={o.id}
-                        className="flex cursor-pointer items-center gap-2 rounded p-1 hover:bg-muted"
-                      >
-                        <Checkbox
-                          checked={(isVendorRole ? selectedVendors : selectedFacilities).includes(o.id)}
-                          onCheckedChange={() =>
-                            isVendorRole ? toggleVendor(o.id) : toggleFacility(o.id)
+                    {(isVendorRole ? vendorOptions : facilityOptions).map((o) => {
+                      // Without an Organization there is nothing for a Member
+                      // row to point at, so the account could never sign in.
+                      // Disable with the reason visible rather than hiding the
+                      // entry — an admin hunting for a name they can see in
+                      // the Vendors list would just think it was missing.
+                      const selectable = o.canHaveUsers
+                      return (
+                        <label
+                          key={o.id}
+                          className={
+                            selectable
+                              ? "flex cursor-pointer items-center gap-2 rounded p-1 hover:bg-muted"
+                              : "flex items-center gap-2 rounded p-1 opacity-60"
                           }
-                        />
-                        <span className="text-sm">{o.name}</span>
-                      </label>
-                    ))}
+                        >
+                          <Checkbox
+                            disabled={!selectable}
+                            checked={(isVendorRole ? selectedVendors : selectedFacilities).includes(o.id)}
+                            onCheckedChange={() =>
+                              isVendorRole ? toggleVendor(o.id) : toggleFacility(o.id)
+                            }
+                          />
+                          <span className="text-sm">{o.name}</span>
+                          {!selectable && (
+                            <span className="ml-auto text-xs text-muted-foreground">
+                              no organization yet
+                            </span>
+                          )}
+                        </label>
+                      )
+                    })}
                   </div>
                 </ScrollArea>
                 <p className="text-xs text-muted-foreground">

@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"
-import { Pencil, Trash2 } from "lucide-react"
+import { Pencil, Trash2, UserCheck, UserX } from "lucide-react"
 import { formatDate } from "@/lib/formatting"
 import type { AdminUserRow } from "@/lib/actions/admin/users"
 
@@ -16,7 +16,8 @@ const roleBadgeVariant: Record<string, "default" | "secondary" | "outline"> = {
 
 export function getUserColumns(
   onEdit: (user: AdminUserRow) => void,
-  onDelete: (user: AdminUserRow) => void
+  onDelete: (user: AdminUserRow) => void,
+  onToggleActive: (user: AdminUserRow) => void,
 ): ColumnDef<AdminUserRow>[] {
   return [
     {
@@ -96,6 +97,14 @@ export function getUserColumns(
         <TableActionMenu
           actions={[
             { label: "Edit", icon: Pencil, onClick: () => onEdit(row.original) },
+            // Deactivation is the offboarding path that actually works:
+            // audit_log.userId is RESTRICT, so deleting anyone who has done
+            // something throws — and the audit trail needs its actor.
+            {
+              label: row.original.deactivatedAt ? "Reactivate" : "Deactivate",
+              icon: row.original.deactivatedAt ? UserCheck : UserX,
+              onClick: () => onToggleActive(row.original),
+            },
             { label: "Delete", icon: Trash2, onClick: () => onDelete(row.original), variant: "destructive" },
           ]}
         />
