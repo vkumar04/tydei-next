@@ -54,6 +54,12 @@ const RYUK_IMAGE = "testcontainers/ryuk:0.14.0"
  * A cached image never touches the credential helper, so checking for one
  * is both the diagnosis and the workaround. This turns a 90s silent hang
  * into an immediate, actionable error.
+ *
+ * What does NOT fix it: restarting Docker Desktop. That was asserted here
+ * on first write and turned out to be untrue — a full quit-and-relaunch
+ * (verified 2026-07-26: every container stopped, app process restarted)
+ * left the helper hanging at exactly the same 20s+ timeout. Whatever the
+ * cause is, it survives an engine cycle.
  */
 function assertImagesCached(): void {
   const missing: string[] = []
@@ -82,9 +88,13 @@ function assertImagesCached(): void {
         .map((m) => `  DOCKER_CONFIG=/tmp/dockercfg docker pull ${m}`)
         .join("\n"),
       ``,
-      `That leaves ~/.docker/config.json untouched. If pulls hang for`,
-      `other images too, restart Docker Desktop — its credential service`,
-      `is the thing that stops responding.`,
+      `That leaves ~/.docker/config.json untouched.`,
+      ``,
+      `Restarting Docker Desktop does NOT fix this — verified 2026-07-26:`,
+      `the helper still hung after a full quit-and-relaunch. Check for a`,
+      `blocked Docker Desktop sign-in prompt or a locked login keychain,`,
+      `which produce exactly this hang. The DOCKER_CONFIG workaround above`,
+      `sidesteps the helper entirely and is enough to run the tests.`,
     ].join("\n"),
   )
 }
