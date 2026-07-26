@@ -18,10 +18,12 @@
 // same way regardless of which path we use here.
 import { anthropic } from "@ai-sdk/anthropic"
 
-export const claudeModel = anthropic("claude-opus-4-7")
+export const claudeModel = anthropic("claude-opus-5")
 
 // Faster / cheaper models for mechanical tasks.
-export const claudeSonnet = anthropic("claude-sonnet-4-6")
+export const claudeSonnet = anthropic("claude-sonnet-5")
+// Still the current Haiku — there is no Haiku 5. Verified against
+// /v1/models with the production key on 2026-07-26.
 export const claudeHaiku = anthropic("claude-haiku-4-5-20251001")
 
 export const AI_CREDIT_COSTS = {
