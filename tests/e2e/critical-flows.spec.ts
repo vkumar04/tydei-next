@@ -49,10 +49,18 @@ test.describe("facility critical flows", () => {
     // Use .first() since "All vendors" appears in both the select-value
     // span and the option label after the dropdown opens.
     await expect(page.getByText(/all vendors/i).first()).toBeVisible()
-    // Count vendor options — should be > 1 (was 1 before fix)
-    const items = page.getByRole("option")
-    const count = await items.count()
-    expect(count).toBeGreaterThan(1)
+    // Count vendor options — should be > 1 (was 1 before fix).
+    //
+    // MUST poll. The list is a union of two async queries
+    // (useRebateOpportunities + useFacilityVendors, optimizer-client.tsx:86),
+    // so at first paint only "All vendors" exists and a snapshot count
+    // returns 1. `expect(value).toBeGreaterThan()` does NOT auto-retry —
+    // Playwright's own docs call this out as a flake source and point at
+    // expect.poll for exactly this shape of assertion. The old
+    // `await items.count()` read that 1 and failed ~700ms in.
+    await expect
+      .poll(() => page.getByRole("option").count(), { timeout: 15_000 })
+      .toBeGreaterThan(1)
   })
 
   test("contract detail performance card has Market share row", async ({
@@ -144,12 +152,19 @@ test.describe("vendor critical flows", () => {
     page,
   }) => {
     await page.goto("/vendor/prospective")
-    // Wait for the page tabs to render
+    // Wait for the page tabs to render.
+    //
+    // The tab is labelled "Proposals", not "My Proposals" — it was renamed
+    // and this selector was never updated, so it matched nothing and the
+    // test failed on a 15s timeout rather than on its actual subject.
+    // Scoped to role=tab, so it can't collide with the "Proposals by Stage"
+    // card title or the "No proposals yet" empty state.
     await expect(
-      page.getByRole("tab", { name: /my proposals/i }).first(),
+      page.getByRole("tab", { name: /proposals/i }).first(),
     ).toBeVisible({ timeout: 15_000 })
     // No "Score 48" / "Score 96" hardcoded text — those were the
-    // generateDealScore mock outputs we removed in 585f8e4
-    expect(await page.getByText(/^Score 48$/).count()).toBe(0)
+    // generateDealScore mock outputs we removed in 585f8e4.
+    // toHaveCount auto-retries; a bare .count() does not.
+    await expect(page.getByText(/^Score 48$/)).toHaveCount(0)
   })
 })
