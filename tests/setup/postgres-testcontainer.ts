@@ -33,12 +33,12 @@ const POSTGRES_IMAGE = "postgres:16-alpine"
 const RYUK_IMAGE = "testcontainers/ryuk:0.14.0"
 
 /**
- * Fail fast when an image testcontainers needs isn't cached locally.
+ * Make sure the images testcontainers needs are present, with a BOUNDED
+ * pull, and explain the failure properly when they can't be fetched.
  *
- * Why this exists (2026-07-26): `docker pull` on this project's machines
- * can hang indefinitely inside the `desktop` credential helper — the
- * binary is a valid symlink into Docker.app but never returns, so docker
- * eventually kills it and reports
+ * Why this exists (2026-07-26): `docker pull` can hang indefinitely inside
+ * the `desktop` credential helper — the binary is a valid symlink into
+ * Docker.app but never returns, so docker eventually kills it and reports
  *
  *     error getting credentials - err: signal: terminated, out: ``
  *
@@ -51,46 +51,76 @@ const RYUK_IMAGE = "testcontainers/ryuk:0.14.0"
  * debugging session to trace. Worse, `postgres:16-alpine` was already
  * cached, so plain `docker run` worked fine and made Docker look healthy.
  *
- * A cached image never touches the credential helper, so checking for one
- * is both the diagnosis and the workaround. This turns a 90s silent hang
- * into an immediate, actionable error.
+ * The first version of this guard only CHECKED the cache and threw when an
+ * image was missing. That was wrong: it hard-coded the assumption that
+ * pulling is broken, so the moment pulls started working again it blocked
+ * the normal path — and it would have failed every cold CI runner, where
+ * nothing is cached by definition. Pull, don't just assert; the timeout is
+ * what protects against the hang, not refusing to try.
+ *
+ * What does NOT fix the underlying hang: restarting Docker Desktop. That
+ * was asserted here on first write and turned out to be untrue — a full
+ * quit-and-relaunch (verified 2026-07-26: every container stopped, app
+ * process restarted) left the helper hanging at the same 20s+ timeout.
+ * The real fix is `credsStore: "osxkeychain"` in ~/.docker/config.json;
+ * `desktop` proxies to the macOS keychain and can wedge, `osxkeychain`
+ * talks to it directly and returned in 0.017s on the same machine.
  */
-function assertImagesCached(): void {
+function ensureImagesAvailable(): void {
   const missing: string[] = []
   for (const image of [POSTGRES_IMAGE, RYUK_IMAGE]) {
     try {
       execSync(`docker image inspect ${image}`, { stdio: "ignore", timeout: 15_000 })
+      continue
     } catch {
-      missing.push(image)
+      // Not cached. Pull it — but bounded, so a hanging credential helper
+      // costs 3 minutes at worst instead of blocking forever. A healthy
+      // machine (and any cold CI runner, where NOTHING is cached) takes
+      // this path normally and just works.
+      try {
+        execSync(`docker pull ${image}`, { stdio: "ignore", timeout: 180_000 })
+      } catch {
+        missing.push(image)
+      }
     }
   }
   if (missing.length === 0) return
 
   throw new Error(
     [
-      `testcontainers needs these images cached locally, and they are not:`,
+      `testcontainers needs these images, and pulling them failed:`,
       ...missing.map((m) => `  - ${m}`),
       ``,
-      `They are NOT pulled automatically here: if the Docker credential`,
-      `helper hangs, the pull hangs with it and testcontainers stalls`,
-      `until the hook times out.`,
+      `The usual cause on macOS is a wedged Docker credential helper. It`,
+      `hangs instead of failing, so docker kills it and reports:`,
       ``,
-      `Pull them without going through the credential helper:`,
+      `    error getting credentials - err: signal: terminated, out: \`\``,
+      ``,
+      `THE FIX — set the credential store to osxkeychain in`,
+      `~/.docker/config.json:`,
+      ``,
+      `    "credsStore": "osxkeychain"     (was: "desktop")`,
+      ``,
+      `"desktop" proxies to the macOS keychain and can wedge; "osxkeychain"`,
+      `talks to it directly. Verified 2026-07-26: desktop hung >20s,`,
+      `osxkeychain returned in 0.017s and pulls worked immediately.`,
+      `Switching stores may require re-login to private registries.`,
+      ``,
+      `Restarting Docker Desktop does NOT fix it — a full quit-and-relaunch`,
+      `left the helper hanging identically.`,
+      ``,
+      `To unblock this run without touching your config at all:`,
       ``,
       `  mkdir -p /tmp/dockercfg && echo '{}' > /tmp/dockercfg/config.json`,
       missing
         .map((m) => `  DOCKER_CONFIG=/tmp/dockercfg docker pull ${m}`)
         .join("\n"),
-      ``,
-      `That leaves ~/.docker/config.json untouched. If pulls hang for`,
-      `other images too, restart Docker Desktop — its credential service`,
-      `is the thing that stops responding.`,
     ].join("\n"),
   )
 }
 
 export async function setupTestDb(): Promise<TestDbContext> {
-  assertImagesCached()
+  ensureImagesAvailable()
 
   const container = await new PostgreSqlContainer(POSTGRES_IMAGE)
     .withDatabase("tydei_test")
