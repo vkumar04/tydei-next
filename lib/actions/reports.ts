@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { computeSyntheticContractPeriods } from "@/lib/actions/contract-periods"
@@ -168,8 +169,21 @@ export async function getContractPeriodData(input: {
   dateFrom?: string
   dateTo?: string
 }) {
-  await requireFacility()
+  const { facility } = await requireFacility()
   const { contractId, dateFrom, dateTo } = input
+
+  // Ownership check. Without this, `requireFacility()` only proved the caller
+  // is SOME facility user — the contractId came straight off the wire, so any
+  // authenticated facility user could read any other tenant's ContractPeriod
+  // rows: totalSpend, rebateEarned, rebateCollected, paymentActual, tier.
+  // Confirmed exploitable against seeded data before the fix (security audit
+  // 2026-07-26). Returns empty rather than throwing, so a stale link degrades
+  // to "no data" instead of confirming that someone else's contract exists.
+  const owned = await prisma.contract.findFirst({
+    where: contractOwnershipWhere(contractId, facility.id),
+    select: { id: true },
+  })
+  if (!owned) return serialize([])
 
   const where: Record<string, unknown> = { contractId }
   if (dateFrom) where.periodStart = { gte: new Date(dateFrom) }
