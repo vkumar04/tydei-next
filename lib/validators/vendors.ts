@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { emailSchema, optionalEmailSchema } from "@/lib/validators/email"
 import { createPaginationSchema } from "./pagination"
 import { VendorTierSchema } from "@/lib/validators"
 
@@ -10,7 +11,7 @@ export const createVendorSchema = z.object({
   displayName: z.string().optional(),
   division: z.string().optional(),
   contactName: z.string().optional(),
-  contactEmail: z.email("Invalid email").optional().or(z.literal("")),
+  contactEmail: optionalEmailSchema("Invalid email"),
   contactPhone: z.string().optional(),
   website: z.url("Invalid URL").optional().or(z.literal("")),
   address: z.string().optional(),

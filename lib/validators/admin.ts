@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { emailSchema, optionalEmailSchema } from "@/lib/validators/email"
 import { FacilityTypeSchema, UserRoleSchema, VendorTierSchema } from "@/lib/validators"
 
 // ─── Admin Facility ──────────────────────────────────────────────
@@ -28,7 +29,7 @@ export const adminCreateVendorSchema = z.object({
   displayName: z.string().optional(),
   division: z.string().optional(),
   contactName: z.string().optional(),
-  contactEmail: z.email().optional().or(z.literal("")),
+  contactEmail: optionalEmailSchema(),
   contactPhone: z.string().optional(),
   website: z.string().optional(),
   address: z.string().optional(),
@@ -45,15 +46,17 @@ export type AdminUpdateVendorInput = z.infer<typeof adminUpdateVendorSchema>
 
 export const adminCreateUserSchema = z.object({
   name: z.string().min(2, "Name is required"),
-  email: z.email("Invalid email"),
+  email: emailSchema("Invalid email"),
   password: z.string().min(8, "Password must be at least 8 characters"),
   role: UserRoleSchema,
-  organizationId: z.string().optional(),
+  // NOTE: `organizationId` was removed 2026-07-26 — the User model has no
+  // such column (org membership lives on Member), so passing it through to
+  // prisma.user.create would have thrown. The admin form never sent it.
 })
 
 export const adminUpdateUserSchema = z.object({
   name: z.string().min(2).optional(),
-  email: z.email().optional(),
+  email: optionalEmailSchema(),
   role: UserRoleSchema.optional(),
   organizationId: z.string().optional(),
 })

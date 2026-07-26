@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { emailSchema, optionalEmailSchema } from "@/lib/validators/email"
 
 // ─── Per-user Account / Profile ──────────────────────────────────
 //
@@ -13,7 +14,7 @@ export const accountNameSchema = z
   .min(1, "Name is required")
   .max(128, "Name must be 128 characters or fewer")
 
-export const accountEmailSchema = z.email("Enter a valid email address")
+export const accountEmailSchema = emailSchema()
 
 export const accountPasswordSchema = z
   .string()
