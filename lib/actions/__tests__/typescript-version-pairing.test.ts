@@ -5,7 +5,7 @@ import { join } from "node:path"
 /**
  * Assert the typescript↔next version pairing invariant:
  *
- *   typescript major >= 7  REQUIRES  next >= 16.3
+ *   typescript major >= 7  REQUIRES  next >= 16.2.12
  *                          AND       `experimental.useTypeScriptCli` in next.config.ts
  *
  * Why this exists: TypeScript 7.0 (the Go-native "Corsa" rewrite, npm
@@ -27,7 +27,9 @@ import { join } from "node:path"
  *
  * Real support landed in vercel/next.js#95639 behind
  * `experimental.useTypeScriptCli`, which shells out to the local `tsc`
- * instead of using the JS API — Next **16.3+ only**.
+ * instead of using the JS API. That landed on canary/16.3 first and was
+ * backported to the 16.2.x line in **16.2.12** (#95831), which is the
+ * minimum this guard accepts.
  *
  * `"typescript": "^6.0.3"` is caret-pinned so it will not resolve 7.x on its
  * own. The hazard is a routine `ncu -u` / `bun update --latest` / an agent
@@ -38,13 +40,14 @@ import { join } from "node:path"
  * + the flag set) it passes unchanged, and it keeps guarding the half-done
  * state.
  *
- * ── Upgrade steps, when `npm view next dist-tags.latest` reports >= 16.3.0
- *    (no -preview/-canary suffix). Verified 2026-07-25 against this repo:
+ * ── Upgrade steps. As of 2026-07-26 the blocker is GONE: next 16.2.12
+ *    ships the CLI backend, so TS 7 is available on the stable line.
+ *    Verified 2026-07-25 against this repo:
  *    TS 7.0.2 typechecks it with 0 errors in 2.5s vs 13.9s on TS 6.0.3
  *    (5.5x), and tsconfig.json needs NO changes.
  *
  *  1. Bump BOTH together — never independently:
- *       bun add next@^16.3 && bun add -d typescript@^7
+ *       bun add next@^16.2.12 && bun add -d typescript@^7
  *  2. next.config.ts → `experimental: { useTypeScriptCli: true }`.
  *     Build output becomes raw tsc diagnostics (no Next code frames).
  *  3. Port the two scripts that import the REMOVED compiler API onto
@@ -66,13 +69,17 @@ import { join } from "node:path"
 
 const ROOT = join(import.meta.dirname, "..", "..", "..")
 
-/** Leading major/minor of one of OUR OWN pinned ranges ("^16.2.10" → [16, 2]).
- *  Not a general semver range parser — it only has to handle what we write
- *  in package.json. */
-function majorMinor(range: string): [number, number] {
+/** Leading major/minor/patch of one of OUR OWN pinned ranges
+ *  ("^16.2.10" → [16, 2, 10]). Not a general semver range parser — it only
+ *  has to handle what we write in package.json. */
+function majorMinorPatch(range: string): [number, number, number] {
   const cleaned = range.trim().replace(/^[\^~]|^>=\s*/, "")
-  const [maj, min] = cleaned.split(".")
-  return [Number.parseInt(maj, 10), Number.parseInt(min ?? "0", 10)]
+  const [maj, min, patch] = cleaned.split(".")
+  return [
+    Number.parseInt(maj, 10),
+    Number.parseInt(min ?? "0", 10),
+    Number.parseInt(patch ?? "0", 10),
+  ]
 }
 
 export interface PairingInput {
@@ -83,12 +90,18 @@ export interface PairingInput {
 
 /** Returns a failure message, or null when the pairing is legal. */
 export function checkTypeScriptPairing(input: PairingInput): string | null {
-  const [tsMajor] = majorMinor(input.typescriptRange)
+  const [tsMajor] = majorMinorPatch(input.typescriptRange)
   if (Number.isNaN(tsMajor) || tsMajor < 7) return null
 
-  const [nextMajor, nextMinor] = majorMinor(input.nextRange)
+  const [nextMajor, nextMinor, nextPatch] = majorMinorPatch(input.nextRange)
+  // TS 7 support landed on the 16.2.x line in 16.2.12 (vercel/next.js#95831
+  // backported the useTypeScriptCli backend from canary), and on 16.3+.
+  // Before 16.2.12, typescript@7 makes `next build` die with a silent
+  // SIGSEGV — see the header comment.
   const nextSupportsTs7 =
-    nextMajor > 16 || (nextMajor === 16 && nextMinor >= 3)
+    nextMajor > 16 ||
+    (nextMajor === 16 && nextMinor > 2) ||
+    (nextMajor === 16 && nextMinor === 2 && nextPatch >= 12)
   const hasFlag = /useTypeScriptCli/.test(input.nextConfigSource)
 
   if (nextSupportsTs7 && hasFlag) return null
@@ -96,7 +109,7 @@ export function checkTypeScriptPairing(input: PairingInput): string | null {
   const reasons: string[] = []
   if (!nextSupportsTs7) {
     reasons.push(
-      `next is pinned to "${input.nextRange}" but TypeScript 7 needs next >= 16.3`,
+      `next is pinned to "${input.nextRange}" but TypeScript 7 needs next >= 16.2.12`,
     )
   }
   if (!hasFlag) {
@@ -144,14 +157,35 @@ describe("typescript ↔ next version pairing", () => {
     expect(failure ?? "ok").toBe("ok")
   })
 
-  it("flags TypeScript 7 on a next < 16.3 pin", () => {
+  it("flags TypeScript 7 on a pre-16.2.12 pin", () => {
     const failure = checkTypeScriptPairing({
       typescriptRange: "^7.0.2",
       nextRange: "^16.2.10",
       nextConfigSource: "export default {}",
     })
-    expect(failure).toContain("needs next >= 16.3")
+    expect(failure).toContain("needs next >= 16.2.12")
     expect(failure).toContain("SIGSEGV")
+  })
+
+  it("accepts TypeScript 7 on 16.2.12 — the backport boundary", () => {
+    // #95831 backported the useTypeScriptCli backend to the 16.2.x line.
+    // Treating 16.2.12 as unsupported would block a legitimate upgrade.
+    expect(
+      checkTypeScriptPairing({
+        typescriptRange: "^7.0.2",
+        nextRange: "^16.2.12",
+        nextConfigSource: "experimental: { useTypeScriptCli: true }",
+      }),
+    ).toBeNull()
+  })
+
+  it("still rejects 16.2.11, one patch below the backport", () => {
+    const failure = checkTypeScriptPairing({
+      typescriptRange: "^7.0.2",
+      nextRange: "^16.2.11",
+      nextConfigSource: "experimental: { useTypeScriptCli: true }",
+    })
+    expect(failure).toContain("needs next >= 16.2.12")
   })
 
   it("flags TypeScript 7 on next 16.3 when the CLI flag is missing", () => {
