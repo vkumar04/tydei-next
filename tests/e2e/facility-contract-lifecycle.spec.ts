@@ -41,13 +41,32 @@ test("terms & tiers tab renders method label", async ({ page }) => {
   const tab = page.getByRole("tab", { name: /rebates & tiers/i })
   if (await tab.count()) {
     await tab.first().click()
-    // Expect one of the canonical method labels (from formatRebateMethodLabel)
-    const hasRetroactive = await page
-      .getByText(/Retroactive|Tiered/i, { exact: false })
-      .first()
-      .isVisible({ timeout: 5_000 })
-      .catch(() => false)
-    expect(hasRetroactive).toBeTruthy()
+
+    // The canonical labels come from formatRebateMethodLabel
+    // (lib/contracts/rebate-method-label.ts): `marginal` → "Bracketed",
+    // everything else → "Retroactive".
+    //
+    // 2026-07-27: this asserted /Retroactive|Tiered/ and was stale — Bug #23
+    // (2026-05-11) renamed "Tiered (Per-slice / Marginal)" to "Bracketed", and
+    // the spec was never updated. It kept passing only while a Retroactive
+    // contract happened to sort first; the seeded contract that sorts first
+    // today ("Medtronic Spine Category Rebate") is `marginal`, so it began
+    // failing on a label that is in fact correct.
+    //
+    // A term with no tiers renders no method label at all, which is also
+    // correct — so only assert when the tab actually shows a term.
+    const methodLabel = page.getByText(/Bracketed|Retroactive/i).first()
+    const termsPanel = page.getByText(/no rebate terms|no terms/i).first()
+
+    const rendered = await Promise.race([
+      methodLabel.waitFor({ state: "visible", timeout: 5_000 }).then(() => "method" as const),
+      termsPanel.waitFor({ state: "visible", timeout: 5_000 }).then(() => "empty" as const),
+    ]).catch(() => null)
+
+    expect(
+      rendered,
+      "Rebates & Tiers tab showed neither a method label nor an empty-terms message",
+    ).not.toBeNull()
   }
 })
 

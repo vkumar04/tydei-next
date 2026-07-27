@@ -1,5 +1,95 @@
 import { test, expect, type Page } from "@playwright/test"
-import { prisma } from "@/lib/db"
+import { Client } from "pg"
+import { readFileSync } from "node:fs"
+import path from "node:path"
+
+/**
+ * 2026-07-27: this used to `import { prisma } from "@/lib/db"` to resolve the
+ * seeded ids below. That import took the WHOLE visual project down — Prisma 7's
+ * `prisma-client` generator emits `import.meta` in lib/generated/prisma/client.ts,
+ * which Playwright's node loader cannot parse from a CJS context:
+ *
+ *   SyntaxError: Cannot use 'import.meta' outside a module   at lib/db.ts:2
+ *
+ * That is a collection-time error, so all four visual specs failed to load and
+ * the entire project had been silently dead since the Prisma 7 migration.
+ *
+ * A Playwright spec has no business importing the app's server-only DB client
+ * anyway; it only needs a handful of ids. Query them over plain `pg` (already a
+ * dependency — PrismaPg is built on it) and the coupling disappears.
+ */
+/**
+ * Playwright does NOT load .env (unlike vitest, which does it via
+ * tests/setup.ts). Read it explicitly rather than letting `pg` fall back to its
+ * defaults — an undefined connection string resolves to localhost:5432, which
+ * on a dev machine is very likely a DIFFERENT project's database. Failing loudly
+ * beats silently asserting against the wrong data.
+ */
+function databaseUrl(): string {
+  if (process.env.DATABASE_URL) return process.env.DATABASE_URL
+  const envPath = path.resolve(process.cwd(), ".env")
+  const line = readFileSync(envPath, "utf8")
+    .split("\n")
+    .find((l) => l.trimStart().startsWith("DATABASE_URL="))
+  const value = line?.slice(line.indexOf("=") + 1).trim().replace(/^["']|["']$/g, "")
+  if (!value) {
+    throw new Error(
+      `DATABASE_URL is not set and could not be read from ${envPath} — the visual smoke needs it to resolve seeded ids.`,
+    )
+  }
+  return value
+}
+
+async function lookupIds(): Promise<Record<string, string | null>> {
+  const client = new Client({ connectionString: databaseUrl() })
+  await client.connect()
+  try {
+    const one = async (sql: string, params: unknown[] = []) => {
+      const r = await client.query(sql, params)
+      return (r.rows[0]?.id as string | undefined) ?? null
+    }
+    const facilityId = await one(
+      `select id from facility where name = $1 limit 1`,
+      ["Lighthouse Surgical Center"],
+    )
+    const vendorId = await one(`select id from vendor where name = $1 limit 1`, [
+      "Stryker",
+    ])
+    return {
+      facilityContractId: facilityId
+        ? await one(`select id from contract where "facilityId" = $1 limit 1`, [facilityId])
+        : null,
+      // tie_in_bundle is keyed by primaryContractId (1:1 with the primary tie-in
+      // contract); no direct facilityId column — join through contract so we only
+      // pick a bundle owned by this facility.
+      bundleId: facilityId
+        ? await one(
+            `select b.id from tie_in_bundle b
+               join contract c on c.id = b."primaryContractId"
+              where c."facilityId" = $1 limit 1`,
+            [facilityId],
+          )
+        : null,
+      alertId: facilityId
+        ? await one(`select id from alert where "facilityId" = $1 limit 1`, [facilityId])
+        : null,
+      invoiceId: facilityId
+        ? await one(`select id from invoice where "facilityId" = $1 limit 1`, [facilityId])
+        : null,
+      purchaseOrderId: facilityId
+        ? await one(`select id from purchase_order where "facilityId" = $1 limit 1`, [facilityId])
+        : null,
+      vendorContractId: vendorId
+        ? await one(`select id from contract where "vendorId" = $1 limit 1`, [vendorId])
+        : null,
+      vendorPendingContractId: vendorId
+        ? await one(`select id from pending_contract where "vendorId" = $1 limit 1`, [vendorId])
+        : null,
+    }
+  } finally {
+    await client.end()
+  }
+}
 
 /**
  * Cache Components rollout — full route compatibility smoke.
@@ -34,8 +124,11 @@ type Role = keyof typeof CREDS
 async function loginAs(page: Page, role: Role): Promise<void> {
   const [email, password, expectedUrl] = CREDS[role]
   await page.goto("/login")
-  await page.getByPlaceholder(/email/i).fill(email)
-  await page.getByPlaceholder(/password/i).fill(password)
+  // 2026-07-27: was getByPlaceholder(/email/i), which never matched — the
+  // placeholder is "you@example.com". The <Label> is the stable selector, same
+  // as tests/e2e/auth.setup.ts.
+  await page.getByLabel(/^email$/i).fill(email)
+  await page.getByLabel(/^password$/i).fill(password)
   await page.getByRole("button", { name: /sign in|log in/i }).click()
   await page.waitForURL(expectedUrl, { timeout: 15_000 })
 }
@@ -80,69 +173,14 @@ const ids: DynamicIds = {
 }
 
 test.beforeAll(async () => {
-  const lighthouse = await prisma.facility.findFirst({
-    where: { name: "Lighthouse Surgical Center" },
-    select: { id: true },
-  })
-  const stryker = await prisma.vendor.findFirst({
-    where: { name: "Stryker" },
-    select: { id: true },
-  })
-
-  if (lighthouse) {
-    const [contract, bundle, alert, invoice, po] = await Promise.all([
-      prisma.contract.findFirst({
-        where: { facilityId: lighthouse.id },
-        select: { id: true },
-      }),
-      // TieInBundle is keyed by primaryContractId (1:1 with the
-      // primary tie-in contract); no direct facilityId column. Query
-      // via the contract relation so we only pick a bundle owned by
-      // this facility.
-      prisma.tieInBundle
-        .findFirst({
-          where: { primaryContract: { facilityId: lighthouse.id } },
-          select: { id: true },
-        })
-        .catch(() => null),
-      prisma.alert.findFirst({
-        where: { facilityId: lighthouse.id },
-        select: { id: true },
-      }),
-      prisma.invoice.findFirst({
-        where: { facilityId: lighthouse.id },
-        select: { id: true },
-      }),
-      prisma.purchaseOrder.findFirst({
-        where: { facilityId: lighthouse.id },
-        select: { id: true },
-      }),
-    ])
-    ids.facility.contractId = contract?.id ?? null
-    ids.facility.bundleId = bundle?.id ?? null
-    ids.facility.alertId = alert?.id ?? null
-    ids.facility.invoiceId = invoice?.id ?? null
-    ids.facility.purchaseOrderId = po?.id ?? null
-  }
-
-  if (stryker) {
-    const [contract, pending] = await Promise.all([
-      prisma.contract.findFirst({
-        where: { vendorId: stryker.id },
-        select: { id: true },
-      }),
-      prisma.pendingContract.findFirst({
-        where: { vendorId: stryker.id },
-        select: { id: true },
-      }),
-    ])
-    ids.vendor.contractId = contract?.id ?? null
-    ids.vendor.pendingContractId = pending?.id ?? null
-  }
-})
-
-test.afterAll(async () => {
-  await prisma.$disconnect()
+  const found = await lookupIds()
+  ids.facility.contractId = found.facilityContractId
+  ids.facility.bundleId = found.bundleId
+  ids.facility.alertId = found.alertId
+  ids.facility.invoiceId = found.invoiceId
+  ids.facility.purchaseOrderId = found.purchaseOrderId
+  ids.vendor.contractId = found.vendorContractId
+  ids.vendor.pendingContractId = found.vendorPendingContractId
 })
 
 // ─── Public / unauthenticated routes ───────────────────────────
