@@ -46,7 +46,14 @@ export async function ingestExtractedInvoices(
       `INV-${Date.now()}-${results.length}`
 
     try {
-      const vendorId = await findOrCreateVendorByName(item.vendorName)
+      // facilityId is required for Pass 0 — without it this import silently
+      // skipped the facility's confirmed vendor-name mappings (Charles
+      // 2026-07-27: a mapping set once on the COG page didn't stick here).
+      const vendorId = await findOrCreateVendorByName(
+        item.vendorName,
+        undefined,
+        { facilityId },
+      )
       const invoiceDate = toSafeDate(item.invoiceDate, new Date())
 
       const invoice = await prisma.invoice.create({

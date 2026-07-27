@@ -139,8 +139,8 @@ export function ProspectiveHero({
           <li className="flex items-start gap-2.5 text-sm leading-relaxed">
             <Sparkles className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
             <span>
-              <strong>Benchmarks</strong> and <strong>Analytics</strong> show
-              where your pricing sits vs the market across categories.
+              <strong>Benchmarks</strong> shows where your pricing sits vs the
+              market across categories.
             </span>
           </li>
         </ul>

@@ -638,6 +638,7 @@ model Vendor {
   productBenchmarks  ProductBenchmark[]
   crossVendorTieInMembers CrossVendorTieInMember[]
   vendorCogRecords   VendorCogRecord[]
+  aliases            VendorAlias[]
 
   @@map("vendor")
 }
@@ -1898,6 +1899,40 @@ model VendorNameMapping {
   @@unique([facilityId, cogVendorName])
   @@index([cogVendorName])
   @@map("vendor_name_mapping")
+}
+
+/// Vendor "also known as" — the spellings a vendor's own name appears under in
+/// facility-side COG / PO / invoice / contract files.
+///
+/// Charles 2026-07-27: the vendor workspace is named "Stryker", but facility
+/// files carry "STRYKER SALES CORP", "Howmedica Osteonics" (Stryker's legal
+/// manufacturing entity), "Stryker Flex Financial", "MAKO Surgical Corp"...
+/// Ingestion resolved names through an 11-company hardcoded literal plus a 0.7
+/// Levenshtein fallback; every spelling above MISSED and silently minted a new
+/// global Vendor row, splitting the vendor's spend into unrelated silos.
+///
+/// Distinct from VendorNameMapping, which is a per-FACILITY override a facility
+/// admin sets on their own COG page. This table is the VENDOR's own global
+/// declaration of its identities, managed from vendor settings.
+model VendorAlias {
+  id       String @id @default(cuid())
+  vendorId String
+  /// As typed, preserved for display.
+  alias    String
+  /// `vendorNameKey(alias)` — the exact lookup key. See lib/vendors/normalize.ts.
+  normalizedAlias String
+  /// vendor | admin | seed — who asserted this alias.
+  source   String @default("vendor")
+  createdAt DateTime @default(now())
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  /// GLOBAL uniqueness is the over-merge guard: an alias resolves to exactly one
+  /// vendor, so two companies can never both claim "Howmedica Osteonics" and
+  /// quietly cross-attribute each other's spend.
+  @@unique([normalizedAlias])
+  @@index([vendorId])
+  @@map("vendor_alias")
 }
 
 model CategoryMapping {

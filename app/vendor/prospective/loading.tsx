@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton"
  * Vendor Prospective loading skeleton — mirrors
  * `app/vendor/prospective/prospective-client.tsx`: the ProspectiveHero
  * (label + heading + status badge, then 3 border-y proposal stats), the
- * Opportunities / My Proposals / Deal Scorer / Benchmarks / Analytics
+ * Opportunities / Proposals / Benchmarks
  * tab strip, and the tab content (a 3-card grid). 2026-06-18: was a
  * form card + 3 result cards that didn't match the real layout.
  */
@@ -31,13 +31,11 @@ export default function VendorProspectiveLoading() {
         </div>
       </section>
 
-      {/* Tab strip (Opportunities / My Proposals / Deal Scorer / Benchmarks / Analytics) */}
+      {/* Tab strip (Opportunities / Proposals / Benchmarks) */}
       <div className="inline-flex w-fit gap-1 rounded-lg bg-muted p-1">
         <Skeleton className="h-8 w-28 rounded-md" />
         <Skeleton className="h-8 w-28 rounded-md" />
         <Skeleton className="h-8 w-28 rounded-md" />
-        <Skeleton className="h-8 w-28 rounded-md" />
-        <Skeleton className="h-8 w-24 rounded-md" />
       </div>
 
       {/* Tab content: a grid of opportunity / proposal cards */}

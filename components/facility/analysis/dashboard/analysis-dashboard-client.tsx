@@ -50,19 +50,38 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Download } from "lucide-react"
+import { AlertTriangle, Download } from "lucide-react"
+import Link from "next/link"
 import { downloadAnalysisCsv, downloadAnalysisPdf } from "./export-analysis"
 
-function seedAssumptions(
+/**
+ * Seed the model sliders.
+ *
+ * `sample` = the user explicitly asked to see the illustrative mid-size-ASC
+ * model. Only then may DEFAULT_FACILITY_ASSUMPTIONS stand in for a missing
+ * figure.
+ *
+ * Charles 2026-07-27 ("With no data in COG this is still coming up"): these
+ * three fields used `||` fallbacks, so a facility with no COG rows —
+ * `currentVendorSpend: 0` — silently became `0 || 12_500_000` and the page
+ * presented $12.5M of vendor spend, a $1.0M EBITDA and an $11.9M DCF as if
+ * they were the facility's own numbers. A zero is real data, not a missing
+ * value, so it now flows through untouched and the caller renders an empty
+ * state instead.
+ */
+export function seedAssumptions(
   data: FacilityAnalysisData,
+  sample = false,
 ): FacilityModelAssumptions {
+  if (sample) return { ...DEFAULT_FACILITY_ASSUMPTIONS }
   return {
+    // The genuinely-unknowable knobs (margin %, discount rate, growth, DCF
+    // horizon) still seed from defaults — those are modeling choices, not
+    // facility data.
     ...DEFAULT_FACILITY_ASSUMPTIONS,
-    netRevenue: data.netRevenue || DEFAULT_FACILITY_ASSUMPTIONS.netRevenue,
-    currentVendorSpend:
-      data.currentVendorSpend || DEFAULT_FACILITY_ASSUMPTIONS.currentVendorSpend,
-    annualCaseVolume:
-      data.annualCaseVolume || DEFAULT_FACILITY_ASSUMPTIONS.annualCaseVolume,
+    netRevenue: data.netRevenue,
+    currentVendorSpend: data.currentVendorSpend,
+    annualCaseVolume: data.annualCaseVolume,
   }
 }
 
@@ -74,11 +93,16 @@ function seedAssumptions(
  * all cases. That data-grounded seed is NOT the old spend÷30% proxy, so EBITDA
  * no longer collapses onto vendor spend (Vick 2026-06-22).
  */
-function seedRevenue(data: FacilityAnalysisData): {
+function seedRevenue(
+  data: FacilityAnalysisData,
+  sample = false,
+): {
   mode: RevenueMode
   avgReimbursementPerCase: number
 } {
-  const cases = data.annualCaseVolume || DEFAULT_FACILITY_ASSUMPTIONS.annualCaseVolume
+  const cases = sample
+    ? DEFAULT_FACILITY_ASSUMPTIONS.annualCaseVolume
+    : data.annualCaseVolume
   const coveredAvg =
     data.reimbursementCoverage.withRate > 0
       ? data.measuredReimbursement / data.reimbursementCoverage.withRate
@@ -144,6 +168,12 @@ export function AnalysisDashboardClient({
   const [overrideFileName, setOverrideFileName] = useState<string | null>(null)
   const effectiveData = override ?? data
 
+  // Explicit opt-in to the illustrative mid-size-ASC model. Off by default:
+  // with no COG data the page must not invent a facility (Charles 2026-07-27).
+  const [sampleMode, setSampleMode] = useState(false)
+  // No live COG, no uploaded file, and no opt-in → there is nothing to model.
+  const showEmptyState = !override && !data.hasData && !sampleMode
+
   const [assumptions, setAssumptions] = useState<FacilityModelAssumptions>(() =>
     seedAssumptions(data),
   )
@@ -160,19 +190,29 @@ export function AnalysisDashboardClient({
     () => seedAssumptions(data).currentVendorSpend * 0.05,
   )
 
-  const reseedFrom = useCallback((d: FacilityAnalysisData) => {
-    const seeded = seedAssumptions(d)
-    setAssumptions(seeded)
-    setSavings(seeded.currentVendorSpend * 0.05)
-    const rev = seedRevenue(d)
-    setRevenueMode(rev.mode)
-    setAvgReimbursementPerCase(rev.avgReimbursementPerCase)
-  }, [])
+  const reseedFrom = useCallback(
+    (d: FacilityAnalysisData, sample = false) => {
+      const seeded = seedAssumptions(d, sample)
+      setAssumptions(seeded)
+      setSavings(seeded.currentVendorSpend * 0.05)
+      const rev = seedRevenue(d, sample)
+      setRevenueMode(rev.mode)
+      setAvgReimbursementPerCase(rev.avgReimbursementPerCase)
+    },
+    [],
+  )
+
+  const handleShowSampleModel = useCallback(() => {
+    setSampleMode(true)
+    reseedFrom(data, true)
+  }, [data, reseedFrom])
 
   const handleApplyUpload = useCallback(
     (d: FacilityAnalysisData, fileName: string) => {
       setOverride(d)
       setOverrideFileName(fileName)
+      // Real uploaded numbers supersede the illustrative model.
+      setSampleMode(false)
       reseedFrom(d)
     },
     [reseedFrom],
@@ -181,6 +221,7 @@ export function AnalysisDashboardClient({
   const handleResetSource = useCallback(() => {
     setOverride(null)
     setOverrideFileName(null)
+    setSampleMode(false)
     reseedFrom(data)
   }, [data, reseedFrom])
 
@@ -222,8 +263,11 @@ export function AnalysisDashboardClient({
               ? `Modeled from uploaded file ${overrideFileName}.`
               : data.hasData
                 ? "Modeled from your facility's live spend and case data."
-                : "No facility data yet — showing a representative model you can tune."}{" "}
-            Tune any assumption and every figure recalculates instantly.
+                : sampleMode
+                  ? "Sample model — illustrative figures, not this facility's data."
+                  : "No COG spend data yet."}{" "}
+            {!showEmptyState &&
+              "Tune any assumption and every figure recalculates instantly."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -234,7 +278,15 @@ export function AnalysisDashboardClient({
           />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5">
+              {/* Nothing to export while the page has no facility data —
+                  exporting the sample model would put fabricated figures in a
+                  file that outlives the on-screen disclaimer. */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={showEmptyState || sampleMode}
+              >
                 <Download className="h-4 w-4" />
                 Export
               </Button>
@@ -261,7 +313,53 @@ export function AnalysisDashboardClient({
         </div>
       </div>
 
-      <CurrentStateCards current={model.prospective.current} />
+      {showEmptyState ? (
+        <div className="rounded-lg border border-dashed p-10 text-center">
+          <h2 className="text-lg font-semibold">No COG spend data yet</h2>
+          <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
+            The Current State model is built from your facility&apos;s supply
+            spend. Import COG data or model from a contract / pricing file to
+            see your vendor spend, EBITDA and enterprise-value figures.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+            <Button asChild size="sm">
+              <Link href="/dashboard/cog-data">Import COG data</Link>
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleShowSampleModel}>
+              Show sample model
+            </Button>
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">
+            The sample model is an illustrative mid-size ASC — useful for a
+            walkthrough, but none of it is your facility&apos;s data.
+          </p>
+        </div>
+      ) : (
+        <>
+          {sampleMode && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+              <div className="space-y-1">
+                <p className="font-medium">
+                  Sample model — not this facility&apos;s data
+                </p>
+                <p className="text-muted-foreground">
+                  Every figure below is an illustrative default for a mid-size
+                  ASC. Import COG data or upload a pricing file to model your own
+                  numbers.{" "}
+                  <button
+                    type="button"
+                    className="underline underline-offset-2"
+                    onClick={handleResetSource}
+                  >
+                    Exit sample model
+                  </button>
+                </p>
+              </div>
+            </div>
+          )}
+
+          <CurrentStateCards current={model.prospective.current} />
 
       <FinancialAssumptionsCard
         assumptions={effectiveAssumptions}
@@ -326,7 +424,9 @@ export function AnalysisDashboardClient({
         <ManagedCareCard prediction={model.managedCare} />
       </div>
 
-      <GrowthSimulatorCard assumptions={assumptions} />
+          <GrowthSimulatorCard assumptions={assumptions} />
+        </>
+      )}
     </div>
   )
 }

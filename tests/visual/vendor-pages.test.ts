@@ -46,11 +46,18 @@ test("vendor new contract has 3 entry modes", async ({ page }) => {
 
 // ─── Vendor Prospective ─────────────────────────────────────────
 
-test("vendor prospective has 5 tabs", async ({ page }) => {
+test("vendor prospective has 3 tabs", async ({ page }) => {
   await loginAsVendor(page)
   await page.goto("/vendor/prospective")
   await expectText(page, ["Prospective Analysis"])
-  await expectText(page, ["Opportunities", "My Proposals", "Deal Scorer", "Benchmarks", "Analytics"])
+  // Assert on the tabs themselves, not any visible text — the previous
+  // expectText list had gone stale ("My Proposals" / "Deal Scorer" were
+  // folded into "Proposals" long before Analytics was removed) and still
+  // passed, because those words appear in body copy elsewhere on the page.
+  for (const name of ["Opportunities", "Proposals", "Benchmarks"]) {
+    await expect(page.getByRole("tab", { name })).toBeVisible()
+  }
+  await expect(page.getByRole("tab", { name: "Analytics" })).toHaveCount(0)
   // Stat cards
   await expectText(page, ["Total Proposals", "Avg Deal Score", "Acceptable Deals"])
 })

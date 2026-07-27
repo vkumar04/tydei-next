@@ -47,7 +47,14 @@ export async function matchCOGToContracts(): Promise<{
   const distinctNames = distinctVendors
     .map((g) => g.vendorName ?? "")
     .filter((n) => n.trim())
-  const resolved = await resolveVendorIdsBulk(distinctNames, { createMissing: false })
+  // facilityId is required for Pass 0 — without it the match preview ignored
+  // the facility's own confirmed vendor-name mappings and reported names as
+  // unmatched that the importer would in fact have resolved (Charles
+  // 2026-07-27).
+  const resolved = await resolveVendorIdsBulk(distinctNames, {
+    createMissing: false,
+    facilityId: facility.id,
+  })
 
   // 3. Load vendors that have active contracts at this facility so we
   //    can tell the user which matches are "on contract" vs just "matched".

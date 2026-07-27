@@ -29,8 +29,14 @@ export function useCreatePendingContract() {
   // caller (vendor-contract-submission.tsx) so the multi-facility fan-out can
   // roll up "submitted to N of M facilities" into one message instead of N
   // stacked toasts — hence no `success`/`error` here (silent).
+  //
+  // Charles 2026-07-27: `contracts.all` joined the list because creation is no
+  // longer guaranteed to produce only a pending row — in one-way mode the
+  // action materializes a real Contract on the spot
+  // (lib/connections/operating-mode.ts), and the vendor is redirected straight
+  // to /vendor/contracts, which reads that key.
   return useToastMutation(createPendingContract, {
-    invalidate: [queryKeys.pendingContracts.all],
+    invalidate: [queryKeys.pendingContracts.all, queryKeys.contracts.all],
   })
 }
 

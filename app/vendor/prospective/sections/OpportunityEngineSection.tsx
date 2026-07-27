@@ -55,6 +55,7 @@ import { cn } from "@/lib/utils"
 import { useToastMutation } from "@/hooks/use-toast-mutation"
 import { queryKeys } from "@/lib/query-keys"
 import { updateProposalOpportunity } from "@/lib/actions/prospective"
+import { useVendorProposalDetail } from "@/hooks/use-prospective"
 import {
   computeOpportunityEngine,
   DEFAULT_OPPORTUNITY_SCENARIO,
@@ -157,6 +158,14 @@ interface OpportunityEngineSectionProps {
   /** When set, pre-fills facility + price/share sliders from a scored deal. */
   initialDeal?: OppEngineHandoff | null
   /**
+   * The saved proposal the workspace is attached to. On RE-ENTRY there is no
+   * deal handoff — the vendor just reopened the proposal — so this is the only
+   * route back to the Opportunity run they left on it (Charles 2026-07-27
+   * "you can go back and look at it again"). It also enables "Save opportunity
+   * to proposal" without an Analyze first.
+   */
+  attachedProposalId?: string | null
+  /**
    * One-page workspace (Charles 2026-07-06 "entering facility twice"): the ONE
    * facility for this workspace, sourced LIVE from the ProposalBuilder above.
    * When set it locks BOTH facility controls (Facility Current State + Deal
@@ -172,6 +181,21 @@ const BAND_SUBLABEL: Record<
   long_shot: "Long-shot likelihood",
   competitive: "Competitive",
   likely: "Likely to convert",
+}
+
+/**
+ * Blended current unit price across a deal's constructs — Σ(current × volume)
+ * ÷ Σ volume, null when the deal carries no current prices. ONE copy, shared
+ * by the live handoff and the re-entry restore below so the two paths can't
+ * drift (Charles 2026-07-27).
+ */
+function blendedCurrentAsp(rows: OppDealConstructRow[]): number | null {
+  const volume = rows.reduce((s, c) => s + Math.max(0, c.annualVolume), 0)
+  const spend = rows.reduce(
+    (s, c) => s + Math.max(0, c.current) * Math.max(0, c.annualVolume),
+    0,
+  )
+  return volume > 0 && spend > 0 ? spend / volume : null
 }
 
 // Compact USD: $6.9M / $803K / $420.
@@ -193,6 +217,7 @@ export const OpportunityEngineSection = forwardRef<
     vendorId,
     facilities = [],
     initialDeal = null,
+    attachedProposalId = null,
     lockedFacilityId = null,
   },
   ref,
@@ -237,9 +262,6 @@ export const OpportunityEngineSection = forwardRef<
   const [dealCurrentRevenue, setDealCurrentRevenue] = useState<number | null>(null)
   const [dealCurrentSharePct, setDealCurrentSharePct] = useState<number | null>(null)
   const [dealCurrentAsp, setDealCurrentAsp] = useState<number | null>(null)
-  // The real proposal id (when reached from a saved proposal) — enables
-  // saving this Opportunity run back onto the proposal so View shows it.
-  const [savedProposalId, setSavedProposalId] = useState<string | null>(null)
   const saveOpportunity = useToastMutation(updateProposalOpportunity, {
     invalidate: [queryKeys.prospective.all],
     success: "Opportunity saved to the proposal",
@@ -255,20 +277,11 @@ export const OpportunityEngineSection = forwardRef<
     if (!initialDeal || appliedDealRef.current === initialDeal.proposalId) return
     appliedDealRef.current = initialDeal.proposalId
     setDealConstructs(initialDeal.constructs ?? [])
-    setSavedProposalId(initialDeal.savedProposalId ?? null)
     setCapitalRevenue(initialDeal.capitalRevenue ?? 0)
     setDealSupplySpend(initialDeal.facilitySupplySpend ?? null)
     setDealCurrentRevenue(initialDeal.currentRevenue ?? null)
     setDealCurrentSharePct(initialDeal.currentSharePct ?? null)
-    // Blended current unit price across the deal's constructs — the ASP the
-    // unit math should run on when the deal carries current prices.
-    const cons = initialDeal.constructs ?? []
-    const conVol = cons.reduce((s, c) => s + Math.max(0, c.annualVolume), 0)
-    const conSpend = cons.reduce(
-      (s, c) => s + Math.max(0, c.current) * Math.max(0, c.annualVolume),
-      0,
-    )
-    setDealCurrentAsp(conVol > 0 && conSpend > 0 ? conSpend / conVol : null)
+    setDealCurrentAsp(blendedCurrentAsp(initialDeal.constructs ?? []))
     if (initialDeal.facilityId) {
       const f = facilities.find((x) => x.id === initialDeal.facilityId)
       if (f) setFacility(f.name)
@@ -284,6 +297,76 @@ export const OpportunityEngineSection = forwardRef<
       )
     }
   }, [initialDeal, facilities])
+
+  // The real proposal THIS run belongs to — it enables "Save opportunity to
+  // proposal" and keys the re-entry restore below. Derived, never mirrored into
+  // state (CLAUDE.md). A live deal handoff names it first: a card's
+  // "Opportunity Engine" button must save onto ITS proposal, not whatever the
+  // Deal Scorer's picker happens to be holding. Otherwise it's the proposal the
+  // scorer is attached to — the RE-ENTRY path, where no Analyze ever runs
+  // (Charles 2026-07-27 "you can go back and look at it again").
+  const savedProposalId =
+    initialDeal?.savedProposalId ?? attachedProposalId ?? null
+  // Read through the shared detail query — the builder above holds the same row
+  // under the same factory key, so reopening a proposal costs no extra
+  // round-trip.
+  const { data: attachedDetail } = useVendorProposalDetail(savedProposalId)
+  // Apply the saved proposal ONCE, the same one-shot ref guard the initialDeal
+  // handoff above uses, so a vendor tweak afterwards stands (and a background
+  // refetch doesn't undo it). Division and facility are deliberately NOT
+  // restored: the workspace above owns them (locked from the builder), and
+  // re-seeding them here would fight it.
+  const restoredProposalRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!attachedDetail) return
+    if (restoredProposalRef.current === attachedDetail.id) return
+    // A deal analyzed in THIS session OWNS the engine — a fresh run always
+    // beats the stored one.
+    if (appliedDealRef.current !== null) return
+    restoredProposalRef.current = attachedDetail.id
+    // Restore the DEAL before its levers. Restoring the sliders alone would
+    // move them against the book-of-business/default seeds, so the six stat
+    // cards would render a scenario that was never actually run — the exact
+    // "not sure where these numbers are coming from" failure the seed
+    // priority exists to prevent (Charles 2026-07-27).
+    const handoff = attachedDetail.dealHandoff
+    if (handoff) {
+      setDealConstructs(handoff.constructs)
+      setCapitalRevenue(handoff.capitalRevenue ?? 0)
+      setDealCurrentRevenue(
+        handoff.currentAnnualSpend > 0 ? handoff.currentAnnualSpend : null,
+      )
+      setDealCurrentAsp(blendedCurrentAsp(handoff.constructs))
+    }
+    // Facility supply spend + current share are Deal-Scorer assumptions, not
+    // part of the handoff — Σ the saved category-spend rows the same way the
+    // live handoff does (falling back to the single legacy `estimatedSpend`).
+    const assumptions = attachedDetail.dealAssumptions
+    if (assumptions) {
+      setDealCurrentSharePct(assumptions.currentSharePct)
+      const spend =
+        assumptions.estimatedCategorySpends &&
+        assumptions.estimatedCategorySpends.length > 0
+          ? assumptions.estimatedCategorySpends.reduce(
+              (s, r) => s + (r.spend ?? 0),
+              0,
+            )
+          : (assumptions.estimatedSpend ?? 0)
+      setDealSupplySpend(spend > 0 ? spend : null)
+    }
+    // Stored as fractions; the sliders hold whole percents. Clamp to each
+    // slider's domain (V-C6) so a run saved outside it still renders.
+    const saved = attachedDetail.opportunityScenario
+    if (saved) {
+      setPriceChangePctInt(
+        clamp(Math.round(saved.priceChangePct * 100), -20, 20),
+      )
+      setTargetSharePctInt(clamp(Math.round(saved.targetShare * 100), 0, 100))
+      setVolumeGrowthPctInt(
+        clamp(Math.round(saved.expectedVolumeGrowthPct * 100), -10, 30),
+      )
+    }
+  }, [attachedDetail])
 
   // One-page workspace: mirror the builder's LIVE facility into the field so
   // scoping, the Facility Current State panel, and the export all follow it —

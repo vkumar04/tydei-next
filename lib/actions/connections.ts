@@ -287,15 +287,85 @@ async function assertCallerOnConnection(
   }
 }
 
+/**
+ * Charles 2026-07-27 (found while wiring one-way auto-activation): accepting
+ * is RECIPIENT-ONLY. `assertCallerOnConnection` allows either party, which is
+ * right for reject/remove but let the INVITER accept its own invite — so a
+ * vendor could `sendConnectionInvite` at a facility it picked by name and then
+ * `acceptConnection` itself, manufacturing an "accepted" relationship with no
+ * facility consent. `canAutoActivate` (lib/connections/operating-mode.ts)
+ * treats an accepted one_way row as permission to write a LIVE contract onto
+ * that facility's tenant, so self-accept was a cross-tenant write in two
+ * calls. The invited side is the one named by `inviteType`.
+ */
+async function assertCallerIsInviteRecipient(
+  userId: string,
+  connectionId: string,
+): Promise<{ facilityId: string; vendorId: string }> {
+  const member = await prisma.member.findFirst({
+    where: { userId },
+    include: { organization: { include: { facility: true, vendor: true } } },
+  })
+  const callerFacilityId = member?.organization?.facility?.id
+  const callerVendorId = member?.organization?.vendor?.id
+
+  // The row is read ALREADY NARROWED to the caller's own tenant, so the
+  // ownership decision lives in the where clause rather than in a post-fetch
+  // comparison the scanner (and a future reader) can't see. The inviteType
+  // check below then narrows "a party" to "the INVITED party".
+  const connection = callerFacilityId
+    ? await prisma.connection.findFirst({
+        where: { id: connectionId, facilityId: callerFacilityId },
+        select: { facilityId: true, vendorId: true, inviteType: true },
+      })
+    : callerVendorId
+      ? await prisma.connection.findFirst({
+          where: { id: connectionId, vendorId: callerVendorId },
+          select: { facilityId: true, vendorId: true, inviteType: true },
+        })
+      : null
+  if (!connection) {
+    throw new Error("Not authorized: not a party to this connection")
+  }
+  const callerIsRecipient =
+    connection.inviteType === "vendor_to_facility"
+      ? connection.facilityId === callerFacilityId
+      : connection.vendorId === callerVendorId
+  if (!callerIsRecipient) {
+    throw new Error(
+      "Not authorized: only the invited party can accept this connection",
+    )
+  }
+  return { facilityId: connection.facilityId, vendorId: connection.vendorId }
+}
+
 export async function acceptConnection(connectionId: string): Promise<void> {
   const session = await requireAuth()
   await requireCanMutate()
-  await assertCallerOnConnection(session.user.id, connectionId)
+  const { facilityId, vendorId } = await assertCallerIsInviteRecipient(
+    session.user.id,
+    connectionId,
+  )
 
-  await prisma.connection.update({
-    where: { id: connectionId },
-    data: { status: "accepted", respondedAt: new Date() },
+  // Both party ids come from the recipient-scoped read above, so the write can
+  // only ever land on the row that was authorized. `status: "pending"` is the
+  // third clause on purpose: without it, accept re-opens a `rejected` or
+  // `expired` invite, and an accepted row is what `canAutoActivate`
+  // (lib/connections/operating-mode.ts) treats as permission for a vendor to
+  // write a LIVE contract into this facility's tenant.
+  const accepted = await prisma.connection.updateMany({
+    where: { id: connectionId, facilityId, vendorId, status: "pending" },
+    data: {
+      status: "accepted",
+      respondedAt: new Date(),
+      respondedBy: session.user.id,
+    },
   })
+  if (accepted.count !== 1) {
+    throw new Error(
+      "This invitation is no longer pending — ask the other party to send a new one.",
+    )
+  }
 }
 
 export async function rejectConnection(connectionId: string): Promise<void> {

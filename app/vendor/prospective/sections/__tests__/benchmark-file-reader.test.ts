@@ -9,7 +9,13 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { mapBenchmarkRows } from "../benchmark-file-reader"
+import { resolveMapping } from "@/components/shared/uploads/field-spec"
+import {
+  mapBenchmarkRows,
+  benchmarkCoverageGaps,
+  buildBenchmarkTemplateCsv,
+  BENCHMARK_UPLOAD_SPECS,
+} from "../benchmark-file-reader"
 
 function rowsFor(
   headers: string[],
@@ -276,6 +282,215 @@ describe("mapBenchmarkRows — mappingOverride (uploader improvements 1, 2026-06
     expect(items).toHaveLength(1)
     expect(items[0]!.vendorItemNo).toBe("A-2")
     expect(droppedNoPrice).toBe(1)
+  })
+})
+
+// ─── Per-field coverage (Charles 2026-07-27) ─────────────────────
+// "Benchmarks still do not have all of the information as they should" was a
+// TRANSPARENCY bug, not data loss: his workbook is two columns, so the
+// distribution fields were never in the file. Coverage is what lets the
+// Benchmarks surface say that out loud instead of rendering a wall of "—".
+describe("mapBenchmarkRows — per-field coverage", () => {
+  it("reports zero coverage for every column Charles's two-column file omits", () => {
+    const headers = ["Construct", "National Avg Price"]
+    const { items, coverage } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [
+        ["Cemented Knee", "3300"],
+        ["Cemented knee with top Poly", "3600"],
+        ["Cemented with revision poly", "3750"],
+        ["Press fit knee", "4200"],
+      ]),
+    )
+    expect(items).toHaveLength(4)
+    expect(coverage).toEqual({
+      category: 0,
+      nationalAvgPrice: 4,
+      percentile25: 0,
+      percentile50: 0,
+      percentile75: 0,
+      minPrice: 0,
+      maxPrice: 0,
+      sampleSize: 0,
+    })
+    expect(benchmarkCoverageGaps(coverage).map((g) => g.key)).toEqual([
+      "category",
+      "percentile25",
+      "percentile50",
+      "percentile75",
+      "minPrice",
+      "maxPrice",
+      "sampleSize",
+    ])
+    // Labels come from the specs so the import copy names columns exactly as
+    // the mapping dialog and the CSV template do.
+    expect(benchmarkCoverageGaps(coverage).map((g) => g.label)).toEqual([
+      "Category",
+      "25th percentile price",
+      "Median price (P50)",
+      "75th percentile price",
+      "Minimum price",
+      "Maximum price",
+      "Sample size",
+    ])
+  })
+
+  it("reports full coverage — and no gaps — for a fully-populated file", () => {
+    const headers = [
+      "Item Number",
+      "Description",
+      "Category",
+      "National Avg Price",
+      "P25",
+      "Median",
+      "P75",
+      "Min Price",
+      "Max Price",
+      "Sample Size",
+      "As Of",
+    ]
+    const { items, coverage } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [
+        ["AR-1", "Knee", "Joints", "3300", "3100", "3250", "3500", "2800", "4100", "120", "2026-01-15"],
+        ["AR-2", "Hip", "Joints", "4200", "4000", "4150", "4400", "3700", "5000", "80", "2026-01-15"],
+      ]),
+    )
+    expect(items).toHaveLength(2)
+    expect(coverage).toEqual({
+      category: 2,
+      nationalAvgPrice: 2,
+      percentile25: 2,
+      percentile50: 2,
+      percentile75: 2,
+      minPrice: 2,
+      maxPrice: 2,
+      sampleSize: 2,
+    })
+    expect(benchmarkCoverageGaps(coverage)).toEqual([])
+  })
+
+  it("counts per row, not per column — a partly-filled column is not a gap", () => {
+    const headers = ["Item Number", "National Avg Price", "P25", "Sample Size"]
+    const { coverage } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [
+        ["A-1", "10", "9", ""],
+        ["A-2", "20", "", "50"],
+      ]),
+    )
+    expect(coverage.percentile25).toBe(1)
+    expect(coverage.sampleSize).toBe(1)
+    expect(benchmarkCoverageGaps(coverage).map((g) => g.key)).toEqual([
+      "category",
+      "percentile50",
+      "percentile75",
+      "minPrice",
+      "maxPrice",
+    ])
+  })
+
+  it("counts only KEPT rows (a dropped no-price row contributes nothing)", () => {
+    const headers = ["Item Number", "Category", "National Avg Price"]
+    const { items, droppedNoPrice, coverage } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [
+        ["B-1", "Joints", ""], // dropped: no price data
+        ["B-2", "Joints", "10"],
+      ]),
+    )
+    expect(items).toHaveLength(1)
+    expect(droppedNoPrice).toBe(1)
+    expect(coverage.category).toBe(1)
+    expect(coverage.nationalAvgPrice).toBe(1)
+  })
+
+  it("honours a mappingOverride that marks a column 'Not in this file'", () => {
+    const headers = ["Code", "Avg", "P25"]
+    const { coverage } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["A-1", "10", "9"]]),
+      {
+        itemNumber: "Code",
+        description: null,
+        category: null,
+        nationalAvgPrice: "Avg",
+        percentile25: null, // user unmapped it — coverage must follow
+        percentile50: null,
+        percentile75: null,
+        minPrice: null,
+        maxPrice: null,
+        sampleSize: null,
+        dataDate: null,
+      },
+    )
+    expect(coverage.nationalAvgPrice).toBe(1)
+    expect(coverage.percentile25).toBe(0)
+  })
+})
+
+describe("buildBenchmarkTemplateCsv", () => {
+  it("emits one header row built from the spec labels (never a hand-kept copy)", () => {
+    const csv = buildBenchmarkTemplateCsv()
+    expect(csv.split("\n")).toHaveLength(1)
+    expect(csv).toBe(
+      BENCHMARK_UPLOAD_SPECS.map((s) => `"${s.label}"`).join(","),
+    )
+  })
+
+  it("carries a column for every field the parser reads", () => {
+    const csv = buildBenchmarkTemplateCsv()
+    for (const spec of BENCHMARK_UPLOAD_SPECS) {
+      expect(csv).toContain(spec.label)
+    }
+  })
+
+  it("round-trips: the template's own headers auto-detect to every field", () => {
+    // The whole point of generating the template from the specs — a vendor
+    // who fills it in must never see a "column not found" gap.
+    const headers = BENCHMARK_UPLOAD_SPECS.map((s) => s.label)
+    const { items, coverage } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [
+        ["AR-1", "Knee", "Joints", "3300", "3100", "3250", "3500", "2800", "4100", "120", "2026-01-15"],
+      ]),
+    )
+    expect(items).toHaveLength(1)
+    expect(benchmarkCoverageGaps(coverage)).toEqual([])
+  })
+
+  it("round-trips through the MAPPING DIALOG too — every field resolves exactly", () => {
+    // The dialog resolves headers with resolveMapping, the mapper with its
+    // own alias scan. A filled-in template must clear BOTH: an "exact" hit
+    // on every field means no missing-column amber note and no fuzzy "best
+    // guess — verify" badge on the way to Import.
+    const headers = BENCHMARK_UPLOAD_SPECS.map((s) => s.label)
+    const { mapping, missingRequired, provenance } = resolveMapping(
+      headers,
+      BENCHMARK_UPLOAD_SPECS,
+    )
+    expect(missingRequired).toEqual([])
+    for (const spec of BENCHMARK_UPLOAD_SPECS) {
+      expect(mapping[spec.key]).toBe(spec.label)
+      expect(provenance[spec.key]).toBe("exact")
+    }
+  })
+
+  it("a label alias never steals another field's column", () => {
+    // withLabelAlias widens EVERY consumer's detection, and the percentile
+    // labels differ by one character ("25th…" / "75th…"). A file carrying
+    // only the P75 template column must leave P25 and the median unmapped
+    // rather than claiming the nearest lookalike.
+    const headers = ["Item number", "75th percentile price"]
+    const { items, coverage } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["AR-1", "3500"]]),
+    )
+    expect(items[0]!.percentile75).toBe(3500)
+    expect(items[0]!.percentile25).toBeUndefined()
+    expect(items[0]!.percentile50).toBeUndefined()
+    expect(coverage.percentile75).toBe(1)
+    expect(coverage.percentile25).toBe(0)
   })
 })
 

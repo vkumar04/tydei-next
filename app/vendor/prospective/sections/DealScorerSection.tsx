@@ -74,28 +74,43 @@ interface DealScorerSectionProps {
    */
   onDealAnalyzed?: (deal: OppEngineHandoff) => void
   /**
-   * A just-created/opened proposal id — selects it in "Attach score" and
+   * A just-created/opened proposal id — selects it in the proposal picker and
    * hydrates the construct grid from its products ("save → next step").
    */
   preselectedProposalId?: string | null
+  /**
+   * The proposal this section is actually attached to, reported upward on
+   * every change (preselect OR the picker). The Opportunity Engine below needs
+   * it to restore the proposal's saved scenario on RE-ENTRY, when no Analyze
+   * ever runs (Charles 2026-07-27 "go back and look at it again"). Null when
+   * nothing is attached.
+   */
+  onProposalAttached?: (proposalId: string | null) => void
   /**
    * One-page workspace mode (Charles 2026-07-06 "you should not need to enter
    * the facility twice or usage or pricing"): when the Deal Scorer sits below
    * the ProposalBuilder on the same page, the facility, usage, pricing, and
    * categories were ALREADY entered in the builder and ride in on the attached
-   * proposal. In embedded mode we HIDE the facility select, the attach-proposal
-   * dropdown, and the upload dropzones once a proposal is attached — showing an
-   * inherited summary instead — so nothing is re-entered.
+   * proposal. In embedded mode we HIDE the facility select and the upload
+   * dropzones — showing an inherited summary instead — so nothing is
+   * re-entered. The proposal picker is NOT hidden (Charles 2026-07-27): it is
+   * the only way back into a proposal saved in an earlier session.
    */
   embedded?: boolean
   /**
    * One-page bridge (Charles 2026-07-06): "Analyze deal" is the single commit
    * — when the builder above has unsaved content, this persists it first and
    * returns the created proposal id + facility so the score attaches and the
-   * facility resolves without a separate mid-page Save. Returns null when
-   * there's nothing to save (a proposal is already attached).
+   * facility resolves without a separate mid-page Save.
+   *
+   * Three outcomes: the saved proposal, `null` to carry on analyzing with
+   * whatever is already attached, or `"abort"` when there is nothing to attach
+   * and a score computed here would be written nowhere — the workspace has
+   * already explained why (Charles 2026-07-27).
    */
-  beforeAnalyze?: () => Promise<{ proposalId: string; facilityId: string | null } | null>
+  beforeAnalyze?: () => Promise<
+    { proposalId: string; facilityId: string | null } | "abort" | null
+  >
   /**
    * One-page LIVE inheritance (Charles 2026-07-06 "categories not coming
    * over"): the categories + facility the user is picking in the ProposalBuilder
@@ -151,10 +166,14 @@ function makeConstruct(seed?: Partial<ConstructForm>): ConstructForm {
 
 // ─── Section ───────────────────────────────────────────────────
 
-export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed, preselectedProposalId, embedded = false, beforeAnalyze, builderCategories = [], builderFacilityId = null }: DealScorerSectionProps) {
+export function DealScorerSection({ facilities, proposals, vendorId, onDealAnalyzed, preselectedProposalId, onProposalAttached, embedded = false, beforeAnalyze, builderCategories = [], builderFacilityId = null }: DealScorerSectionProps) {
   const queryClient = useQueryClient()
   const [facilityId, setFacilityId] = useState<string>("")
   const [proposalRowId, setProposalRowId] = useState<string>(NO_PROPOSAL)
+  // The vendor explicitly picked "Don't attach — just analyze". Distinct from
+  // "nothing attached yet": it opts OUT of the one-page bridge save, so Analyze
+  // neither persists a proposal nor blocks (Charles 2026-07-27).
+  const [detachRequested, setDetachRequested] = useState(false)
   const [contractVariant, setContractVariant] =
     useState<VendorContractVariant>("USAGE_SPEND")
   const [constructs, setConstructs] = useState<ConstructForm[]>(() => [
@@ -270,12 +289,26 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       : revenue
   }
 
-  // Coming from a builder save just SELECTS the proposal in the "Attach score"
-  // dropdown; the load below keys on that selection, so choosing a proposal
-  // manually behaves identically.
+  // Coming from a builder save (or a reopened proposal) just SELECTS the
+  // proposal in the picker; the load below keys on that selection, so choosing
+  // a proposal manually behaves identically.
   useEffect(() => {
-    if (preselectedProposalId) setProposalRowId(preselectedProposalId)
+    if (!preselectedProposalId) return
+    setProposalRowId(preselectedProposalId)
+    setDetachRequested(false)
   }, [preselectedProposalId])
+
+  // Report the attached proposal up to the workspace so the Opportunity Engine
+  // below can restore ITS saved run for the same proposal. Ref-hold the
+  // callback (same idiom as onDraftChange in the builder) so identity churn
+  // doesn't re-fire it.
+  const onProposalAttachedRef = useRef(onProposalAttached)
+  onProposalAttachedRef.current = onProposalAttached
+  useEffect(() => {
+    onProposalAttachedRef.current?.(
+      proposalRowId === NO_PROPOSAL ? null : proposalRowId,
+    )
+  }, [proposalRowId])
 
   // When a real proposal is attached (via preselect OR the dropdown), load its
   // usage + pricing as the REFERENCE — you enter usage + pricing ONCE (in the
@@ -552,11 +585,16 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
   async function handleAnalyze() {
     // One-page single-commit: if the builder above has unsaved content, save
     // it first — that becomes the attached proposal + resolves the facility,
-    // so there's no separate mid-page Save (Charles 2026-07-06).
-    let effFacilityId = facilityId
+    // so there's no separate mid-page Save (Charles 2026-07-06). The builder's
+    // LIVE facility pick is the fallback so an unattached analyze still knows
+    // where the deal is aimed.
+    let effFacilityId = facilityId || builderFacilityId || ""
     let effProposalId = proposalRowId
-    if (beforeAnalyze && proposalRowId === NO_PROPOSAL) {
+    if (beforeAnalyze && proposalRowId === NO_PROPOSAL && !detachRequested) {
       const saved = await beforeAnalyze()
+      // Nothing to attach — the workspace toasted why. Scoring on would throw
+      // the run away (Charles 2026-07-27 "…and look at it again").
+      if (saved === "abort") return
       if (saved) {
         effProposalId = saved.proposalId
         setProposalRowId(saved.proposalId)
@@ -856,7 +894,6 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
   // resolves from the local pick, else the builder's LIVE facility selection
   // (streamed down before Analyze), so the summary names it immediately instead
   // of waiting for the bridge-save (Charles 2026-07-06).
-  const hasAttachedProposal = proposalRowId !== NO_PROPOSAL
   const effectiveFacilityId = facilityId || builderFacilityId || ""
   const inheritedFacilityName =
     facilities.find((f) => f.id === effectiveFacilityId)?.name ?? null
@@ -983,12 +1020,25 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
             </div>
           </div>
 
-          {!inheritInputs ? (
+          {/* The proposal picker renders in BOTH modes (Charles 2026-07-27
+              "you can go back and look at it again"). Behind the one-page
+              inherit gate it was unreachable, so the only way to attach was a
+              save made in the current session — a saved proposal could never
+              be picked back up, and its score / constructs / assumptions never
+              came back. */}
           <div className="space-y-2">
             <Label htmlFor="attach-proposal">
-              Attach score to proposal (optional)
+              {embedded
+                ? "Working on proposal"
+                : "Attach score to proposal (optional)"}
             </Label>
-            <Select value={proposalRowId} onValueChange={setProposalRowId}>
+            <Select
+              value={proposalRowId}
+              onValueChange={(v) => {
+                setProposalRowId(v)
+                setDetachRequested(v === NO_PROPOSAL)
+              }}
+            >
               <SelectTrigger id="attach-proposal">
                 <SelectValue />
               </SelectTrigger>
@@ -1014,11 +1064,11 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              The overall score is saved on the selected proposal and shown
-              on its card in My Proposals.
+              {embedded
+                ? "Pick a saved proposal to carry on with it — its usage, pricing, constructs and assumptions load straight back in. Left unattached, Analyze saves the proposal you are building above and scores that."
+                : "The overall score is saved on the selected proposal and shown on its card in My Proposals."}
             </p>
           </div>
-          ) : null}
 
           {!inheritInputs ? (
           <div className="grid gap-3 md:grid-cols-2">

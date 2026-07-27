@@ -38,6 +38,7 @@ import {
 } from "./builder/file-handlers"
 import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
 import { estimateProposalTerms } from "@/lib/prospective-analysis/proposal-term-estimate"
+import { resolveProposalPersistTarget } from "@/lib/prospective/builder-session"
 import type {
   NewProposalState,
   ProspectiveFacility,
@@ -371,9 +372,12 @@ export const ProposalBuilder = forwardRef<
     onClose?.()
   }
 
-  // The row a mid-page Save already created — subsequent saves UPDATE it
+  // The row THIS builder session is bound to — subsequent saves UPDATE it
   // instead of minting a duplicate draft per click (bugs.rtfd 2026-07-07
-  // explicit-save flow). Reset with the form.
+  // explicit-save flow). It is deliberately NOT reset by any effect: the
+  // one-page workspace remounts the builder with a fresh session key when the
+  // vendor starts a new proposal (lib/prospective/builder-session.ts), so the
+  // binding dies with the session that owns it.
   const createdIdRef = useRef<string | null>(null)
 
   // Core persist — validation + create/update. Returns the proposal (or null
@@ -461,18 +465,29 @@ export const ProposalBuilder = forwardRef<
             : undefined,
       }
       // Edit an existing proposal in place (opened for edit OR already
-      // created by a prior mid-page Save), or create a new draft.
-      const targetId = editingProposalId ?? createdIdRef.current
-      const created = targetId
-        ? await updateMutation.mutateAsync({ proposalId: targetId, ...payload })
-        : await createMutation.mutateAsync({
-            vendorId,
-            ...payload,
-            vendorDivisionId: showDivisionPicker
-              ? vendorDivisionId || (myDivisions?.divisions[0]?.id ?? null)
-              : null,
-          })
-      if (!editingProposalId) createdIdRef.current = created.id
+      // created by a prior save in this session), or create a new draft.
+      const target = resolveProposalPersistTarget(
+        editingProposalId,
+        createdIdRef.current,
+      )
+      const created =
+        target.mode === "update"
+          ? await updateMutation.mutateAsync({
+              proposalId: target.proposalId,
+              ...payload,
+            })
+          : await createMutation.mutateAsync({
+              vendorId,
+              ...payload,
+              vendorDivisionId: showDivisionPicker
+                ? vendorDivisionId || (myDivisions?.divisions[0]?.id ?? null)
+                : null,
+            })
+      // Bind unconditionally (Charles 2026-07-27). The old `if
+      // (!editingProposalId)` guard meant an edit session left the ref null
+      // and the bound row lived in two places at once — with the session key
+      // now owning the reset, one place is enough and the two can't drift.
+      createdIdRef.current = created.id
       return created
     } catch {
       // Error toast handled by mutation

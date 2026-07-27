@@ -16,6 +16,7 @@ import {
   FolderTree,
   Boxes,
   BellRing,
+  Fingerprint,
 } from "lucide-react"
 import {
   useVendorProfile,
@@ -46,6 +47,7 @@ import { AICreditsTab } from "@/components/vendor/settings/tabs/ai-credits-tab"
 import { DivisionsTab } from "@/components/vendor/settings/tabs/divisions-tab"
 import { CogsTab } from "@/components/vendor/settings/tabs/cogs-tab"
 import { AlertsTab } from "@/components/vendor/settings/tabs/alerts-tab"
+import { IdentityTab } from "@/components/vendor/settings/tabs/identity-tab"
 
 interface VendorSettingsClientProps {
   vendorId: string
@@ -121,6 +123,7 @@ export function VendorSettingsClient({
 
   const tabs: Array<{ value: string; label: string; Icon: typeof User }> = [
     { value: "profile", label: "Profile", Icon: User },
+    { value: "identity", label: "Identity", Icon: Fingerprint },
     { value: "notifications", label: "Notifications", Icon: Bell },
     { value: "organization", label: "Organization", Icon: Building2 },
     { value: "divisions", label: "Divisions", Icon: FolderTree },
@@ -189,6 +192,10 @@ export function VendorSettingsClient({
             showPassword={showPassword}
             onTogglePassword={() => setShowPassword((p) => !p)}
           />
+        </TabsContent>
+
+        <TabsContent value="identity" className="space-y-6">
+          <IdentityTab vendorId={vendorId} vendorName={vendorName} />
         </TabsContent>
 
         <TabsContent value="notifications" className="space-y-6">

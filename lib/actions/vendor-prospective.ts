@@ -20,6 +20,7 @@ import {
   buildCptRateSchedule,
   resolveCaseReimbursement,
 } from "@/lib/case-costing/cpt-rate-map"
+import { vendorRelatedFacilityWhere } from "@/lib/vendors/related-facilities"
 import { expandCategoriesToCogVariants } from "@/lib/contracts/cog-category-filter"
 import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-universe"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
@@ -146,32 +147,13 @@ export interface VendorProspectiveAnalysisResult
 // ─── Vendor↔facility relationship scope (audit M5) ─────────────
 
 /**
- * Facilities a vendor has a real relationship with: a contract
- * (including grouped membership via `additionalVendorIds`), COG sales
- * history, or a submitted/draft PendingContract. Used by both the
- * prospective page's facility list and the analysis action's facility
- * lookup so a vendor can't enumerate or analyze arbitrary facilities.
+ * `vendorRelatedFacilityWhere` used to live here. Charles 2026-07-27: the
+ * vendor "New Contract" facility picker needs the identical predicate, so it
+ * moved to `lib/vendors/related-facilities.ts` rather than being re-inlined
+ * there. Same semantics — a contract (incl. grouped `additionalVendorIds`
+ * membership), COG history, or a PendingContract — so a vendor can't
+ * enumerate or analyze arbitrary facilities.
  */
-function vendorRelatedFacilityWhere(
-  vendorId: string,
-): Prisma.FacilityWhereInput {
-  return {
-    OR: [
-      {
-        contracts: {
-          some: {
-            OR: [
-              { vendorId },
-              { additionalVendorIds: { has: vendorId } },
-            ],
-          },
-        },
-      },
-      { cogRecords: { some: { vendorId } } },
-      { pendingContracts: { some: { vendorId } } },
-    ],
-  }
-}
 
 /**
  * Active facilities related to the calling vendor (contract incl.

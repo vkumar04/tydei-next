@@ -153,3 +153,57 @@ describe("penetration — the Charles case: spend estimate below known revenue",
     expect(r.warnings.some((w) => w.includes("spend floor"))).toBe(false)
   })
 })
+
+describe("penetration — the Charles 2026-07-27 case: an entered 0% share", () => {
+  // Reproduces the "Penetration & revenue at risk" card from the bug report
+  // verbatim: unit price $3,200 × 700 units = $2,240,000 of basket spend,
+  // 90% market-share commitment, and a current share the vendor entered as 0.
+  //
+  // Pre-fix the card read:
+  //   Current share 0.0% | Current revenue $2,240,000
+  //   Target revenue $2,016,000 | Incremental $0 | At risk $2,240,000
+  // Charles: "current share is 0 / there is nothing at risk it is all growth."
+  function zeroShareInput() {
+    return baseInput({
+      facilityCurrentVendorShare: 0,
+      facilityCurrentVendorRevenue: 2_240_000,
+      facilityEstimatedAnnualSpend: 0,
+      targetVendorShare: 0.9,
+    })
+  }
+
+  it("reports no current revenue and nothing at risk", () => {
+    const r = analyzeVendorProspective(zeroShareInput())
+    expect(r.penetrationAnalysis.currentShare).toBe(0)
+    expect(r.penetrationAnalysis.currentAnnualRevenue).toBe(0)
+    expect(r.revenueAtRisk).toBe(0)
+  })
+
+  it("treats the whole target as incremental growth", () => {
+    const r = analyzeVendorProspective(zeroShareInput())
+    // The supplied figure is the addressable basket, so it floors the
+    // denominator: $2,240,000 × 90% = $2,016,000, all of it new business.
+    expect(r.penetrationAnalysis.targetAnnualRevenue).toBe(2_016_000)
+    expect(r.penetrationAnalysis.incrementalRevenueOpportunity).toBe(2_016_000)
+  })
+
+  it("emits neither the spend-floor nor the revenue-loss warning", () => {
+    const r = analyzeVendorProspective(zeroShareInput())
+    expect(r.warnings.some((w) => w.includes("spend floor"))).toBe(false)
+    expect(r.warnings.some((w) => w.includes("LESS revenue"))).toBe(false)
+  })
+
+  it("still lets a real non-zero share keep the known-revenue behavior", () => {
+    // Guards the fix against over-reach: only an entered ZERO reclassifies.
+    const r = analyzeVendorProspective(
+      baseInput({
+        facilityCurrentVendorShare: 0.4,
+        facilityCurrentVendorRevenue: 500_000,
+        facilityEstimatedAnnualSpend: 2_000_000,
+        targetVendorShare: 0.6,
+      }),
+    )
+    expect(r.penetrationAnalysis.currentAnnualRevenue).toBe(500_000)
+    expect(r.revenueAtRisk).toBe(500_000)
+  })
+})

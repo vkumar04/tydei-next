@@ -249,9 +249,22 @@ export function analyzeVendorProspective(
   // COG sales / uploaded usage×price files) over the spend × share
   // derivation. See input doc on `facilityCurrentVendorRevenue`.
   const enteredShare = input.facilityCurrentVendorShare
-  const currentAnnualRevenue =
-    input.facilityCurrentVendorRevenue ??
-    input.facilityEstimatedAnnualSpend * (enteredShare ?? 0)
+
+  // An explicitly entered 0% share is a statement of fact: this vendor has no
+  // book at this facility yet. Any `facilityCurrentVendorRevenue` supplied
+  // alongside it therefore CANNOT be this vendor's revenue — the Deal Scorer
+  // sends Σ(construct current price × volume) over the negotiated basket,
+  // which at 0% share is entirely competitor spend, i.e. the denominator.
+  // Charles 2026-07-27: "current share is 0 / there is nothing at risk it is
+  // all growth." Pre-fix the card showed 0.0% share next to $2,240,000 of
+  // "current revenue", called all of it "revenue at risk", and clamped the
+  // incremental opportunity to $0 — the exact inverse of the truth.
+  const shareEnteredAsZero = enteredShare != null && enteredShare <= 0
+
+  const currentAnnualRevenue = shareEnteredAsZero
+    ? 0
+    : (input.facilityCurrentVendorRevenue ??
+      input.facilityEstimatedAnnualSpend * (enteredShare ?? 0))
 
   // Consistency floor (Charles 2026-06-30, Penetration card): the
   // facility's TOTAL category spend can never be less than what it
@@ -261,12 +274,22 @@ export function analyzeVendorProspective(
   // far BELOW current revenue, incremental $0, and "revenue at risk =
   // the entire book" with current share reading 0%. Floor the spend at
   // the known revenue and say so.
+  //
+  // At 0% share the supplied figure is addressable basket spend rather than
+  // vendor revenue, so it still floors the denominator — but silently, since
+  // the "below your known current revenue" warning would be incoherent for a
+  // vendor that earns nothing at the facility.
   let effectiveFacilitySpend = input.facilityEstimatedAnnualSpend
-  if (currentAnnualRevenue > effectiveFacilitySpend) {
-    effectiveFacilitySpend = currentAnnualRevenue
-    warnings.push(
-      `Facility estimated annual spend ($${fmt(input.facilityEstimatedAnnualSpend)}) is below your known current revenue ($${fmt(currentAnnualRevenue)}) — using your current revenue as the spend floor. Enter the facility's real total category spend for accurate penetration numbers.`,
-    )
+  const spendFloor = shareEnteredAsZero
+    ? (input.facilityCurrentVendorRevenue ?? 0)
+    : currentAnnualRevenue
+  if (spendFloor > effectiveFacilitySpend) {
+    effectiveFacilitySpend = spendFloor
+    if (!shareEnteredAsZero) {
+      warnings.push(
+        `Facility estimated annual spend ($${fmt(input.facilityEstimatedAnnualSpend)}) is below your known current revenue ($${fmt(currentAnnualRevenue)}) — using your current revenue as the spend floor. Enter the facility's real total category spend for accurate penetration numbers.`,
+      )
+    }
   }
 
   // When no current share was entered but current revenue IS known,
@@ -279,7 +302,11 @@ export function analyzeVendorProspective(
       : 0)
   const targetShare =
     input.targetVendorShare ?? Math.max(currentShare, 0.5) // default: try for 50%
-  const revenueAtRisk = currentAnnualRevenue
+  // Revenue at risk is the book you stand to LOSE, so it is derived from the
+  // share/revenue pair rather than aliasing currentAnnualRevenue — a vendor
+  // with no share has nothing at risk, and keeping the two tied prevents the
+  // pair from silently diverging again.
+  const revenueAtRisk = currentShare > 0 ? currentAnnualRevenue : 0
 
   // ── 4. Penetration analysis ──────────────────────────────────
   const targetAnnualRevenue = effectiveFacilitySpend * targetShare
