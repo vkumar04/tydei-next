@@ -256,10 +256,22 @@ export function AnalysisDashboardClient({
   // Effective net revenue from the Net Revenue control feeds the model — it
   // overrides the seed `assumptions.netRevenue` so EBITDA/DCF reflect the
   // chosen revenue source rather than the spend-derived proxy.
+  //
+  // Manual revenue is `perCase × cases`, which is structurally $0 when the
+  // facility has no case-costing data — and $0 revenue against real supply
+  // spend is incoherent, not honest. Removing the old `annualCaseVolume ||
+  // 5_000` fabrication (Charles 2026-07-27) exposed this: the fake case count
+  // had been the only thing keeping the loader's spend-derived proxy alive on
+  // such a facility. With no cases, fall back to that proxy — it is derived
+  // from spend, not from cases, so it stays meaningful — and let the operator
+  // enter a real case volume to take over.
+  const manualNetRevenue = avgReimbursementPerCase * assumptions.annualCaseVolume
   const effectiveNetRevenue =
     revenueMode === "actuals"
       ? effectiveData.measuredReimbursement
-      : avgReimbursementPerCase * assumptions.annualCaseVolume
+      : assumptions.annualCaseVolume > 0
+        ? manualNetRevenue
+        : assumptions.netRevenue
 
   const effectiveAssumptions = useMemo<FacilityModelAssumptions>(
     () => ({ ...assumptions, netRevenue: effectiveNetRevenue }),

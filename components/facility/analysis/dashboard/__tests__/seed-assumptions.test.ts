@@ -144,3 +144,53 @@ describe("seedRevenue — implied revenue must not revert to the rejected figure
     expect(avgReimbursementPerCase).toBe(5_000_000 / 50)
   })
 })
+
+describe("no case data — spend must still produce coherent revenue", () => {
+  /**
+   * Charles 2026-07-27, "everything is 0".
+   *
+   * A facility with real COG spend but NO case-costing data rendered the whole
+   * Contribution Margin table as 0 / $0 / $0 / 70%. Removing the old
+   * `annualCaseVolume || 5_000` fabrication exposed it: manual revenue is
+   * `perCase × cases`, so with zero cases it collapsed to $0 and discarded the
+   * loader's spend-derived proxy. The fake case count had been the only thing
+   * keeping that proxy alive.
+   */
+  const SPEND = 25_500_000
+  const PROXY = SPEND / 0.3
+
+  function noCases(): FacilityAnalysisData {
+    return emptyData({
+      currentVendorSpend: SPEND,
+      netRevenue: PROXY,
+      annualCaseVolume: 0,
+      measuredReimbursement: 0,
+      reimbursementCoverage: { withRate: 0, totalCases: 0 },
+      revenueIsImplied: true,
+      hasData: true,
+    })
+  }
+
+  it("does not fabricate a case volume", () => {
+    // The regression this whole change set exists to prevent.
+    expect(seedAssumptions(noCases()).annualCaseVolume).toBe(0)
+  })
+
+  it("keeps the spend-derived proxy as the seeded net revenue", () => {
+    // Revenue is derived from SPEND, not from cases, so it stays meaningful
+    // even with no case-costing data. $0 revenue against $25.5M of supply spend
+    // is incoherent, not honest.
+    expect(seedAssumptions(noCases()).netRevenue).toBe(PROXY)
+    expect(seedAssumptions(noCases()).netRevenue).toBeGreaterThan(SPEND)
+  })
+
+  it("yields a zero per-case seed, which is why the caller must not multiply by it", () => {
+    // seedRevenue can only return 0 here — there are no cases to divide by.
+    // AnalysisDashboardClient therefore falls back to assumptions.netRevenue
+    // instead of computing perCase × 0.
+    const { mode, avgReimbursementPerCase } = seedRevenue(noCases())
+    expect(mode).toBe("manual")
+    expect(avgReimbursementPerCase).toBe(0)
+    expect(avgReimbursementPerCase * 0).toBe(0)
+  })
+})

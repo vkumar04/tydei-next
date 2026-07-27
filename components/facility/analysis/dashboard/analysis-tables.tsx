@@ -37,6 +37,8 @@ import type {
 } from "@/components/facility/analysis/dashboard/model"
 
 const NUM = "text-right tabular-nums"
+/** Unknowable cell (e.g. a per-case figure with no case volume) — not a zero. */
+const EMPTY_CELL = "—"
 
 /** Fixed-height scroll region so the side-by-side cards stay aligned while a
  *  long list scrolls. The header stays pinned via sticky positioning. */
@@ -135,6 +137,19 @@ export function ContributionMarginTable({
         </p>
       </CardHeader>
       <CardContent>
+        {/* Charles 2026-07-27 ("everything is 0"): a facility with no
+            case-costing data has no per-case figures, and rendering those as a
+            literal "0 / $0" reads as broken data rather than absent data. Show
+            an em-dash for the genuinely-unknowable cells; the revenue-derived
+            columns beside them are real and must still render. */}
+        {rows.length > 0 && rows.every((r) => r.cases === 0) && (
+          <p className="mb-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+            No case volume on file — per-case columns are unavailable. Import
+            case-costing data, or set{" "}
+            <span className="font-medium">Annual cases</span> in Financial
+            Assumptions above.
+          </p>
+        )}
         <Table>
           <TableHeader>
             <TableRow>
@@ -149,9 +164,11 @@ export function ContributionMarginTable({
             {rows.map((row) => (
               <TableRow key={row.procedure}>
                 <TableCell className="font-medium">{row.procedure}</TableCell>
-                <TableCell className={NUM}>{formatNumber(row.cases)}</TableCell>
                 <TableCell className={NUM}>
-                  {formatCurrency(row.supplyPerCase)}
+                  {row.cases > 0 ? formatNumber(row.cases) : EMPTY_CELL}
+                </TableCell>
+                <TableCell className={NUM}>
+                  {row.cases > 0 ? formatCurrency(row.supplyPerCase) : EMPTY_CELL}
                 </TableCell>
                 <TableCell className={NUM}>
                   {usdCompact(row.contributionMargin)}
@@ -197,7 +214,12 @@ export function IndividualImpactTable({
             {rows.map((row) => (
               <TableRow key={row.category}>
                 <TableCell className="font-medium">{row.category}</TableCell>
-                <TableCell className={NUM}>{formatNumber(row.cases)}</TableCell>
+                {/* See ContributionMarginTable — an unknown per-case figure is
+                    an em-dash, not a zero. Annual Impact beside it is
+                    spend-derived and stays real. */}
+                <TableCell className={NUM}>
+                  {row.cases > 0 ? formatNumber(row.cases) : EMPTY_CELL}
+                </TableCell>
                 <TableCell
                   className={
                     row.annualImpact > 0
@@ -208,7 +230,7 @@ export function IndividualImpactTable({
                   {usdDelta(row.annualImpact)}
                 </TableCell>
                 <TableCell className={NUM}>
-                  {formatCurrency(row.impactPerCase)}
+                  {row.cases > 0 ? formatCurrency(row.impactPerCase) : EMPTY_CELL}
                 </TableCell>
                 <TableCell className={NUM}>
                   {pctFromFraction(row.marginPct, 0)} →{" "}
