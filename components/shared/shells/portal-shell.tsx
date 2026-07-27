@@ -102,12 +102,19 @@ export function PortalShell({
             uses TriangleAlert (warnings/expirations/discrepancies) so
             it's distinguishable from NotificationBell (in-app
             notification feed) at a glance. */}
-        <header className="grid h-16 grid-cols-[auto_1fr_auto] items-center gap-4 border-b bg-card px-4 lg:px-6">
+        {/* `minmax(0,1fr)` rather than `1fr`: a grid track sized `1fr` still
+            has an automatic MINIMUM of its content's min-content width, so
+            the search column refused to shrink and the header demanded
+            633px inside the 512px available at tablet width (768 minus the
+            sidebar). Every route overflowed by exactly 121px, at 768 only.
+            The `min-w-0` on the search wrapper is the same guard one level
+            down. Measured 2026-07-27. */}
+        <header className="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 border-b bg-card px-4 lg:px-6">
           {/* LEFT — sidebar collapse */}
           <SidebarTrigger className="-ml-1" />
 
           {/* CENTER — global search (Cmd+K palette spans every entity) */}
-          <div className="mx-auto w-full max-w-xl">
+          <div className="mx-auto w-full min-w-0 max-w-xl">
             <CommandSearch />
           </div>
 
