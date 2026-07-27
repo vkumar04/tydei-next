@@ -9,8 +9,10 @@ import { test, expect, type Page } from "@playwright/test"
 
 async function loginAsVendor(page: Page) {
   await page.goto("/login")
-  await page.getByPlaceholder(/email/i).fill("demo-vendor@tydei.com")
-  await page.getByPlaceholder(/password/i).fill("demo-vendor-2024")
+  // 2026-07-27: was getByPlaceholder(/email/i), which never matched — the
+  // placeholder is "you@example.com". The <Label> is the stable selector.
+  await page.getByLabel(/^email$/i).fill("demo-vendor@tydei.com")
+  await page.getByLabel(/^password$/i).fill("demo-vendor-2024")
   await page.getByRole("button", { name: /sign in|log in/i }).click()
   await page.waitForURL(/vendor/, { timeout: 10_000 })
 }

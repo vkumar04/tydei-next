@@ -86,14 +86,20 @@ export function seedAssumptions(
 }
 
 /**
- * Seed the Net Revenue control. Default to Actuals only when the measured
- * reimbursement is coherent (exceeds supply spend → `!revenueIsImplied`);
- * otherwise Manual, with the per-case figure seeded from the REAL average of
- * covered cases (`measuredReimbursement ÷ casesWithRate`), extrapolated to
- * all cases. That data-grounded seed is NOT the old spend÷30% proxy, so EBITDA
- * no longer collapses onto vendor spend (Vick 2026-06-22).
+ * Seed the Net Revenue control.
+ *
+ * Mode is Actuals only when the measured reimbursement is coherent (exceeds
+ * supply spend → `!revenueIsImplied`); otherwise Manual.
+ *
+ * The per-case seed depends on which of those it is:
+ *   - NOT implied → the real average of covered cases
+ *     (`measuredReimbursement ÷ casesWithRate`). Data-grounded, and what the
+ *     user sees if they flip to Manual (Vick 2026-06-22).
+ *   - IMPLIED → the proxy the loader already substituted, divided by the same
+ *     case count, so Manual mode agrees with the headline instead of silently
+ *     reverting to the figure the loader rejected. See the note below.
  */
-function seedRevenue(
+export function seedRevenue(
   data: FacilityAnalysisData,
   sample = false,
 ): {
@@ -110,7 +116,29 @@ function seedRevenue(
   const fallbackPerCase = cases > 0 ? data.netRevenue / cases : 0
   return {
     mode: data.revenueIsImplied ? "manual" : "actuals",
-    avgReimbursementPerCase: coveredAvg > 0 ? coveredAvg : fallbackPerCase,
+    // 2026-07-27: when revenue is IMPLIED, seed from the PROXY, not from the
+    // measured average.
+    //
+    // getFacilityAnalysisData sets `revenueIsImplied` exactly when the measured
+    // reimbursement is missing or implausibly low (≤ supply spend), and
+    // substitutes `totalSpend / IMPLIED_SUPPLY_COST_PCT` "so EBITDA/DCF stay
+    // coherent" (facility-analysis-data.ts:165-175). This function then put the
+    // page straight back into the state that fix existed to prevent: implied ⇒
+    // mode "manual", and manual revenue is `avgReimbursementPerCase × cases` —
+    // so seeding from `coveredAvg` (measured ÷ covered cases) multiplied back to
+    // the measured figure and the proxy was computed and thrown away.
+    //
+    // Lighthouse Surgical Center showed it: $1.45M trailing-12-month supply
+    // spend, 40 cases, $441,247 measured reimbursement over 40 covered cases.
+    // Proxy = $4.82M, but the page rendered Net Revenue $441,247 — BELOW its own
+    // supply spend, i.e. a negative gross margin, with EBITDA derived from it.
+    // `fallbackPerCase` divides the proxy by the same case count, so manual mode
+    // reproduces the proxy instead of contradicting it.
+    avgReimbursementPerCase: data.revenueIsImplied
+      ? fallbackPerCase
+      : coveredAvg > 0
+        ? coveredAvg
+        : fallbackPerCase,
   }
 }
 
