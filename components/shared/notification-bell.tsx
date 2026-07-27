@@ -37,7 +37,16 @@ export function NotificationBell() {
   const NOTIF_KEY = queryKeys.notifications.all
   const { data } = useQuery({
     queryKey: NOTIF_KEY,
-    queryFn: () => getMyNotifications(),
+    // Route Handler, NOT the Server Action — actions are dispatched one at a
+    // time per client and a queued poll keeps posting to the route that
+    // queued it after you navigate away, which can commit that route's RSC
+    // payload and yank you back. Plain JSON can't navigate the router.
+    // The mutations below stay actions; that is what actions are for.
+    queryFn: async (): Promise<NotificationsData> => {
+      const res = await fetch("/api/notifications")
+      if (!res.ok) throw new Error(`Notifications failed: ${res.status}`)
+      return res.json()
+    },
     refetchInterval: 30_000,
   })
 
