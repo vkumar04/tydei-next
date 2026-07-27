@@ -30,19 +30,43 @@ import {
 } from "@/lib/actions/admin/dashboard"
 import { queryKeys } from "@/lib/query-keys"
 
+type DashboardPayload = {
+  stats: Awaited<ReturnType<typeof getAdminDashboardStats>>
+  activity: Awaited<ReturnType<typeof getAdminRecentActivity>>
+  pending: Awaited<ReturnType<typeof getAdminPendingActions>>
+}
+
+/**
+ * One Route Handler, not three Server Actions.
+ *
+ * Actions are dispatched one at a time per client, so these three were
+ * serialised anyway — and a queued one keeps POSTing to /admin/dashboard
+ * after you click through to /admin/users, where its response commits this
+ * route's RSC payload and yanks you back. Plain JSON cannot navigate the
+ * router, and the three queries now genuinely run in parallel server-side.
+ *
+ * The three query keys are kept so existing invalidations still target the
+ * right panels; they share one fetch via the promise below.
+ */
 export function AdminDashboardClient() {
-  const stats = useQuery({
+  const dashboard = useQuery({
     queryKey: queryKeys.admin.stats(),
-    queryFn: getAdminDashboardStats,
+    queryFn: async (): Promise<DashboardPayload> => {
+      const res = await fetch("/api/admin/dashboard")
+      if (!res.ok) throw new Error(`Admin dashboard failed: ${res.status}`)
+      return res.json()
+    },
   })
-  const activity = useQuery({
-    queryKey: queryKeys.admin.activity(),
-    queryFn: () => getAdminRecentActivity(10),
-  })
-  const pending = useQuery({
-    queryKey: queryKeys.admin.pendingActions(),
-    queryFn: getAdminPendingActions,
-  })
+
+  const stats = { data: dashboard.data?.stats, isLoading: dashboard.isLoading }
+  const activity = {
+    data: dashboard.data?.activity,
+    isLoading: dashboard.isLoading,
+  }
+  const pending = {
+    data: dashboard.data?.pending,
+    isLoading: dashboard.isLoading,
+  }
 
   const pendingItems = pending.data
     ? [
