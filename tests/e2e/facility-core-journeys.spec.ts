@@ -256,8 +256,13 @@ test.describe("renewals", () => {
     ).toBeVisible({ timeout: LOAD })
 
     const table = page.getByRole("table")
-    const noContracts = content(page).getByText("No contracts on file")
-    await expect(table.first().or(noContracts)).toBeVisible({ timeout: LOAD })
+    // `.first()` on BOTH sides and on the union: `.or()` is still a locator, so
+    // if either branch matches more than one node the whole expression throws a
+    // strict-mode violation before the assertion runs.
+    const noContracts = content(page).getByText("No contracts on file").first()
+    await expect(table.first().or(noContracts).first()).toBeVisible({
+      timeout: LOAD,
+    })
 
     // Skip (don't fail) when the seed genuinely has no contracts to renew
     // — the header/hero assertions above already covered the page itself.
@@ -382,7 +387,10 @@ test.describe("purchase orders", () => {
     // Filter controls: search + vendor select + status select.
     await expect(search).toBeVisible()
     await expect(content(page).getByText("All Vendors")).toBeVisible()
-    await expect(content(page).getByText("All Status")).toBeVisible()
+    // The PO toolbar renders the status filter's label twice (trigger + the
+    // selected item), so scope to the first match rather than tripping strict
+    // mode.
+    await expect(content(page).getByText("All Status").first()).toBeVisible()
 
     // Scope tabs carry live counts, e.g. "On Contract (12)".
     for (const label of ["All", "On Contract", "Off Contract", "Pending"]) {
