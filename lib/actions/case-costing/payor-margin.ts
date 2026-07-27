@@ -21,6 +21,10 @@ import {
   lookupReimbursement,
   type PayorCptRate,
 } from "@/lib/case-costing/reimbursement-lookup"
+import {
+  normalizePayorCptRates,
+  type StoredPayorRate,
+} from "@/lib/case-costing/payor-rate-normalize"
 
 export interface PayorContractOption {
   id: string
@@ -63,13 +67,6 @@ export async function getPayorContractsForFacility(): Promise<
   }))
 }
 
-interface SeededRate {
-  cpt?: string
-  cptCode?: string
-  rate?: number
-  reimbursement?: number
-  description?: string
-}
 
 export async function getPayorContractMarginSummary(
   payorContractId: string,
@@ -87,15 +84,14 @@ export async function getPayorContractMarginSummary(
   })
   if (!contract) return null
 
-  // cptRates is stored as `{cpt, rate, description}` in the seed but
-  // `lookupReimbursement` takes `{cptCode, reimbursement}`. Normalize at
-  // the boundary; tolerate either shape so legacy data keeps working.
-  const raw = (contract.cptRates as SeededRate[] | null) ?? []
-  const rates: PayorCptRate[] = raw.map((r) => ({
-    payorType: String(contract.payorType),
-    cptCode: String(r.cptCode ?? r.cpt ?? ""),
-    reimbursement: Number(r.reimbursement ?? r.rate ?? 0),
-  }))
+  // Normalization lives in lib/case-costing/payor-rate-normalize.ts so it is
+  // reachable by tests. Inline here it dropped `effectiveDate` for months
+  // with the whole suite green, because nothing could call it without a
+  // database and a session.
+  const rates: PayorCptRate[] = normalizePayorCptRates(
+    contract.cptRates as StoredPayorRate[] | null,
+    String(contract.payorType),
+  )
 
   const cases = await prisma.case.findMany({
     where: { facilityId: facility.id },
