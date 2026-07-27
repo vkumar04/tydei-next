@@ -715,11 +715,24 @@ export async function getVendorBenchmarks(): Promise<VendorBenchmarkRow[]> {
   // files"): prospective benchmarks are the vendor's OWN uploaded rows
   // (vendorId = vendor.id, from the Benchmarks-tab import). The seeded /
   // national rows (vendorId = null) are intentionally NOT merged in anymore.
+  // Charles 2026-07-27 ("Benchmarks still do not have all of the information"):
+  // the cap used to be 500 with no signal, so a vendor who imported more than
+  // that silently saw a truncated table whose footer counted the truncated set
+  // as if it were everything — a second, independent way the complaint could be
+  // literally true. Raised well past any real uploaded benchmark set, and a hit
+  // is now logged rather than swallowed. Note the cap applies BEFORE the
+  // division-scope filter below, so a restricted member legitimately sees fewer.
+  const BENCHMARK_ROW_CAP = 5_000
   const direct = await prisma.productBenchmark.findMany({
     where: { vendorId: vendor.id },
     orderBy: [{ category: "asc" }, { vendorItemNo: "asc" }],
-    take: 500,
+    take: BENCHMARK_ROW_CAP,
   })
+  if (direct.length === BENCHMARK_ROW_CAP) {
+    console.warn(
+      `[getVendorBenchmarks] hit the ${BENCHMARK_ROW_CAP}-row cap for vendor ${vendor.id} — the table is truncated and its row count understates the real set.`,
+    )
+  }
 
   const seen = new Set<string>()
   const all = direct.filter((b) => {

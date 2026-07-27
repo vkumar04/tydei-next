@@ -641,10 +641,20 @@ export function VendorContractSubmission({
         ? [facilityId]
         : []
 
+    // Charles 2026-07-27: the picker now only offers facilities this vendor
+    // actually deals with (lib/vendors/related-facilities.ts), so a standalone
+    // vendor legitimately has none to pick. That is the one-way flow — the
+    // contract is the vendor's OWN (facilityId null) — not a missing required
+    // field, so submit exactly one facility-less payload instead of blocking.
+    const standalone = facilities.length === 0
+    const submitTargets: (string | undefined)[] = standalone
+      ? [undefined]
+      : facilityIdsToSubmit
+
     if (
       !contractName ||
       !contractType ||
-      facilityIdsToSubmit.length === 0 ||
+      submitTargets.length === 0 ||
       !effectiveDate ||
       !expirationDate
     ) {
@@ -672,14 +682,16 @@ export function VendorContractSubmission({
     startTransition(async () => {
 
     const buildPayloadFor = (
-      facId: string,
+      facId: string | undefined,
     ): CreatePendingContractInput => ({
       vendorId,
       vendorName,
       contractName,
       contractType: contractType as CreatePendingContractInput["contractType"],
       facilityId: facId,
-      facilityName: facilities.find((f) => f.id === facId)?.name,
+      facilityName: facId
+        ? facilities.find((f) => f.id === facId)?.name
+        : undefined,
       effectiveDate: effectiveDate.toISOString().split("T")[0],
       expirationDate: expirationDate.toISOString().split("T")[0],
       totalValue: contractTotal ? parseFloat(contractTotal) : undefined,
@@ -769,7 +781,7 @@ export function VendorContractSubmission({
         // (instead of one per success) telling the user exactly what
         // succeeded and what failed.
         const results = await Promise.allSettled(
-          facilityIdsToSubmit.map((facId) =>
+          submitTargets.map((facId) =>
             create.mutateAsync(buildPayloadFor(facId)),
           ),
         )
@@ -778,8 +790,9 @@ export function VendorContractSubmission({
             r.status === "rejected"
               ? {
                   facilityName:
-                    facilities.find((f) => f.id === facilityIdsToSubmit[i])
-                      ?.name ?? facilityIdsToSubmit[i],
+                    facilities.find((f) => f.id === submitTargets[i])?.name ??
+                    submitTargets[i] ??
+                    "your organization",
                   error: r.reason instanceof Error ? r.reason.message : String(r.reason),
                 }
               : null,
@@ -787,10 +800,25 @@ export function VendorContractSubmission({
           .filter((x): x is { facilityName: string; error: string } => x !== null)
         const successes = results.length - failures.length
         if (failures.length === 0) {
+          // Charles 2026-07-27: in one-way mode the server materializes the
+          // contract immediately and returns the row already flipped to
+          // "approved" — telling the vendor it's "submitted for review" when
+          // nobody is going to review it is the confusion behind the original
+          // report. Read the status back rather than assuming.
+          const autoActivated = results.every(
+            (r) =>
+              r.status === "fulfilled" &&
+              (r.value as { status?: string } | undefined)?.status ===
+                "approved",
+          )
           toast.success(
-            successes === 1
-              ? "Contract submitted for review"
-              : `Contract submitted to ${successes} facilities`,
+            autoActivated
+              ? successes === 1
+                ? "Contract created and activated"
+                : `Contract created and activated for ${successes} facilities`
+              : successes === 1
+                ? "Contract submitted for review"
+                : `Contract submitted to ${successes} facilities`,
           )
           router.push("/vendor/contracts")
           return

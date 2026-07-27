@@ -9,9 +9,26 @@
  * Strategy (cheapest → most expensive):
  *   0. confirmed per-facility VendorNameMapping (admin-set rule) — #1
  *   1. exact case-insensitive match against vendor.name / displayName
- *   2. alias table resolution (Stryker Corp → Stryker)
+ *   1a. VendorAlias — the vendor's OWN declared "also known as" spellings
+ *   1b. normalized-key match against vendor.name / displayName
+ *   2. hardcoded alias literal (Stryker Corp → Stryker)
  *   3. fuzzy Levenshtein match (threshold 0.7)
  *   4. optional: create new vendor row
+ *
+ * Passes 1a/1b (Charles 2026-07-27): a vendor's real-world spellings were
+ * falling all the way through to the 0.7 fuzzy pass and MISSING — "STRYKER
+ * SALES CORP", "Howmedica Osteonics", "MAKO Surgical Corp" and "Stryker Flex
+ * Financial" all returned null against a vendor list containing "Stryker", so
+ * pass 4 silently minted a separate Vendor row for each and split the vendor's
+ * spend into unrelated silos. 1a is the vendor's own declaration (managed in
+ * vendor settings → Identity); 1b catches pure formatting drift ("Stryker,
+ * Inc." / "STRYKER CORPORATION") without anyone having to declare anything.
+ *
+ * Both new passes are EXACT on the normalized key — never fuzzy. Under-matching
+ * loses spend from a contract; over-matching cross-attributes one company's
+ * spend to another's contract and inflates rebate accrual, which is a financial
+ * error rather than a reporting gap. 1b additionally refuses to match when two
+ * vendors share a normalized key, since it cannot tell which was meant.
  *
  * Pass 0 (Vick 2026-05-31 #1): when a `facilityId` is supplied, a
  * confirmed `VendorNameMapping` for that facility wins over every other
@@ -23,11 +40,24 @@
  */
 import { prisma } from "@/lib/db"
 import { matchVendorByAlias } from "@/lib/vendor-aliases"
+import { vendorNameKey } from "@/lib/vendors/normalize"
 
 // Placeholder id for records imported with no usable vendor name.
 const UNKNOWN_VENDOR_ID = "unknown-vendor-placeholder"
 
 type VendorRow = { id: string; name: string; displayName: string | null }
+
+/**
+ * Load every declared VendorAlias as `normalizedAlias` → vendorId. The table's
+ * global unique index on `normalizedAlias` makes this map unambiguous by
+ * construction: an alias belongs to exactly one vendor.
+ */
+async function loadAliasMap(): Promise<Map<string, string>> {
+  const rows = await prisma.vendorAlias.findMany({
+    select: { normalizedAlias: true, vendorId: true },
+  })
+  return new Map(rows.map((r) => [r.normalizedAlias, r.vendorId]))
+}
 
 /**
  * Load a facility's confirmed vendor-name rules as a lookup map:
@@ -67,15 +97,15 @@ export async function resolveVendorId(
     return ensureUnknownVendor()
   }
 
-  const mappingByName = opts.facilityId
-    ? await loadConfirmedMappings(opts.facilityId)
-    : undefined
+  const [mappingByName, allVendors, aliasMap] = await Promise.all([
+    opts.facilityId ? loadConfirmedMappings(opts.facilityId) : undefined,
+    prisma.vendor.findMany({
+      select: { id: true, name: true, displayName: true },
+    }),
+    loadAliasMap(),
+  ])
 
-  const allVendors = await prisma.vendor.findMany({
-    select: { id: true, name: true, displayName: true },
-  })
-
-  const matched = matchFromList(trimmed, allVendors, mappingByName)
+  const matched = matchFromList(trimmed, allVendors, mappingByName, aliasMap)
   if (matched) return matched
 
   if (!createMissing) return null
@@ -99,17 +129,17 @@ export async function resolveVendorIdsBulk(
 
   if (unique.length === 0) return result
 
-  const mappingByName = opts.facilityId
-    ? await loadConfirmedMappings(opts.facilityId)
-    : undefined
-
-  const allVendors = await prisma.vendor.findMany({
-    select: { id: true, name: true, displayName: true },
-  })
+  const [mappingByName, allVendors, aliasMap] = await Promise.all([
+    opts.facilityId ? loadConfirmedMappings(opts.facilityId) : undefined,
+    prisma.vendor.findMany({
+      select: { id: true, name: true, displayName: true },
+    }),
+    loadAliasMap(),
+  ])
 
   const unmatched: string[] = []
   for (const name of unique) {
-    const id = matchFromList(name, allVendors, mappingByName)
+    const id = matchFromList(name, allVendors, mappingByName, aliasMap)
     if (id) {
       result.set(name.toLowerCase(), id)
     } else {
@@ -149,6 +179,7 @@ function matchFromList(
   name: string,
   vendors: VendorRow[],
   mappingByName?: Map<string, string>,
+  aliasMap?: Map<string, string>,
 ): string | null {
   const lower = name.toLowerCase()
 
@@ -166,7 +197,28 @@ function matchFromList(
   )
   if (exact) return exact.id
 
-  // Pass 2+3: alias + fuzzy (threshold 0.7 inside matchVendorByAlias)
+  const key = vendorNameKey(name)
+  // An empty key means the name was nothing but punctuation/suffixes — it
+  // must never match, or every such name would collapse onto one vendor.
+  if (key) {
+    // Pass 1a: the vendor's own declared alias. Same dangling-id guard as
+    // pass 0 — a cascade-deleted vendor can't strand resolution.
+    const aliased = aliasMap?.get(key)
+    if (aliased && vendors.some((v) => v.id === aliased)) return aliased
+
+    // Pass 1b: normalized-key match on name/displayName, for pure formatting
+    // drift. Ambiguity is a REFUSAL, not a coin flip: if two vendors share a
+    // key we cannot tell which the file meant, so fall through to fuzzy and
+    // ultimately to a new row rather than guess and cross-attribute spend.
+    const keyed = vendors.filter(
+      (v) =>
+        vendorNameKey(v.name) === key ||
+        (v.displayName ? vendorNameKey(v.displayName) === key : false),
+    )
+    if (keyed.length === 1) return keyed[0].id
+  }
+
+  // Pass 2+3: hardcoded alias literal + fuzzy (0.7 inside matchVendorByAlias)
   return matchVendorByAlias(name, vendors)
 }
 

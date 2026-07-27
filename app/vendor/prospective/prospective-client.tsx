@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BarChart3, Gauge, Scale } from "lucide-react"
+import { Gauge, Scale } from "lucide-react"
 
 import { ProspectiveHero } from "@/components/vendor/prospective/prospective-hero"
 import { useVendorProposals } from "@/hooks/use-prospective"
@@ -11,7 +11,6 @@ import { ProposalCards } from "./sections/ProposalCards"
 import { ProposalStepper } from "./sections/ProposalStepper"
 import { BenchmarksSection } from "./sections/BenchmarksSection"
 import { type OppEngineHandoff } from "./sections/OpportunityEngineSection"
-import { AnalyticsSection } from "./sections/AnalyticsSection"
 
 // ─── Main Component ────────────────────────────────────────────
 
@@ -33,6 +32,29 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
   // page"): the hidden new-proposal tab is GONE; builder + Deal Scorer +
   // Opportunity Engine all live stacked on the Proposals tab.
   const [showBuilder, setShowBuilder] = useState(false)
+  // Monotonic "builder session" nonce, bumped by New proposal. The workspace
+  // keys the builder off it (lib/prospective/builder-session.ts) so a new
+  // session REMOUNTS the builder and drops the row its last save was bound to.
+  // Without it, New proposal reused the mounted builder and the next save
+  // called updateProposal on the proposal just created — silently overwriting
+  // it instead of creating a second one (Charles 2026-07-27).
+  const [builderSessionId, setBuilderSessionId] = useState(0)
+
+  // ONE way in for every "open a saved proposal" entry point: the builder
+  // rehydrates (editingProposalId) AND the Deal Scorer / Opportunity Engine
+  // restore the saved score, constructs, assumptions and scenario
+  // (preselectedProposalId). Setting only the first is what made the saved
+  // analysis vanish on reopen — Charles 2026-07-27 "you can go back and look
+  // at it again".
+  const openSavedProposal = (proposalId: string) => {
+    setEditingProposalId(proposalId)
+    setPreselectedProposalId(proposalId)
+    // Mutually exclusive with a card handoff (V-C1) — the reopened proposal
+    // owns the flow.
+    setOppHandoff(null)
+    setShowBuilder(true)
+    setActiveTab("proposals")
+  }
 
   const totalProposals = proposals?.length ?? 0
   // Facility projected ANNUAL spend (the user-entered assumption) — falls back
@@ -60,10 +82,6 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             <Scale className="h-4 w-4" />
             Benchmarks
           </TabsTrigger>
-          <TabsTrigger value="analytics" className="gap-2">
-            <BarChart3 className="h-4 w-4" />
-            Analytics
-          </TabsTrigger>
         </TabsList>
 
         {/* Opportunities = the list of past proposals (like My Contracts). */}
@@ -73,14 +91,15 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             isLoading={isLoading}
             onNewProposal={() => {
               setEditingProposalId(null)
+              // Drop everything bound to the proposal just finished; the
+              // bumped nonce remounts the builder + the sections below it.
+              setPreselectedProposalId(null)
+              setOppHandoff(null)
+              setBuilderSessionId((n) => n + 1)
               setShowBuilder(true)
               setActiveTab("proposals")
             }}
-            onEditProposal={(id) => {
-              setEditingProposalId(id)
-              setShowBuilder(true)
-              setActiveTab("proposals")
-            }}
+            onEditProposal={openSavedProposal}
             onAnalyzeInOpportunityEngine={(deal) => {
               // Mutually exclusive with a builder-save preselect (V-C1).
               setPreselectedProposalId(null)
@@ -107,6 +126,7 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             initialDeal={oppHandoff}
             preselectedProposalId={preselectedProposalId}
             editingProposalId={editingProposalId}
+            builderSessionId={builderSessionId}
             showBuilderInitially={showBuilder}
             onBuilderClosed={() => {
               setShowBuilder(false)
@@ -115,9 +135,10 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             onProposalCreated={(p) => {
               // Same page: the new proposal pre-selects in the Deal Scorer
               // below; clear any stale card handoff so the freshly saved deal
-              // owns the flow.
-              setShowBuilder(false)
-              setEditingProposalId(null)
+              // owns the flow. The builder KEEPS its session identity — it is
+              // still bound to the row it just wrote, so the next save updates
+              // that row rather than minting a duplicate (clearing
+              // editingProposalId here used to remount it mid-edit).
               setOppHandoff(null)
               setPreselectedProposalId(p.id)
             }}
@@ -126,10 +147,6 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
 
         <TabsContent value="benchmarks" className="mt-4 space-y-4">
           <BenchmarksSection vendorId={vendorId} />
-        </TabsContent>
-
-        <TabsContent value="analytics" className="mt-4 space-y-4">
-          <AnalyticsSection proposals={proposals ?? []} isLoading={isLoading} />
         </TabsContent>
       </Tabs>
     </div>

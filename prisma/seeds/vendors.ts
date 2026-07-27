@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@/lib/generated/prisma/client"
+import { vendorNameKey } from "@/lib/vendors/normalize"
 
 export async function seedVendors(prisma: PrismaClient) {
   const stryker = await prisma.vendor.create({
@@ -194,6 +195,45 @@ export async function seedVendors(prisma: PrismaClient) {
     ],
   })
 
+  // Vendor "also known as" (Charles 2026-07-27). These are the spellings that
+  // show up in facility COG / PO / invoice files but do NOT collapse onto the
+  // vendor's own name by normalization alone — a sales entity, a legal
+  // manufacturing entity, or an acquired brand. Without a declared alias each
+  // one resolved to nothing and ingestion minted a duplicate Vendor row, so the
+  // vendor's spend fragmented into unrelated silos.
+  // Managed by the vendor at /vendor/settings → Identity.
+  const aliasesByVendorId: Array<[string, string[]]> = [
+    [
+      stryker.id,
+      [
+        "Stryker Sales Corp",
+        "Howmedica Osteonics",
+        "MAKO Surgical Corp",
+        "Stryker Flex Financial",
+        "Stryker Endoscopy",
+        "Stryker Instruments",
+        "Stryker Orthopaedics",
+      ],
+    ],
+    [depuySynthes.id, ["DePuy", "Johnson & Johnson", "Ethicon", "J&J"]],
+    [zimmerBiomet.id, ["Zimmer US", "Biomet", "Zimmer Surgical"]],
+    [smithNephew.id, ["Smith Nephew", "S&N"]],
+    [integra.id, ["Integra Life Sciences"]],
+    [medtronic.id, ["Medtronic Spine", "Medtronic Surgical", "Covidien"]],
+  ]
+
+  await prisma.vendorAlias.createMany({
+    data: aliasesByVendorId.flatMap(([vendorId, names]) =>
+      names.map((alias) => ({
+        vendorId,
+        alias,
+        normalizedAlias: vendorNameKey(alias),
+        source: "seed",
+      })),
+    ),
+    skipDuplicates: true,
+  })
+
   const vendors = {
     stryker,
     medtronic,
@@ -209,6 +249,9 @@ export async function seedVendors(prisma: PrismaClient) {
 
   console.log("  Vendors: 10")
   console.log("  Vendor Divisions: 17")
+  console.log(
+    `  Vendor Aliases: ${aliasesByVendorId.reduce((n, [, a]) => n + a.length, 0)}`,
+  )
 
   return { vendors }
 }

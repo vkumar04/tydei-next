@@ -19,6 +19,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 const {
   connectionFindManyMock,
   connectionCreateMock,
+  connectionFindFirstMock,
+  connectionUpdateManyMock,
   memberFindFirstMock,
   vendorFindFirstMock,
   facilityFindFirstMock,
@@ -26,6 +28,8 @@ const {
 } = vi.hoisted(() => ({
   connectionFindManyMock: vi.fn().mockResolvedValue([]),
   connectionCreateMock: vi.fn(),
+  connectionFindFirstMock: vi.fn(),
+  connectionUpdateManyMock: vi.fn(),
   memberFindFirstMock: vi.fn(),
   vendorFindFirstMock: vi.fn(),
   facilityFindFirstMock: vi.fn(),
@@ -37,6 +41,8 @@ vi.mock("@/lib/db", () => ({
     connection: {
       findMany: connectionFindManyMock,
       create: connectionCreateMock,
+      findFirst: connectionFindFirstMock,
+      updateMany: connectionUpdateManyMock,
     },
     member: { findFirst: memberFindFirstMock },
     vendor: { findFirst: vendorFindFirstMock },
@@ -47,11 +53,16 @@ vi.mock("@/lib/actions/auth", () => ({
   requireAuth: requireAuthMock,
 }))
 
-import { getConnections, sendConnectionInvite } from "@/lib/actions/connections"
+import {
+  getConnections,
+  sendConnectionInvite,
+  acceptConnection,
+} from "@/lib/actions/connections"
 
 beforeEach(() => {
   vi.clearAllMocks()
   connectionFindManyMock.mockResolvedValue([])
+  connectionUpdateManyMock.mockResolvedValue({ count: 1 })
 })
 
 describe("getConnections — Iter4-B1", () => {
@@ -181,5 +192,102 @@ describe("sendConnectionInvite — Iter4-B2", () => {
       }),
     ).rejects.toThrow(/not authorized/i)
     expect(connectionCreateMock).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Charles 2026-07-27 — accepting is RECIPIENT-only.
+ *
+ * This became load-bearing when one-way vendor contracts started
+ * auto-activating: `canAutoActivate` (lib/connections/operating-mode.ts)
+ * treats an ACCEPTED one_way Connection as permission for the vendor to write
+ * a LIVE contract into that facility's tenant. `sendConnectionInvite` lets any
+ * vendor mint a `pending` row against a facility matched by NAME off the wire,
+ * so if the inviter could also accept, a vendor manufactured facility consent
+ * in two calls — a cross-tenant write with nobody at the facility involved.
+ */
+describe("acceptConnection — recipient-only", () => {
+  it("refuses to let the INVITER accept its own invite (the self-accept bypass)", async () => {
+    requireAuthMock.mockResolvedValue({
+      user: { id: "u-v", email: "rep@stryker.com" },
+    })
+    memberFindFirstMock.mockResolvedValue({
+      organization: { facility: null, vendor: { id: "vendor-caller" } },
+    })
+    // The vendor's own outbound invite at a facility it has no relationship
+    // with — the row it just created via sendConnectionInvite.
+    connectionFindFirstMock.mockResolvedValue({
+      facilityId: "fac-victim",
+      vendorId: "vendor-caller",
+      inviteType: "vendor_to_facility",
+    })
+
+    await expect(acceptConnection("conn-1")).rejects.toThrow(
+      /only the invited party/i,
+    )
+    expect(connectionUpdateManyMock).not.toHaveBeenCalled()
+  })
+
+  it("refuses a caller who is not a party to the connection at all", async () => {
+    requireAuthMock.mockResolvedValue({
+      user: { id: "u-x", email: "rep@other.com" },
+    })
+    memberFindFirstMock.mockResolvedValue({
+      organization: { facility: null, vendor: { id: "vendor-stranger" } },
+    })
+    // The tenant-scoped read finds nothing for a stranger.
+    connectionFindFirstMock.mockResolvedValue(null)
+
+    await expect(acceptConnection("conn-1")).rejects.toThrow(/not authorized/i)
+    expect(connectionUpdateManyMock).not.toHaveBeenCalled()
+  })
+
+  it("lets the invited facility accept, and scopes + compare-and-swaps the write", async () => {
+    requireAuthMock.mockResolvedValue({
+      user: { id: "u-f", email: "ops@lighthouse.com" },
+    })
+    memberFindFirstMock.mockResolvedValue({
+      organization: { facility: { id: "fac-victim" }, vendor: null },
+    })
+    connectionFindFirstMock.mockResolvedValue({
+      facilityId: "fac-victim",
+      vendorId: "vendor-caller",
+      inviteType: "vendor_to_facility",
+    })
+
+    await acceptConnection("conn-1")
+
+    // The read is narrowed to the caller's own tenant before any decision.
+    expect(connectionFindFirstMock.mock.calls[0][0].where).toEqual({
+      id: "conn-1",
+      facilityId: "fac-victim",
+    })
+    // Both party ids carry into the write, and only a PENDING row may flip —
+    // otherwise accept would re-open a rejected/expired invite.
+    expect(connectionUpdateManyMock.mock.calls[0][0].where).toEqual({
+      id: "conn-1",
+      facilityId: "fac-victim",
+      vendorId: "vendor-caller",
+      status: "pending",
+    })
+  })
+
+  it("throws instead of silently no-op'ing when the row is no longer pending", async () => {
+    requireAuthMock.mockResolvedValue({
+      user: { id: "u-f", email: "ops@lighthouse.com" },
+    })
+    memberFindFirstMock.mockResolvedValue({
+      organization: { facility: { id: "fac-victim" }, vendor: null },
+    })
+    connectionFindFirstMock.mockResolvedValue({
+      facilityId: "fac-victim",
+      vendorId: "vendor-caller",
+      inviteType: "vendor_to_facility",
+    })
+    connectionUpdateManyMock.mockResolvedValue({ count: 0 })
+
+    await expect(acceptConnection("conn-1")).rejects.toThrow(
+      /no longer pending/i,
+    )
   })
 })

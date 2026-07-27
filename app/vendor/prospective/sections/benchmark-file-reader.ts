@@ -3,8 +3,8 @@
  * ("Need to be able to add data for the benchmarks", Vick 2026-06-12).
  *
  * Takes the parsed `{ headers, rows }` shape produced by `readPricingRows`
- * (CSV client-side, XLSX via /api/parse-file) and maps each row to a
- * benchmark import item for `importVendorBenchmarks`.
+ * (CSV and XLSX both parse client-side since 2026-06-13) and maps each row
+ * to a benchmark import item for `importVendorBenchmarks`.
  *
  * Column detection for SKU / description / category / price MUST go through
  * the canonical alias lists in `lib/utils/parse-pricing-file.ts` (invariants
@@ -12,6 +12,12 @@
  * proposal analyzer's hand-rolled list missed "ReferenceNumber" and dropped
  * every row. Benchmark-only columns (percentiles, min/max, sample size, data
  * date) get their own lists below because no other surface reads them.
+ *
+ * The mapping itself has been complete since 2026-07-07 — what was missing is
+ * TELLING the vendor which columns his file didn't carry, so this module also
+ * owns the per-field `coverage` counts (`benchmarkCoverageGaps`) and the
+ * spec-derived CSV template (`buildBenchmarkTemplateCsv`) the Benchmarks
+ * surface renders (Charles 2026-07-27).
  */
 
 import {
@@ -26,6 +32,7 @@ import {
   type ResolvedMapping,
   type UploadFieldSpec,
 } from "@/components/shared/uploads/field-spec"
+import { toCSV } from "@/lib/reports/csv-export"
 import type { VendorBenchmarkImportInput } from "@/lib/actions/benchmarks"
 
 // Benchmark files often name the product-identifier column "Construct"
@@ -99,19 +106,38 @@ const DATA_DATE_ALIASES = [
 // field" rule can't be a per-field `required` — it stays inside
 // mapBenchmarkRows (droppedNoPrice), and the Benchmarks surface keys
 // its confirm copy + import gate off that result.
-export const BENCHMARK_UPLOAD_SPECS: UploadFieldSpec[] = [
-  { key: "itemNumber", label: "Item number", aliases: BENCHMARK_ITEM_NUMBER_ALIASES, required: true, kind: "text" },
-  { key: "description", label: "Description", aliases: DESCRIPTION_ALIASES, kind: "text" },
-  { key: "category", label: "Category", aliases: CATEGORY_ALIASES, kind: "text" },
-  { key: "nationalAvgPrice", label: "National average price", aliases: NATIONAL_AVG_ALIASES, kind: "number" },
-  { key: "percentile25", label: "25th percentile price", aliases: P25_ALIASES, kind: "number" },
-  { key: "percentile50", label: "Median price (P50)", aliases: P50_ALIASES, kind: "number" },
-  { key: "percentile75", label: "75th percentile price", aliases: P75_ALIASES, kind: "number" },
-  { key: "minPrice", label: "Minimum price", aliases: MIN_PRICE_ALIASES, kind: "number" },
-  { key: "maxPrice", label: "Maximum price", aliases: MAX_PRICE_ALIASES, kind: "number" },
-  { key: "sampleSize", label: "Sample size", aliases: SAMPLE_SIZE_ALIASES, kind: "number" },
-  { key: "dataDate", label: "Data date", aliases: DATA_DATE_ALIASES, kind: "date" },
-]
+
+/**
+ * A field's own LABEL is always a last-resort alias for it. The downloadable
+ * CSV template's header row IS the label list (`buildBenchmarkTemplateCsv`),
+ * so without this a vendor who fills in OUR OWN template would still miss the
+ * fields whose label isn't already an alias ("25th percentile price" vs the
+ * "25th_percentile" family) — exactly the silent gap this whole change exists
+ * to close. Appended LAST so canonical aliases keep their priority.
+ * Charles 2026-07-27.
+ */
+function withLabelAlias(spec: UploadFieldSpec): UploadFieldSpec {
+  const label = norm(spec.label)
+  return spec.aliases.some((a) => norm(a) === label)
+    ? spec
+    : { ...spec, aliases: [...spec.aliases, spec.label] }
+}
+
+export const BENCHMARK_UPLOAD_SPECS: UploadFieldSpec[] = (
+  [
+    { key: "itemNumber", label: "Item number", aliases: BENCHMARK_ITEM_NUMBER_ALIASES, required: true, kind: "text" },
+    { key: "description", label: "Description", aliases: DESCRIPTION_ALIASES, kind: "text" },
+    { key: "category", label: "Category", aliases: CATEGORY_ALIASES, kind: "text" },
+    { key: "nationalAvgPrice", label: "National average price", aliases: NATIONAL_AVG_ALIASES, kind: "number" },
+    { key: "percentile25", label: "25th percentile price", aliases: P25_ALIASES, kind: "number" },
+    { key: "percentile50", label: "Median price (P50)", aliases: P50_ALIASES, kind: "number" },
+    { key: "percentile75", label: "75th percentile price", aliases: P75_ALIASES, kind: "number" },
+    { key: "minPrice", label: "Minimum price", aliases: MIN_PRICE_ALIASES, kind: "number" },
+    { key: "maxPrice", label: "Maximum price", aliases: MAX_PRICE_ALIASES, kind: "number" },
+    { key: "sampleSize", label: "Sample size", aliases: SAMPLE_SIZE_ALIASES, kind: "number" },
+    { key: "dataDate", label: "Data date", aliases: DATA_DATE_ALIASES, kind: "date" },
+  ] satisfies UploadFieldSpec[]
+).map(withLabelAlias)
 
 // ─── Resolve (same norm scheme as the canonical detector, via the
 //     shared field-spec module) ─────────────────────────────────────
@@ -139,12 +165,72 @@ function parseDateISO(v: string): string | undefined {
   return d.toISOString().slice(0, 10)
 }
 
+// ─── Per-field coverage (Charles 2026-07-27) ─────────────────────
+// "Benchmarks still do not have all of the information as they should":
+// his workbook is TWO columns (Construct | National Avg Price), so P25 /
+// Median / P75 / Min / Max / Sample imported as null and the table rendered
+// a wall of "—", which reads exactly like the app dropped his data. Nothing
+// is lost — the columns were never in the file. Counting how many rows
+// resolved EACH field lets the Benchmarks surface say so out loud (import
+// confirm copy + the table's omitted-column footnote) instead of leaving
+// him to infer it from dashes.
+const COVERAGE_FIELD_KEYS = [
+  "category",
+  "nationalAvgPrice",
+  "percentile25",
+  "percentile50",
+  "percentile75",
+  "minPrice",
+  "maxPrice",
+  "sampleSize",
+] as const
+
+export type BenchmarkCoverageField = (typeof COVERAGE_FIELD_KEYS)[number]
+
+/** Kept rows that resolved a value for each field. 0 = absent from the file. */
+export type BenchmarkFieldCoverage = Record<BenchmarkCoverageField, number>
+
 export interface ParsedBenchmarkRows {
   items: VendorBenchmarkImportInput[]
   /** rows that had an item number but no price-ish field (dropped) */
   droppedNoPrice: number
   /** rows with a nationalAvgPrice — surfaced in the import confirm copy */
   withNationalAvg: number
+  /** per-field value counts across the KEPT rows (`items`) */
+  coverage: BenchmarkFieldCoverage
+}
+
+export interface BenchmarkCoverageGap {
+  key: BenchmarkCoverageField
+  /** The spec's own label, so the copy can never drift from the mapper. */
+  label: string
+}
+
+/**
+ * Fields no kept row supplied a value for, in spec order. Labels come from
+ * BENCHMARK_UPLOAD_SPECS so the "not in your file" copy, the mapping dialog
+ * and the downloadable template all name a column the same way.
+ */
+export function benchmarkCoverageGaps(
+  coverage: BenchmarkFieldCoverage,
+): BenchmarkCoverageGap[] {
+  return COVERAGE_FIELD_KEYS.filter((key) => coverage[key] === 0).map((key) => ({
+    key,
+    label: BENCHMARK_UPLOAD_SPECS.find((s) => s.key === key)?.label ?? key,
+  }))
+}
+
+/**
+ * Header-only CSV template for the Benchmarks import. Built at runtime from
+ * BENCHMARK_UPLOAD_SPECS, so a new/renamed field shows up in the template the
+ * moment the parser learns it — a hand-maintained template would drift and
+ * hand the vendor back the same silently-missing columns.
+ */
+export function buildBenchmarkTemplateCsv(): string {
+  return toCSV<Record<string, string>>({
+    columns: BENCHMARK_UPLOAD_SPECS.map((s) => ({ key: s.key, label: s.label })),
+    rows: [],
+  })
 }
 
 /**
@@ -165,26 +251,42 @@ export function mapBenchmarkRows(
 ): ParsedBenchmarkRows {
   const normHeaders = headers.map(norm)
 
-  const idx = (key: string, aliases: string[]): number =>
+  // Auto-detect reads the SPEC alias lists (same lists, plus each field's own
+  // label via withLabelAlias) so this mapper and the mapping dialog can never
+  // disagree about which headers a field answers to.
+  const idx = (key: string): number =>
     mappingOverride
       ? overrideIndex(headers, mappingOverride, key)
-      : findIndex(normHeaders, aliases)
+      : findIndex(
+          normHeaders,
+          BENCHMARK_UPLOAD_SPECS.find((s) => s.key === key)?.aliases ?? [],
+        )
 
-  const idxItem = idx("itemNumber", BENCHMARK_ITEM_NUMBER_ALIASES)
-  const idxDesc = idx("description", DESCRIPTION_ALIASES)
-  const idxCat = idx("category", CATEGORY_ALIASES)
-  const idxAvg = idx("nationalAvgPrice", NATIONAL_AVG_ALIASES)
-  const idxP25 = idx("percentile25", P25_ALIASES)
-  const idxP50 = idx("percentile50", P50_ALIASES)
-  const idxP75 = idx("percentile75", P75_ALIASES)
-  const idxMin = idx("minPrice", MIN_PRICE_ALIASES)
-  const idxMax = idx("maxPrice", MAX_PRICE_ALIASES)
-  const idxN = idx("sampleSize", SAMPLE_SIZE_ALIASES)
-  const idxDate = idx("dataDate", DATA_DATE_ALIASES)
+  const idxItem = idx("itemNumber")
+  const idxDesc = idx("description")
+  const idxCat = idx("category")
+  const idxAvg = idx("nationalAvgPrice")
+  const idxP25 = idx("percentile25")
+  const idxP50 = idx("percentile50")
+  const idxP75 = idx("percentile75")
+  const idxMin = idx("minPrice")
+  const idxMax = idx("maxPrice")
+  const idxN = idx("sampleSize")
+  const idxDate = idx("dataDate")
 
   const items: VendorBenchmarkImportInput[] = []
   let droppedNoPrice = 0
   let withNationalAvg = 0
+  const coverage: BenchmarkFieldCoverage = {
+    category: 0,
+    nationalAvgPrice: 0,
+    percentile25: 0,
+    percentile50: 0,
+    percentile75: 0,
+    minPrice: 0,
+    maxPrice: 0,
+    sampleSize: 0,
+  }
 
   for (const row of rows) {
     const get = (idx: number) => (idx >= 0 ? (row[headers[idx]!] ?? "") : "")
@@ -212,6 +314,17 @@ export function mapBenchmarkRows(
     const description = get(idxDesc).trim()
     const category = get(idxCat).trim()
 
+    // Coverage counts only KEPT rows — a dropped row tells the vendor
+    // nothing about which columns his file carries.
+    if (category) coverage.category++
+    if (nationalAvgPrice !== undefined) coverage.nationalAvgPrice++
+    if (percentile25 !== undefined) coverage.percentile25++
+    if (percentile50 !== undefined) coverage.percentile50++
+    if (percentile75 !== undefined) coverage.percentile75++
+    if (minPrice !== undefined) coverage.minPrice++
+    if (maxPrice !== undefined) coverage.maxPrice++
+    if (sampleRaw !== undefined) coverage.sampleSize++
+
     items.push({
       vendorItemNo,
       description: description || undefined,
@@ -227,5 +340,5 @@ export function mapBenchmarkRows(
     })
   }
 
-  return { items, droppedNoPrice, withNationalAvg }
+  return { items, droppedNoPrice, withNationalAvg, coverage }
 }

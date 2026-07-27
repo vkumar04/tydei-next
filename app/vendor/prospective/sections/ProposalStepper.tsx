@@ -36,6 +36,7 @@ import {
   type OppEngineHandoff,
   type OpportunityEngineExportHandle,
 } from "./OpportunityEngineSection"
+import { builderSessionKey } from "@/lib/prospective/builder-session"
 import type { VendorProposal } from "@/lib/actions/prospective"
 
 interface FacilityOption {
@@ -50,6 +51,7 @@ export function ProposalStepper({
   initialDeal,
   preselectedProposalId = null,
   editingProposalId = null,
+  builderSessionId = 0,
   showBuilderInitially = false,
   onBuilderClosed,
   onProposalCreated,
@@ -63,6 +65,8 @@ export function ProposalStepper({
   preselectedProposalId?: string | null
   /** A saved proposal opened for in-place editing (expands the builder). */
   editingProposalId?: string | null
+  /** Nonce bumped by "New proposal" — see the builder session key below. */
+  builderSessionId?: number
   /** "New proposal" entry point — the builder starts expanded. */
   showBuilderInitially?: boolean
   onBuilderClosed?: () => void
@@ -76,6 +80,36 @@ export function ProposalStepper({
   const [analyzedDeal, setAnalyzedDeal] = useState<OppEngineHandoff | null>(
     null,
   )
+  // Single-commit bridge: the builder exposes an imperative save that the Deal
+  // Scorer's "Analyze deal" calls, so there is no mid-page Save button
+  // (Charles 2026-07-06). Tracks the proposal id it just attached so the same
+  // proposal isn't re-created on a re-analyze.
+  const builderRef = useRef<ProposalBuilderHandle>(null)
+  const [bridgedProposalId, setBridgedProposalId] = useState<string | null>(null)
+  // The proposal the Deal Scorer is actually attached to (its own picker, or a
+  // preselect) — the Opportunity Engine below needs it to restore the saved
+  // scenario on re-entry, not just after an Analyze.
+  const [attachedProposalId, setAttachedProposalId] = useState<string | null>(
+    null,
+  )
+
+  // ONE identity for the whole workspace session: which saved proposal is open
+  // plus the "New proposal" nonce. Handed to the builder + the two sections as
+  // `key`, so starting a new proposal REMOUNTS them instead of leaving the
+  // previous proposal's bindings behind — CLAUDE.md "reset state with a key
+  // prop, not an effect" (Charles 2026-07-27; the stale binding meant the next
+  // save overwrote the proposal just created).
+  const builderKey = builderSessionKey(editingProposalId, builderSessionId)
+  // The bridged/attached/analyzed ids live above the keyed subtree, so they get
+  // React's adjust-state-during-render reset rather than an effect.
+  const [sessionMark, setSessionMark] = useState(builderKey)
+  if (sessionMark !== builderKey) {
+    setSessionMark(builderKey)
+    setBridgedProposalId(null)
+    setAttachedProposalId(null)
+    setAnalyzedDeal(null)
+  }
+
   const opportunityDeal = analyzedDeal ?? initialDeal ?? null
 
   // Live builder selection (categories + facility) streamed up from the
@@ -97,17 +131,12 @@ export function ProposalStepper({
     null
 
   // External commands (edit / new) re-open the builder even when this
-  // section is already mounted (the tab is forceMounted).
+  // section is already mounted (the tab is forceMounted). A bumped session
+  // nonce is such a command too — "New proposal" must re-open step 1 even when
+  // the vendor had collapsed it.
   useEffect(() => {
     if (editingProposalId || showBuilderInitially) setBuilderOpen(true)
-  }, [editingProposalId, showBuilderInitially])
-
-  // Single-commit bridge: the builder exposes an imperative save that the Deal
-  // Scorer's "Analyze deal" calls, so there is no mid-page Save button
-  // (Charles 2026-07-06). Tracks the proposal id it just attached so the same
-  // proposal isn't re-created on a re-analyze.
-  const builderRef = useRef<ProposalBuilderHandle>(null)
-  const [bridgedProposalId, setBridgedProposalId] = useState<string | null>(null)
+  }, [editingProposalId, showBuilderInitially, builderSessionId])
 
   // Top-of-page Export ("Export button should be at the top not in the
   // middle", bugs.rtfd 2026-07-07): the live engine/score state stays in the
@@ -207,6 +236,8 @@ export function ProposalStepper({
         {builderOpen ? (
           <div className="rounded-lg border p-4">
             <ProposalBuilder
+              // A new session = a fresh builder, with no row bound to it.
+              key={builderKey}
               ref={builderRef}
               vendorId={vendorId}
               facilities={facilities}
@@ -236,6 +267,7 @@ export function ProposalStepper({
           desc="Set Floor / Target / Ask per product, then Analyze — it saves and scores in one step"
         />
       <DealScorerSection
+        key={builderKey}
         vendorId={vendorId}
         facilities={facilities}
         proposals={proposals}
@@ -250,16 +282,27 @@ export function ProposalStepper({
           })
         }}
         preselectedProposalId={preselectedProposalId ?? bridgedProposalId}
+        onProposalAttached={setAttachedProposalId}
         embedded
         beforeAnalyze={async () => {
-          // Only bridge-save when the builder is open with unsaved content and
-          // nothing is attached yet — otherwise the Deal Scorer analyzes with
-          // whatever is already attached.
-          if (!builderOpen || bridgedProposalId || preselectedProposalId)
-            return null
-          if (!builderRef.current?.hasContent()) return null
+          // Something is already attached — analyze against it, don't save.
+          if (bridgedProposalId || preselectedProposalId) return null
+          // Nothing attached and nothing to save: step 1 is either collapsed
+          // (builderRef unmounted) or empty. Analyzing here would score a deal
+          // and write it NOWHERE — the proposal list stays at "0 in pipeline"
+          // and the run is lost on reload (Charles 2026-07-27). Block instead
+          // of silently discarding it. The `!builderOpen` early-return this
+          // replaces is exactly what made the discard silent.
+          if (!builderRef.current?.hasContent()) {
+            toast.error(
+              "Save the proposal first — open step 1, fill in the facility and products, then Save proposal.",
+            )
+            return "abort"
+          }
           const p = await builderRef.current.submit()
-          if (!p) return null
+          // persist() already toasted the specific gap (category / pricing) —
+          // abort quietly rather than scoring against nothing.
+          if (!p) return "abort"
           return { proposalId: p.id, facilityId: p.facilityIds[0] ?? null }
         }}
       />
@@ -273,10 +316,12 @@ export function ProposalStepper({
           desc="Model the scenario levers and export the deal report"
         />
         <OpportunityEngineSection
+          key={builderKey}
           ref={exportRef}
           vendorId={vendorId}
           facilities={facilities}
           initialDeal={opportunityDeal}
+          attachedProposalId={attachedProposalId}
           lockedFacilityId={workspaceFacilityId}
         />
       </section>

@@ -2,9 +2,13 @@
 
 import { ZodError } from "zod"
 import { prisma } from "@/lib/db"
-import type { Prisma } from "@/lib/generated/prisma/client"
+import type { Prisma, PendingContract } from "@/lib/generated/prisma/client"
 import { requireVendor, requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
+import {
+  resolveOperatingMode,
+  canAutoActivate,
+} from "@/lib/connections/operating-mode"
 import {
   createPendingContractSchema,
   updatePendingContractSchema,
@@ -466,6 +470,464 @@ function parseDateOr(value: unknown, fallback: Date): Date {
   return fallback
 }
 
+// ─── Internal: materialize a submission into a live Contract ────
+
+/**
+ * Turn a `submitted` PendingContract into a real Contract row (terms, tiers,
+ * pricing, documents, category links) and flip the pending row to `approved`.
+ *
+ * Charles 2026-07-27: extracted verbatim out of `approvePendingContract` so
+ * the one-way auto-activation branch in `createPendingContract` runs the
+ * SAME materialization — "if it is set up for 1 way on a facility it does not
+ * need to submit a contract it just becomes active after creating it". Two
+ * parallel hand-rolled materializers would drift exactly like the parallel
+ * reducers CLAUDE.md warns about; there is one.
+ *
+ * LOCAL AND NON-EXPORTED ON PURPOSE. This file is `"use server"`, so any
+ * export here becomes a client-callable Server Action — a directly-invocable
+ * `materializePending(pendingId, ...)` would be an unauthenticated
+ * "make any submission live" RPC, bypassing every auth gate. Callers do the
+ * gating: `approvePendingContract` (requireFacility + requireCanMutate +
+ * facility-scoped read) and `createPendingContract` (requireVendor +
+ * requireCanMutate + `canAutoActivate`).
+ *
+ * `facilityId` is NULLABLE: a standalone one-way vendor's own contract has no
+ * counterparty facility. When it is null the COG match recompute and the
+ * facility-side revalidations are skipped — there is no facility whose rows
+ * or cached views could change.
+ */
+async function materializePending(
+  pending: PendingContract,
+  facilityId: string | null,
+  reviewedBy: string,
+) {
+  // 2026-06-09 audit: only a "submitted" row is approvable. Without this
+  // guard, re-approving an already-approved (or rejected/withdrawn) row
+  // created a DUPLICATE Contract — prod had 7 approved rows whose contracts
+  // were later deleted, each one re-approve away from a dupe.
+  if (pending.status !== "submitted") {
+    throw new Error(
+      `This submission is "${pending.status}" — only submitted contracts can be approved.` +
+        (pending.status === "approved"
+          ? " It was already approved; ask the vendor to resubmit if a new contract is needed."
+          : " Ask the vendor to (re)submit it."),
+    )
+  }
+
+  // F3 — port pricingData JSON into ContractPricing rows. Defensively
+  // extract only items that look real (vendorItemNo + numeric unitPrice).
+  const pricingItems = extractPendingPricingItems(pending.pricingData)
+
+  // Charles 2026-04-25 (vendor-mirror Phase 1): port the `terms` JSON
+  // blob into real `ContractTerm` + `ContractTier` rows. Without this
+  // every approved vendor submission silently lost its rebate
+  // structure — the contract appeared as "active" but had no terms,
+  // so accruals computed to $0 forever. The shape of the blob mirrors
+  // what the vendor submission form persists; we extract defensively
+  // so a malformed blob doesn't blow the approval.
+  const pendingTerms = extractPendingTerms(pending.terms, pending.effectiveDate)
+
+  // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
+  // pre-resolve scoped category IDs → names per term, OUTSIDE the
+  // create call. ContractTerm.categories is a String[] of NAMES (the
+  // engine matches against COG row category names) but the vendor UI
+  // sends category IDs. Mirrors the create-contract path in
+  // lib/actions/contracts.ts.
+  const resolvedCategoryNamesByTerm = new Map<number, string[]>()
+  for (let i = 0; i < pendingTerms.length; i++) {
+    const ids = pendingTerms[i].scopedCategoryIds
+    if (ids.length > 0) {
+      resolvedCategoryNamesByTerm.set(i, await resolveCategoryIdsToNames(ids))
+    }
+  }
+
+  // 2026-06-09 audit: the approval writes (contract + nested terms/tiers/
+  // pricing, documents, category links, pending-row status flip) were
+  // sequential — a mid-flight crash could create the Contract without
+  // flipping the pending row (the status guard above makes that benign but
+  // manual to clean up). Run them as ONE interactive transaction so an
+  // approval either fully lands or fully rolls back. Timeout is generous
+  // because pricing payloads can be large (one prod submission carries
+  // ~46K ContractPricing rows in the nested create).
+  const contract = await prisma.$transaction(
+    async (tx) => {
+      const contract = await tx.contract.create({
+        data: {
+          name: pending.contractName,
+          vendorId: pending.vendorId,
+          facilityId,
+          contractType: pending.contractType,
+          // 2026-06-09 audit: derive status from the expiration date instead of
+          // hardcoding "active" — two prod rows (exp 2024-12-31) were approved
+          // as "active" though already expired, violating the
+          // status/expirationDate invariant.
+          status:
+            pending.expirationDate && pending.expirationDate < new Date()
+              ? "expired"
+              : "active",
+          effectiveDate: pending.effectiveDate ?? new Date(),
+          // Evergreen sentinel (see lib/actions/contracts.ts:728). Previously
+          // the fallback was now + 365d which silently created a contract
+          // that "expired" exactly one year after approval with no user
+          // action. For evergreen pending contracts, write the far-future
+          // sentinel so the matcher + formatDate treat it correctly
+          // ("Evergreen" in the UI, in-window for every future COG row).
+          expirationDate:
+            pending.expirationDate ?? new Date(Date.UTC(9999, 11, 31)),
+          totalValue: pending.totalValue ?? 0,
+          // Charles 2026-04-25 (vendor-mirror Phase 2): port the field-
+          // parity columns onto the real contract on approve. Without
+          // this the vendor's submitted values would still drop on the
+          // floor at the approve boundary even though Phase 2 added the
+          // columns to PendingContract.
+          ...(pending.contractNumber != null && {
+            contractNumber: pending.contractNumber,
+          }),
+          ...(pending.annualValue != null && {
+            annualValue: pending.annualValue,
+          }),
+          ...(pending.gpoAffiliation != null && {
+            gpoAffiliation: pending.gpoAffiliation,
+          }),
+          // performancePeriod / rebatePayPeriod are typed `String?` on
+          // PendingContract (free-form vendor input) but enums on the
+          // real Contract. Cast at the boundary; if the vendor sent a
+          // value that doesn't match the enum the create will throw and
+          // surface a helpful Prisma error to the reviewer.
+          ...(pending.performancePeriod != null && {
+            performancePeriod:
+              pending.performancePeriod as Prisma.ContractCreateInput["performancePeriod"],
+          }),
+          ...(pending.rebatePayPeriod != null && {
+            rebatePayPeriod:
+              pending.rebatePayPeriod as Prisma.ContractCreateInput["rebatePayPeriod"],
+          }),
+          autoRenewal: pending.autoRenewal,
+          ...(pending.terminationNoticeDays != null && {
+            terminationNoticeDays: pending.terminationNoticeDays,
+          }),
+          // Charles audit suggestion #4 (v0-port): drain capital from
+          // pending → real ContractCapitalLineItem rows. Two sources:
+          //   (a) pending.capitalLineItems JSON — vendor multi-item path.
+          //   (b) Single-block pending.capitalCost — backward-compat for
+          //       older clients that haven't adopted the editor yet.
+          // (a) wins when present; (b) is a fallback so single-item
+          // submissions keep working.
+          ...(() => {
+            const items = buildCapitalLineItemsFromPending(pending)
+            return items.length > 0
+              ? { capitalLineItems: { create: items } }
+              : {}
+          })(),
+          // Charles audit pass-3 C1 + pass-4 BLOCKER 2: copy tie-in
+          // parent + division so the capital amortization tie-in math is
+          // wired post-approve. Field on Contract is
+          // `tieInCapitalContractId` (not `tieInContractId` — that's the
+          // PendingContract field name only).
+          ...(pending.tieInContractId != null && {
+            tieInCapitalContractId: pending.tieInContractId,
+          }),
+          ...(pending.division != null && { division: pending.division }),
+          ...(pricingItems.length > 0 && {
+            pricingItems: {
+              create: pricingItems,
+            },
+          }),
+          ...(pendingTerms.length > 0 && {
+            terms: {
+              // Prisma's nested-create requires enum-typed strings on the
+              // term row. JSON-extracted values are bare strings, so we
+              // cast at this single boundary. The validators in
+              // `lib/validators/contract-terms.ts` would reject anything
+              // unsafe upstream once Phase 2 plumbs validated terms
+              // through the pending model.
+              create: pendingTerms.map((t, idx) => {
+                const resolvedCategoryNames = resolvedCategoryNamesByTerm.get(idx)
+                return {
+                  termName: t.termName,
+                  termType:
+                    t.termType as Prisma.ContractTermCreateInput["termType"],
+                  baselineType:
+                    t.baselineType as Prisma.ContractTermCreateInput["baselineType"],
+                  evaluationPeriod: t.evaluationPeriod,
+                  paymentTiming: t.paymentTiming,
+                  appliesTo: t.appliesTo,
+                  rebateMethod:
+                    t.rebateMethod as Prisma.ContractTermCreateInput["rebateMethod"],
+                  effectiveStart: t.effectiveStart,
+                  effectiveEnd: t.effectiveEnd,
+                  // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
+                  // baseline + scope + procedure fields. Pre-fix these were
+                  // dropped at the approve boundary; the engine then
+                  // computed $0 forever against undefined baselines.
+                  ...(t.spendBaseline != null && {
+                    spendBaseline: t.spendBaseline,
+                  }),
+                  ...(t.growthBaselinePercent != null && {
+                    growthBaselinePercent: t.growthBaselinePercent,
+                  }),
+                  // volumeBaseline is Int on the schema (Math.round so a
+                  // string→number coercion of "5000.0" doesn't trip
+                  // Prisma). desiredMarketShare is a Decimal — straight
+                  // through.
+                  ...(t.volumeBaseline != null && {
+                    volumeBaseline: Math.round(t.volumeBaseline),
+                  }),
+                  ...(t.desiredMarketShare != null && {
+                    desiredMarketShare: t.desiredMarketShare,
+                  }),
+                  ...(t.volumeType != null && {
+                    volumeType:
+                      t.volumeType as Prisma.ContractTermCreateInput["volumeType"],
+                  }),
+                  // ContractTerm.categories holds NAMES (resolved above).
+                  ...(resolvedCategoryNames &&
+                    resolvedCategoryNames.length > 0 && {
+                      categories: resolvedCategoryNames,
+                    }),
+                  ...(t.cptCodes.length > 0 && { cptCodes: t.cptCodes }),
+                  // scopedItemNumbers → ContractTermProduct join rows.
+                  ...(t.scopedItemNumbers.length > 0 && {
+                    products: {
+                      create: t.scopedItemNumbers.map((vendorItemNo) => ({
+                        vendorItemNo,
+                      })),
+                    },
+                  }),
+                  ...(t.tiers.length > 0 && {
+                    tiers: {
+                      create: t.tiers.map((tier) => ({
+                        tierNumber: tier.tierNumber,
+                        ...(tier.tierName != null && { tierName: tier.tierName }),
+                        spendMin: tier.spendMin,
+                        ...(tier.spendMax != null && { spendMax: tier.spendMax }),
+                        // volumeMin/Max are Int columns — round at the
+                        // boundary in case of string→number coercion.
+                        ...(tier.volumeMin != null && {
+                          volumeMin: Math.round(tier.volumeMin),
+                        }),
+                        ...(tier.volumeMax != null && {
+                          volumeMax: Math.round(tier.volumeMax),
+                        }),
+                        ...(tier.marketShareMin != null && {
+                          marketShareMin: tier.marketShareMin,
+                        }),
+                        ...(tier.marketShareMax != null && {
+                          marketShareMax: tier.marketShareMax,
+                        }),
+                        rebateValue: tier.rebateValue,
+                        rebateType:
+                          tier.rebateType as Prisma.ContractTierCreateInput["rebateType"],
+                      })),
+                    },
+                  }),
+                }
+              }),
+            },
+          }),
+        },
+      })
+
+      // Charles 2026-04-26 (#59): copy vendor-attached PDFs from
+      // PendingContract.documents (JSON array of {name, url}) into real
+      // ContractDocument rows so the vendor's Documents tab on the
+      // approved contract isn't empty. Without this, every approval
+      // dropped the vendor-uploaded contract PDF on the floor.
+      if (Array.isArray(pending.documents) && pending.documents.length > 0) {
+        type AttachedDoc = { name?: unknown; url?: unknown; type?: unknown }
+        const docs = (pending.documents as AttachedDoc[])
+          .filter(
+            (d): d is { name: string; url: string; type?: string } =>
+              d != null &&
+              typeof d === "object" &&
+              typeof (d as AttachedDoc).url === "string",
+          )
+          .map((d) => {
+            const allowed = ["main", "amendment", "addendum", "exhibit", "pricing"] as const
+            type Allowed = (typeof allowed)[number]
+            const raw = typeof d.type === "string" ? d.type : ""
+            const type: Allowed = (allowed as readonly string[]).includes(raw)
+              ? (raw as Allowed)
+              : "main"
+            return {
+              contractId: contract.id,
+              name: typeof d.name === "string" && d.name ? d.name : "Contract document",
+              url: d.url as string,
+              type,
+            }
+          })
+        if (docs.length > 0) {
+          await tx.contractDocument.createMany({ data: docs })
+        }
+      }
+
+      // 2026-06-09 audit: transfer contract-level CATEGORIES. The approve path
+      // previously wrote neither productCategoryId nor ContractProductCategory
+      // join rows — and the join is the primary category-scope source for
+      // market share / compliance (lib/actions/contracts/derived-metrics.ts).
+      // Vendor-approved contracts therefore computed over an EMPTY scope (the
+      // exact "$105K of $3.29M" bug class fixed on the facility side today).
+      // Sources: term scopedCategoryIds (already resolved to names above) plus
+      // pricing-file category names, matched case-insensitively against
+      // existing ProductCategory rows (no auto-create — unresolvable names are
+      // skipped, same posture as the facility import path's strict mode).
+      const categoryNameSet = new Set<string>()
+      for (const names of resolvedCategoryNamesByTerm.values()) {
+        for (const n of names) categoryNameSet.add(n)
+      }
+      for (const p of pricingItems) {
+        if (p.category) categoryNameSet.add(p.category)
+      }
+      if (categoryNameSet.size > 0) {
+        const allCats = await tx.productCategory.findMany({
+          select: { id: true, name: true },
+        })
+        const idByLower = new Map(
+          allCats.map((c) => [c.name.trim().toLowerCase(), c.id]),
+        )
+        const categoryIds = Array.from(
+          new Set(
+            Array.from(categoryNameSet)
+              .map((n) => idByLower.get(n.trim().toLowerCase()))
+              .filter((v): v is string => !!v),
+          ),
+        )
+        if (categoryIds.length > 0) {
+          await tx.contractProductCategory.createMany({
+            data: categoryIds.map((productCategoryId) => ({
+              contractId: contract.id,
+              productCategoryId,
+            })),
+            skipDuplicates: true,
+          })
+        }
+      }
+
+      // Charles 2026-07-27: the flip is a tenant-scoped COMPARE-AND-SWAP, not a
+      // bare-id update. Two reasons:
+      //   - `vendorId` keeps the write inside the row's own tenant. The callers
+      //     authorize the read (approvePendingContract: `{id, facilityId}`;
+      //     createPendingContract: a row it just created under requireVendor),
+      //     but this helper must not depend on that to be safe — a bare
+      //     `where: {id}` here would be the exact shape the auth-scope scanner
+      //     exists to catch, and CLAUDE.md forbids exempting it by comment.
+      //   - `status: "submitted"` re-checks, INSIDE the transaction, the guard
+      //     at the top of this function — which read a snapshot taken outside
+      //     it. Without the re-check two concurrent approvals of the same row
+      //     both pass the guard and both create a Contract (the duplicate-
+      //     Contract class the 2026-06-09 audit fixed). The loser now matches
+      //     zero rows and its whole transaction rolls back.
+      const flipped = await tx.pendingContract.updateMany({
+        where: {
+          id: pending.id,
+          vendorId: pending.vendorId,
+          status: "submitted",
+        },
+        data: {
+          status: "approved",
+          reviewedAt: new Date(),
+          reviewedBy,
+          // 2026-06-09 audit: durable link to the created Contract (FK with
+          // onDelete: SetNull) — an "approved" row whose approvedContractId is
+          // null afterwards means its contract was deleted. Pre-fix this link
+          // lived only in a console.info; prod had 7 such undetectable orphans.
+          approvedContractId: contract.id,
+        },
+      })
+      if (flipped.count !== 1) {
+        throw new Error(
+          "This submission changed state while it was being approved (someone else approved or withdrew it). No duplicate contract was created — reload and try again.",
+        )
+      }
+
+      return contract
+    },
+    // Large nested pricing createMany (≈46K rows on one prod submission)
+    // needs more than the 5s default.
+    { timeout: 120_000, maxWait: 10_000 },
+  )
+
+  // Charles 2026-04-25 (vendor-mirror Phase 1): close the loop with
+  // the vendor — they need to know their submission landed as a real
+  // contract.
+  //
+  // Charles 2026-07-27: `.catch` because notifyVendorOfPendingDecision is
+  // itself requireFacility()-gated (it derives the vendor from the row rather
+  // than trusting the wire — audit Iter3-B1). On the one-way auto-activation
+  // path the actor IS the vendor, so there is no facility session and the
+  // helper rejects; without this the fire-and-forget promise would surface as
+  // an unhandled rejection. The facility-review path never rejects here, so
+  // its behavior is unchanged.
+  void notifyVendorOfPendingDecision({
+    contractName: pending.contractName,
+    vendorName: pending.vendorName,
+    facilityName: pending.facilityName,
+    pendingId: pending.id,
+    approvedContractId: contract.id,
+    decision: "approved",
+  }).catch((err: unknown) => {
+    console.warn(
+      "[materializePending] vendor decision notification skipped",
+      err,
+    )
+  })
+
+  // F2 — recompute COG match-statuses so rows flip from
+  // off_contract_item → on_contract / price_variance now that the
+  // vendor has an active contract with pricing. Facility-scoped by
+  // construction — skipped entirely for a standalone (facility-less)
+  // vendor contract, which has no COG rows to rematch.
+  if (facilityId) {
+    await recomputeMatchStatusesForVendor(prisma, {
+      vendorId: pending.vendorId,
+      facilityId,
+    })
+    revalidatePath("/dashboard/cog")
+    revalidatePath("/dashboard/contracts")
+    revalidatePath("/dashboard/alerts")
+    revalidatePath("/dashboard")
+  }
+
+  // Bug #14 (2026-05-24): after approval, the vendor's My Contracts
+  // page must reflect the newly-created Contract row. revalidatePath
+  // invalidates the Next.js cache so the vendor's next visit reads
+  // fresh data. React Query state stays per-browser; this only
+  // helps if the vendor reloads (which is the usual flow).
+  revalidatePath("/vendor/contracts")
+  revalidatePath(`/vendor/contracts/${contract.id}`)
+  if (facilityId) {
+    revalidatePath("/dashboard/contracts")
+    revalidatePath(`/dashboard/contracts/${contract.id}`)
+  }
+
+  // Bug #14 (2026-05-24): post-approval sanity check. If the Contract
+  // row isn't readable AFTER all writes, something's wrong with the
+  // transaction boundary — throw so the user sees a real error
+  // instead of a green-toast-but-no-contract.
+  // auth-scope-scanner-skip: post-authorized re-read after the tenant-scoped create;
+  // intentionally unscoped so a facilityId mismatch on the new row still surfaces.
+  const verifyContract = await prisma.contract.findUnique({
+    where: { id: contract.id },
+    select: { id: true, vendorId: true, facilityId: true },
+  })
+  if (!verifyContract) {
+    throw new Error(
+      `Approval verification failed: Contract ${contract.id} not found after create. Vendor: ${pending.vendorId}, Facility: ${facilityId ?? "none"}. Re-run approval.`,
+    )
+  }
+
+  console.info("[materializePending] approved", {
+    pendingId: pending.id,
+    contractId: contract.id,
+    vendorId: pending.vendorId,
+    facilityId,
+    termCount: pendingTerms.length,
+    pricingItemCount: pricingItems.length,
+  })
+
+  return contract
+}
+
 // ─── Vendor: List Pending ───────────────────────────────────────
 
 export async function getVendorPendingContracts(_vendorId?: string) {
@@ -506,7 +968,7 @@ export async function createPendingContract(input: CreatePendingContractInput) {
   // Approval propagated the spoofed vendorId onto the live Contract.
   // Facility identity is also looked up from the Facility row when
   // facilityId is provided so the displayed name matches reality.
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
   await requireCanMutate()
   let data: CreatePendingContractInput
   try {
@@ -631,6 +1093,57 @@ export async function createPendingContract(input: CreatePendingContractInput) {
     })
     throw err
   }
+
+  // Charles 2026-07-27: "if it is set up for 1 way on a facility it does not
+  // need to submit a contract it just becomes active after creating it."
+  // Pre-fix the row was hardcoded `submitted` with no operating-mode branch,
+  // and the ONLY exit into a live Contract was approvePendingContract — which
+  // opens with requireFacility(). In one-way mode there is no counterparty
+  // facility user, so the row sat at "submitted" forever (the stranded
+  // Stryker Flex Financial / "2 LSC" submission in the bug report).
+  //
+  // `canAutoActivate` is the tenant gate, not a convenience: when the payload
+  // names a facility it demands an ACCEPTED Connection row for this exact
+  // vendor↔facility pair, so a client-supplied facilityId the caller has no
+  // relationship with falls through to the ordinary submit-for-review path
+  // rather than minting a live contract inside someone else's tenant.
+  const resolvedMode = await resolveOperatingMode({
+    vendorId: vendor.id,
+    facilityId: data.facilityId ?? null,
+  })
+  if (canAutoActivate(resolvedMode, data.facilityId ?? null)) {
+    try {
+      await materializePending(contract, data.facilityId ?? null, user.id)
+    } catch (err) {
+      // The PendingContract row is already committed at this point; leaving it
+      // at "submitted" is the recoverable state (the facility can still
+      // approve it, or the vendor can delete it). Say so — in prod the client
+      // only ever sees a digest unless the message is explicit.
+      console.error("[createPendingContract] auto-activation failed", err, {
+        vendorId: vendor.id,
+        facilityId: data.facilityId ?? null,
+        pendingId: contract.id,
+        mode: resolvedMode.mode,
+        modeSource: resolvedMode.source,
+      })
+      throw new Error(
+        `Contract was saved but could not be activated automatically — ${
+          err instanceof Error ? err.message : "unknown error"
+        }. It is still listed as a pending submission.`,
+      )
+    }
+    // Deliberately NO notifyFacilityOfPendingContract here: nothing was
+    // submitted for review, so there is no reviewer to page.
+    //
+    // Re-read so callers get the post-materialize row (status "approved",
+    // reviewedAt/reviewedBy, approvedContractId) instead of the stale
+    // pre-flip snapshot — the vendor's "My Contracts" list keys off status.
+    const activated = await prisma.pendingContract.findUniqueOrThrow({
+      where: { id: contract.id, vendorId: vendor.id },
+    })
+    return serialize(activated)
+  }
+
   // Charles 2026-04-25 (vendor-mirror Phase 1): notify the facility
   // so a human knows there's a submission to review. Best-effort; if
   // emails are unconfigured the submission still succeeds.
@@ -855,396 +1368,17 @@ export async function approvePendingContract(id: string, _reviewedByIgnored?: st
   // the audit field, so the reviewer-of-record could be forged.
   const { facility, user } = await requireFacility()
   await requireCanMutate()
-  const reviewedBy = user.id
 
   const pending = await prisma.pendingContract.findUniqueOrThrow({
     where: { id, facilityId: facility.id },
   })
 
-  // 2026-06-09 audit: only a "submitted" row is approvable. Without this
-  // guard, re-approving an already-approved (or rejected/withdrawn) row
-  // created a DUPLICATE Contract — prod had 7 approved rows whose contracts
-  // were later deleted, each one re-approve away from a dupe.
-  if (pending.status !== "submitted") {
-    throw new Error(
-      `This submission is "${pending.status}" — only submitted contracts can be approved.` +
-        (pending.status === "approved"
-          ? " It was already approved; ask the vendor to resubmit if a new contract is needed."
-          : " Ask the vendor to (re)submit it."),
-    )
-  }
-
-  // F3 — port pricingData JSON into ContractPricing rows. Defensively
-  // extract only items that look real (vendorItemNo + numeric unitPrice).
-  const pricingItems = extractPendingPricingItems(pending.pricingData)
-
-  // Charles 2026-04-25 (vendor-mirror Phase 1): port the `terms` JSON
-  // blob into real `ContractTerm` + `ContractTier` rows. Without this
-  // every approved vendor submission silently lost its rebate
-  // structure — the contract appeared as "active" but had no terms,
-  // so accruals computed to $0 forever. The shape of the blob mirrors
-  // what the vendor submission form persists; we extract defensively
-  // so a malformed blob doesn't blow the approval.
-  const pendingTerms = extractPendingTerms(pending.terms, pending.effectiveDate)
-
-  // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
-  // pre-resolve scoped category IDs → names per term, OUTSIDE the
-  // create call. ContractTerm.categories is a String[] of NAMES (the
-  // engine matches against COG row category names) but the vendor UI
-  // sends category IDs. Mirrors the create-contract path in
-  // lib/actions/contracts.ts.
-  const resolvedCategoryNamesByTerm = new Map<number, string[]>()
-  for (let i = 0; i < pendingTerms.length; i++) {
-    const ids = pendingTerms[i].scopedCategoryIds
-    if (ids.length > 0) {
-      resolvedCategoryNamesByTerm.set(i, await resolveCategoryIdsToNames(ids))
-    }
-  }
-
-  // 2026-06-09 audit: the approval writes (contract + nested terms/tiers/
-  // pricing, documents, category links, pending-row status flip) were
-  // sequential — a mid-flight crash could create the Contract without
-  // flipping the pending row (the status guard above makes that benign but
-  // manual to clean up). Run them as ONE interactive transaction so an
-  // approval either fully lands or fully rolls back. Timeout is generous
-  // because pricing payloads can be large (one prod submission carries
-  // ~46K ContractPricing rows in the nested create).
-  const contract = await prisma.$transaction(
-    async (tx) => {
-  const contract = await tx.contract.create({
-    data: {
-      name: pending.contractName,
-      vendorId: pending.vendorId,
-      facilityId: facility.id,
-      contractType: pending.contractType,
-      // 2026-06-09 audit: derive status from the expiration date instead of
-      // hardcoding "active" — two prod rows (exp 2024-12-31) were approved
-      // as "active" though already expired, violating the
-      // status/expirationDate invariant.
-      status:
-        pending.expirationDate && pending.expirationDate < new Date()
-          ? "expired"
-          : "active",
-      effectiveDate: pending.effectiveDate ?? new Date(),
-      // Evergreen sentinel (see lib/actions/contracts.ts:728). Previously
-      // the fallback was now + 365d which silently created a contract
-      // that "expired" exactly one year after approval with no user
-      // action. For evergreen pending contracts, write the far-future
-      // sentinel so the matcher + formatDate treat it correctly
-      // ("Evergreen" in the UI, in-window for every future COG row).
-      expirationDate:
-        pending.expirationDate ?? new Date(Date.UTC(9999, 11, 31)),
-      totalValue: pending.totalValue ?? 0,
-      // Charles 2026-04-25 (vendor-mirror Phase 2): port the field-
-      // parity columns onto the real contract on approve. Without
-      // this the vendor's submitted values would still drop on the
-      // floor at the approve boundary even though Phase 2 added the
-      // columns to PendingContract.
-      ...(pending.contractNumber != null && {
-        contractNumber: pending.contractNumber,
-      }),
-      ...(pending.annualValue != null && {
-        annualValue: pending.annualValue,
-      }),
-      ...(pending.gpoAffiliation != null && {
-        gpoAffiliation: pending.gpoAffiliation,
-      }),
-      // performancePeriod / rebatePayPeriod are typed `String?` on
-      // PendingContract (free-form vendor input) but enums on the
-      // real Contract. Cast at the boundary; if the vendor sent a
-      // value that doesn't match the enum the create will throw and
-      // surface a helpful Prisma error to the reviewer.
-      ...(pending.performancePeriod != null && {
-        performancePeriod:
-          pending.performancePeriod as Prisma.ContractCreateInput["performancePeriod"],
-      }),
-      ...(pending.rebatePayPeriod != null && {
-        rebatePayPeriod:
-          pending.rebatePayPeriod as Prisma.ContractCreateInput["rebatePayPeriod"],
-      }),
-      autoRenewal: pending.autoRenewal,
-      ...(pending.terminationNoticeDays != null && {
-        terminationNoticeDays: pending.terminationNoticeDays,
-      }),
-      // Charles audit suggestion #4 (v0-port): drain capital from
-      // pending → real ContractCapitalLineItem rows. Two sources:
-      //   (a) pending.capitalLineItems JSON — vendor multi-item path.
-      //   (b) Single-block pending.capitalCost — backward-compat for
-      //       older clients that haven't adopted the editor yet.
-      // (a) wins when present; (b) is a fallback so single-item
-      // submissions keep working.
-      ...(() => {
-        const items = buildCapitalLineItemsFromPending(pending)
-        return items.length > 0
-          ? { capitalLineItems: { create: items } }
-          : {}
-      })(),
-      // Charles audit pass-3 C1 + pass-4 BLOCKER 2: copy tie-in
-      // parent + division so the capital amortization tie-in math is
-      // wired post-approve. Field on Contract is
-      // `tieInCapitalContractId` (not `tieInContractId` — that's the
-      // PendingContract field name only).
-      ...(pending.tieInContractId != null && {
-        tieInCapitalContractId: pending.tieInContractId,
-      }),
-      ...(pending.division != null && { division: pending.division }),
-      ...(pricingItems.length > 0 && {
-        pricingItems: {
-          create: pricingItems,
-        },
-      }),
-      ...(pendingTerms.length > 0 && {
-        terms: {
-          // Prisma's nested-create requires enum-typed strings on the
-          // term row. JSON-extracted values are bare strings, so we
-          // cast at this single boundary. The validators in
-          // `lib/validators/contract-terms.ts` would reject anything
-          // unsafe upstream once Phase 2 plumbs validated terms
-          // through the pending model.
-          create: pendingTerms.map((t, idx) => {
-            const resolvedCategoryNames = resolvedCategoryNamesByTerm.get(idx)
-            return {
-              termName: t.termName,
-              termType:
-                t.termType as Prisma.ContractTermCreateInput["termType"],
-              baselineType:
-                t.baselineType as Prisma.ContractTermCreateInput["baselineType"],
-              evaluationPeriod: t.evaluationPeriod,
-              paymentTiming: t.paymentTiming,
-              appliesTo: t.appliesTo,
-              rebateMethod:
-                t.rebateMethod as Prisma.ContractTermCreateInput["rebateMethod"],
-              effectiveStart: t.effectiveStart,
-              effectiveEnd: t.effectiveEnd,
-              // Charles 2026-04-25 (vendor-mirror Phase 3 follow-up — B5):
-              // baseline + scope + procedure fields. Pre-fix these were
-              // dropped at the approve boundary; the engine then
-              // computed $0 forever against undefined baselines.
-              ...(t.spendBaseline != null && {
-                spendBaseline: t.spendBaseline,
-              }),
-              ...(t.growthBaselinePercent != null && {
-                growthBaselinePercent: t.growthBaselinePercent,
-              }),
-              // volumeBaseline is Int on the schema (Math.round so a
-              // string→number coercion of "5000.0" doesn't trip
-              // Prisma). desiredMarketShare is a Decimal — straight
-              // through.
-              ...(t.volumeBaseline != null && {
-                volumeBaseline: Math.round(t.volumeBaseline),
-              }),
-              ...(t.desiredMarketShare != null && {
-                desiredMarketShare: t.desiredMarketShare,
-              }),
-              ...(t.volumeType != null && {
-                volumeType:
-                  t.volumeType as Prisma.ContractTermCreateInput["volumeType"],
-              }),
-              // ContractTerm.categories holds NAMES (resolved above).
-              ...(resolvedCategoryNames &&
-                resolvedCategoryNames.length > 0 && {
-                  categories: resolvedCategoryNames,
-                }),
-              ...(t.cptCodes.length > 0 && { cptCodes: t.cptCodes }),
-              // scopedItemNumbers → ContractTermProduct join rows.
-              ...(t.scopedItemNumbers.length > 0 && {
-                products: {
-                  create: t.scopedItemNumbers.map((vendorItemNo) => ({
-                    vendorItemNo,
-                  })),
-                },
-              }),
-              ...(t.tiers.length > 0 && {
-                tiers: {
-                  create: t.tiers.map((tier) => ({
-                    tierNumber: tier.tierNumber,
-                    ...(tier.tierName != null && { tierName: tier.tierName }),
-                    spendMin: tier.spendMin,
-                    ...(tier.spendMax != null && { spendMax: tier.spendMax }),
-                    // volumeMin/Max are Int columns — round at the
-                    // boundary in case of string→number coercion.
-                    ...(tier.volumeMin != null && {
-                      volumeMin: Math.round(tier.volumeMin),
-                    }),
-                    ...(tier.volumeMax != null && {
-                      volumeMax: Math.round(tier.volumeMax),
-                    }),
-                    ...(tier.marketShareMin != null && {
-                      marketShareMin: tier.marketShareMin,
-                    }),
-                    ...(tier.marketShareMax != null && {
-                      marketShareMax: tier.marketShareMax,
-                    }),
-                    rebateValue: tier.rebateValue,
-                    rebateType:
-                      tier.rebateType as Prisma.ContractTierCreateInput["rebateType"],
-                  })),
-                },
-              }),
-            }
-          }),
-        },
-      }),
-    },
-  })
-
-  // Charles 2026-04-26 (#59): copy vendor-attached PDFs from
-  // PendingContract.documents (JSON array of {name, url}) into real
-  // ContractDocument rows so the vendor's Documents tab on the
-  // approved contract isn't empty. Without this, every approval
-  // dropped the vendor-uploaded contract PDF on the floor.
-  if (Array.isArray(pending.documents) && pending.documents.length > 0) {
-    type AttachedDoc = { name?: unknown; url?: unknown; type?: unknown }
-    const docs = (pending.documents as AttachedDoc[])
-      .filter(
-        (d): d is { name: string; url: string; type?: string } =>
-          d != null &&
-          typeof d === "object" &&
-          typeof (d as AttachedDoc).url === "string",
-      )
-      .map((d) => {
-        const allowed = ["main", "amendment", "addendum", "exhibit", "pricing"] as const
-        type Allowed = (typeof allowed)[number]
-        const raw = typeof d.type === "string" ? d.type : ""
-        const type: Allowed = (allowed as readonly string[]).includes(raw)
-          ? (raw as Allowed)
-          : "main"
-        return {
-          contractId: contract.id,
-          name: typeof d.name === "string" && d.name ? d.name : "Contract document",
-          url: d.url as string,
-          type,
-        }
-      })
-    if (docs.length > 0) {
-      await tx.contractDocument.createMany({ data: docs })
-    }
-  }
-
-  // 2026-06-09 audit: transfer contract-level CATEGORIES. The approve path
-  // previously wrote neither productCategoryId nor ContractProductCategory
-  // join rows — and the join is the primary category-scope source for
-  // market share / compliance (lib/actions/contracts/derived-metrics.ts).
-  // Vendor-approved contracts therefore computed over an EMPTY scope (the
-  // exact "$105K of $3.29M" bug class fixed on the facility side today).
-  // Sources: term scopedCategoryIds (already resolved to names above) plus
-  // pricing-file category names, matched case-insensitively against
-  // existing ProductCategory rows (no auto-create — unresolvable names are
-  // skipped, same posture as the facility import path's strict mode).
-  const categoryNameSet = new Set<string>()
-  for (const names of resolvedCategoryNamesByTerm.values()) {
-    for (const n of names) categoryNameSet.add(n)
-  }
-  for (const p of pricingItems) {
-    if (p.category) categoryNameSet.add(p.category)
-  }
-  if (categoryNameSet.size > 0) {
-    const allCats = await tx.productCategory.findMany({
-      select: { id: true, name: true },
-    })
-    const idByLower = new Map(
-      allCats.map((c) => [c.name.trim().toLowerCase(), c.id]),
-    )
-    const categoryIds = Array.from(
-      new Set(
-        Array.from(categoryNameSet)
-          .map((n) => idByLower.get(n.trim().toLowerCase()))
-          .filter((v): v is string => !!v),
-      ),
-    )
-    if (categoryIds.length > 0) {
-      await tx.contractProductCategory.createMany({
-        data: categoryIds.map((productCategoryId) => ({
-          contractId: contract.id,
-          productCategoryId,
-        })),
-        skipDuplicates: true,
-      })
-    }
-  }
-
-  // id was already validated by the facility-scoped findUniqueOrThrow at the
-  // top of approvePendingContract (where: { id, facilityId: facility.id }).
-  // auth-scope-scanner-skip: gated mutation following the authorized read.
-  await tx.pendingContract.update({
-    where: { id },
-    data: {
-      status: "approved",
-      reviewedAt: new Date(),
-      reviewedBy,
-      // 2026-06-09 audit: durable link to the created Contract (FK with
-      // onDelete: SetNull) — an "approved" row whose approvedContractId is
-      // null afterwards means its contract was deleted. Pre-fix this link
-      // lived only in a console.info; prod had 7 such undetectable orphans.
-      approvedContractId: contract.id,
-    },
-  })
-
-  return contract
-    },
-    // Large nested pricing createMany (≈46K rows on one prod submission)
-    // needs more than the 5s default.
-    { timeout: 120_000, maxWait: 10_000 },
-  )
-
-  // Charles 2026-04-25 (vendor-mirror Phase 1): close the loop with
-  // the vendor — they need to know their submission landed as a real
-  // contract.
-  void notifyVendorOfPendingDecision({
-    contractName: pending.contractName,
-    vendorName: pending.vendorName,
-    facilityName: pending.facilityName,
-    pendingId: pending.id,
-    approvedContractId: contract.id,
-    decision: "approved",
-  })
-
-  // F2 — recompute COG match-statuses so rows flip from
-  // off_contract_item → on_contract / price_variance now that the
-  // vendor has an active contract with pricing.
-  await recomputeMatchStatusesForVendor(prisma, {
-    vendorId: pending.vendorId,
-    facilityId: facility.id,
-  })
-  revalidatePath("/dashboard/cog")
-  revalidatePath("/dashboard/contracts")
-  revalidatePath("/dashboard/alerts")
-  revalidatePath("/dashboard")
-
-  // Bug #14 (2026-05-24): after approval, the vendor's My Contracts
-  // page must reflect the newly-created Contract row. revalidatePath
-  // invalidates the Next.js cache so the vendor's next visit reads
-  // fresh data. React Query state stays per-browser; this only
-  // helps if the vendor reloads (which is the usual flow).
-  revalidatePath("/vendor/contracts")
-  revalidatePath(`/vendor/contracts/${contract.id}`)
-  revalidatePath("/dashboard/contracts")
-  revalidatePath(`/dashboard/contracts/${contract.id}`)
-
-  // Bug #14 (2026-05-24): post-approval sanity check. If the Contract
-  // row isn't readable AFTER all writes, something's wrong with the
-  // transaction boundary — throw so the user sees a real error
-  // instead of a green-toast-but-no-contract.
-  // auth-scope-scanner-skip: post-authorized re-read after facility-scoped create;
-  // intentionally unscoped so a facilityId mismatch on the new row still surfaces.
-  const verifyContract = await prisma.contract.findUnique({
-    where: { id: contract.id },
-    select: { id: true, vendorId: true, facilityId: true },
-  })
-  if (!verifyContract) {
-    throw new Error(
-      `Approval verification failed: Contract ${contract.id} not found after create. Vendor: ${pending.vendorId}, Facility: ${facility.id}. Re-run approval.`,
-    )
-  }
-
-  console.info("[approvePendingContract] approved", {
-    pendingId: pending.id,
-    contractId: contract.id,
-    vendorId: pending.vendorId,
-    facilityId: facility.id,
-    termCount: pendingTerms.length,
-    pricingItemCount: pricingItems.length,
-  })
+  // Everything from the "submitted"-only guard through the contract create,
+  // the pending-row flip, the notifications and the revalidations now lives
+  // in materializePending (shared with the one-way auto-activation path in
+  // createPendingContract). The facility-scoped read above is what authorizes
+  // this call — materializePending does no auth of its own.
+  const contract = await materializePending(pending, facility.id, user.id)
 
   return serialize(contract)
 }

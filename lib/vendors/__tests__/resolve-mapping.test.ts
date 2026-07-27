@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const vendorFindMany = vi.fn()
 const mappingFindMany = vi.fn()
+const aliasFindMany = vi.fn()
 const vendorCreate = vi.fn()
 const vendorFindFirst = vi.fn()
 
@@ -23,6 +24,12 @@ vi.mock("@/lib/db", () => ({
     },
     vendorNameMapping: {
       findMany: (a: unknown) => mappingFindMany(a),
+    },
+    // Pass 1a (Charles 2026-07-27) — vendor-declared aliases. Empty by
+    // default so these Pass 0 cases stay isolated; the alias pass has its
+    // own coverage in resolve-alias.test.ts.
+    vendorAlias: {
+      findMany: (a: unknown) => aliasFindMany(a),
     },
   },
 }))
@@ -38,6 +45,7 @@ describe("resolveVendorId — confirmed mapping Pass 0", () => {
     mappingFindMany.mockResolvedValue([
       { cogVendorName: LEGACY, mappedVendorId: "v-new" },
     ])
+    aliasFindMany.mockResolvedValue([])
   })
 
   it("resolves a mapped name to its target vendor, beating create", async () => {
@@ -81,6 +89,7 @@ describe("resolveVendorIdsBulk — confirmed mapping Pass 0", () => {
     mappingFindMany.mockResolvedValue([
       { cogVendorName: LEGACY, mappedVendorId: "v-new" },
     ])
+    aliasFindMany.mockResolvedValue([])
   })
 
   it("maps the legacy name to the target in the result map", async () => {

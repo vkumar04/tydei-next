@@ -193,6 +193,12 @@ export function AIExtractReview({
   // (date typo gets flagged; fixing it makes the warning disappear).
   const warnings = useMemo(() => findContractWarnings(data), [data])
 
+  // `data` can be a PARTIAL streamObject payload — ai-extract-dialog calls
+  // setExtracted() on every parsed chunk — so arrays the model hasn't emitted
+  // yet are undefined at render time regardless of what the Zod schema says.
+  // Derived, not mirrored (CLAUDE.md).
+  const terms = data.terms ?? []
+
   return (
     <div className="space-y-5 max-h-[65vh] overflow-y-auto pr-1">
       {/* Confidence badge */}
@@ -375,12 +381,19 @@ export function AIExtractReview({
 
       <Separator />
 
-      {/* Terms */}
-      {data.terms.length > 0 && (
+      {/* Terms.
+          Charles 2026-07-27: this read `data.terms.length` bare and threw
+          "TypeError: Cannot read properties of undefined (reading 'length')"
+          straight into the dashboard error boundary, killing the whole page
+          mid-extraction. `data` here can be a PARTIAL streamObject payload —
+          the dialog calls setExtracted() on every parsed chunk — so any array
+          the model hasn't emitted yet is undefined, schema notwithstanding.
+          Same for `term.tiers` below. Treat missing as empty. */}
+      {terms.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <Label className="font-medium">
-              Rebate Terms ({data.terms.length})
+              Rebate Terms ({terms.length})
             </Label>
             <Button
               variant="ghost"
@@ -397,7 +410,7 @@ export function AIExtractReview({
           </div>
 
           <div className="space-y-2">
-            {data.terms.map((term, i) => (
+            {terms.map((term, i) => (
               <div key={i} className="p-3 rounded-lg border bg-card">
                 <div className="flex items-start justify-between">
                   <div>
@@ -406,7 +419,7 @@ export function AIExtractReview({
                       <Badge variant="outline" className="text-xs">
                         {term.termType}
                       </Badge>
-                      {term.tiers.length > 0 && (
+                      {(term.tiers?.length ?? 0) > 0 && (
                         <Badge className="bg-primary/10 text-primary text-xs">
                           {term.tiers.length} Tier
                           {term.tiers.length !== 1 ? "s" : ""}
@@ -434,7 +447,7 @@ export function AIExtractReview({
                   </div>
                 )}
 
-                {showTerms && term.tiers.length > 0 && (
+                {showTerms && (term.tiers?.length ?? 0) > 0 && (
                   <div className="mt-3 pt-3 border-t grid gap-1.5">
                     {term.tiers.map((tier, ti) => (
                       <div

@@ -105,7 +105,14 @@ export function LoginForm({ demoAccounts }: LoginFormProps) {
           // never sign in. better-auth re-sends the link on this attempt
           // (emailVerification.sendOnSignIn), but say so explicitly and
           // offer a manual re-send — otherwise the user is just stuck.
-          if (code === "EMAIL_NOT_VERIFIED" || status === 403) {
+          //
+          // Match on the CODE, not a bare 403 (Vick 2026-07-27). better-auth
+          // also returns 403 for INVALID_ORIGIN, which happens whenever the
+          // app is served from an origin outside `trustedOrigins` — e.g. the
+          // dev server falling back to :3001 because :3000 was taken. Treating
+          // every 403 as "unverified" sent us checking `user.emailVerified` in
+          // the database (all `true`) while the real cause was the port.
+          if (code === "EMAIL_NOT_VERIFIED") {
             setUnverifiedEmail(data.email)
             toast.error(
               "Verify your email to sign in — we've sent you a fresh link.",

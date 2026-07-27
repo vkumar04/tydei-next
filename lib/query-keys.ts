@@ -371,6 +371,8 @@ export const queryKeys = {
       ["settings", "connections", entityId] as const,
     vendorOperatingMode: (vendorId: string) =>
       ["settings", "vendorOperatingMode", vendorId] as const,
+    vendorAliases: (vendorId: string) =>
+      ["settings", "vendorAliases", vendorId] as const,
     vendorDivisions: () => ["vendor-divisions"] as const,
     // Settings/Users feature ───────────────────────────────────────
     memberAccessTiers: (orgId: string) =>

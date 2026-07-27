@@ -248,10 +248,23 @@ export async function POST(req: Request) {
       console.error(
         "[extract-contract/stream] chunked extract error:",
         error,
-        { userId, file: file.name, pageCount: pdfText.pageCount },
+        {
+          userId,
+          file: file.name,
+          pageCount: pdfText.pageCount,
+          hasTextLayer: pdfText.hasTextLayer,
+          meaningfulChars: pdfText.meaningfulChars,
+        },
       )
+      // Name the action AND the failure kind (CLAUDE.md "AI actions"). A
+      // scanned PDF is by far the most common cause here and the user can act
+      // on it, so say so rather than emitting a bare "extraction failed".
       return Response.json(
-        { error: "Chunked extraction failed" },
+        {
+          error: pdfText.hasTextLayer
+            ? "Contract extraction failed while reading this PDF in sections. Try again, or use Manual Entry."
+            : `Contract extraction failed. "${file.name}" looks like a scan with no selectable text (${pdfText.pageCount} page${pdfText.pageCount === 1 ? "" : "s"}), so it was read by OCR. Try a text-based PDF export if you have one, or use Manual Entry.`,
+        },
         { status: 500 },
       )
     }

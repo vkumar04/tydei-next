@@ -146,29 +146,47 @@ export function BasicInformationCard({
 
         {/* Facility Selection */}
         <div className="space-y-3">
-          <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
-            <Checkbox
-              id="multiFacility"
-              checked={isMultiFacility}
-              onCheckedChange={(checked) => {
-                onIsMultiFacilityChange(checked === true)
-              }}
-            />
-            <div className="grid gap-0.5">
-              <label
-                htmlFor="multiFacility"
-                className="flex items-center gap-2 cursor-pointer font-medium"
-              >
-                <Users className="h-4 w-4 text-muted-foreground" />
-                Multi-Facility Contract
-              </label>
-              <p className="text-xs text-muted-foreground">
-                Apply this contract to multiple facilities
+          {/* Nothing to fan out to when the vendor has no connected
+              facilities — hide the toggle rather than offer an empty picker. */}
+          {facilities.length > 0 && (
+            <div className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30">
+              <Checkbox
+                id="multiFacility"
+                checked={isMultiFacility}
+                onCheckedChange={(checked) => {
+                  onIsMultiFacilityChange(checked === true)
+                }}
+              />
+              <div className="grid gap-0.5">
+                <label
+                  htmlFor="multiFacility"
+                  className="flex items-center gap-2 cursor-pointer font-medium"
+                >
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  Multi-Facility Contract
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Apply this contract to multiple facilities
+                </p>
+              </div>
+            </div>
+          )}
+
+          {facilities.length === 0 ? (
+            /* Charles 2026-07-27: the picker is scoped to facilities this
+               vendor actually deals with (lib/vendors/related-facilities.ts),
+               so a standalone vendor sees none. An empty Select reads as
+               "broken"; say what will happen instead. The contract is created
+               as the vendor's own (no facility) — the one-way flow. */
+            <div className="space-y-2">
+              <Label>Target Facility</Label>
+              <p className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                You have no connected facilities yet, so this contract will be
+                created as your own. Connect a facility from Settings to submit
+                contracts to them for review.
               </p>
             </div>
-          </div>
-
-          {isMultiFacility ? (
+          ) : isMultiFacility ? (
             <div className="space-y-2">
               <Label className="flex items-center gap-2">
                 <Building2 className="h-4 w-4" />
