@@ -6,7 +6,6 @@ import { TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
-import { getOpenAlertCount } from "@/lib/actions/alerts"
 import { toast } from "sonner"
 import type { PortalRole } from "@/lib/types"
 
@@ -36,12 +35,18 @@ export function AlertBell({
 
   const { data: count } = useQuery({
     queryKey: queryKeys.alerts.unreadCount(portalType, entityId),
-    queryFn: () =>
-      getOpenAlertCount({
-        facilityId: role !== "vendor" ? facilityId : undefined,
-        vendorId: role === "vendor" ? vendorId : undefined,
-        portalType,
-      }),
+    // Route Handler, NOT the Server Action — see app/api/alerts/unread-count.
+    // A queued 30s poll keeps posting to the route that queued it after you
+    // navigate away, and its response can commit that route's RSC payload.
+    // The endpoint derives the portal scope from the session, so no ids are
+    // sent: the previous facilityId/vendorId arguments were already
+    // deprecated and ignored server-side.
+    queryFn: async (): Promise<number> => {
+      const res = await fetch("/api/alerts/unread-count")
+      if (!res.ok) throw new Error(`Alert count failed: ${res.status}`)
+      const body = (await res.json()) as { count: number }
+      return body.count
+    },
     refetchInterval: 30_000,
     initialData: initialCount,
     enabled: scopedToAnEntity,
