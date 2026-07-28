@@ -37,7 +37,13 @@ interface ProspectiveClientProps {
   initialTab: string | null
 }
 
-const VALID_TABS: ProspectiveTabId[] = [
+/**
+ * Exported so AnalysisPageClient can decide whether an incoming ?tab= is real
+ * before switching the OUTER view to Evaluate Proposals. One list, one source of
+ * truth — duplicating it is how `?tab=analytics` (a tab removed on 2026-07-27)
+ * would start opening a view it no longer belongs to.
+ */
+export const VALID_TABS: ProspectiveTabId[] = [
   "upload",
   "manual",
   "proposals",

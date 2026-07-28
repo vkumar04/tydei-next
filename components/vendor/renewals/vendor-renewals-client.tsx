@@ -17,6 +17,7 @@ import { FileText } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { useExpiringContracts } from "@/hooks/use-renewals"
+import { useVendorContracts } from "@/hooks/use-vendor-contracts"
 import type { ExpiringContract } from "@/lib/actions/renewals"
 import { PageHeader } from "@/components/shared/page-header"
 import { VendorRenewalPipeline } from "./vendor-renewal-pipeline"
@@ -83,6 +84,19 @@ function getStage(c: ExpiringContract): Exclude<VendorRenewalStage, "all"> {
 
 export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
   const { data, isLoading } = useExpiringContracts(vendorId, 365, "vendor")
+  // The portfolio total, NOT the size of the 365-day window. `contracts` is the
+  // expiring-window query; using its length as "totalContracts" made the hero
+  // announce "All 1 contracts are more than 90 days from expiration" to a vendor
+  // holding 5. `portfolio.contractCount` is a server-side `_count.id` over the
+  // whole portfolio — the same aggregate /vendor/contracts already renders.
+  // Charles 2026-07-28 sweep.
+  // `pageSize: 1` on purpose: only `portfolio.contractCount` is read here, and
+  // `portfolioAgg` (vendor-contracts.ts:111,173) is a separate aggregate from
+  // the page query — so shrinking the page costs nothing and avoids pulling 20
+  // contract rows this component discards. It is a distinct query key from the
+  // contracts page's (keys include the filter object), so it would otherwise be
+  // a second full fetch rather than a cache hit.
+  const { data: portfolioData } = useVendorContracts(vendorId, { pageSize: 1 })
   const contracts: ExpiringContract[] = useMemo(() => data ?? [], [data])
 
   const [stage, setStage] = useState<VendorRenewalStage>("upcoming")
@@ -142,10 +156,12 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
       expiring60: e60,
       expiring90: e90,
       atRisk,
-      totalContracts: contracts.length,
+      // Portfolio-wide. The expiring buckets above stay window-scoped, which is
+      // correct — they describe the window. Only this one names the portfolio.
+      totalContracts: portfolioData?.portfolio?.contractCount ?? contracts.length,
       criticalUnstarted,
     }
-  }, [contracts])
+  }, [contracts, portfolioData?.portfolio?.contractCount])
 
   const filteredByChrome = useMemo(() => {
     const needle = search.trim().toLowerCase()

@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EmptyState } from "@/components/shared/empty-state"
 import { CalendarRange } from "lucide-react"
 import { toast } from "sonner"
+import { useContractStats } from "@/hooks/use-contracts"
 import {
   useContractPerformanceHistory,
   useExpiringContracts,
@@ -73,6 +74,13 @@ export function RenewalsClient({
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const { data, isLoading } = useExpiringContracts(facilityId, 365, "facility")
+  // The portfolio total, NOT the size of the 365-day window. `rows` is the
+  // expiring-window query; using its length as "totalContracts" made the hero
+  // tell a facility with 7 contracts — none of them expiring within a year —
+  // that it had none on file. getContractStats is a true server-side aggregate
+  // (pinned by lib/actions/__tests__/get-contract-stats-hero-scope.test.ts).
+  // Charles 2026-07-28 sweep.
+  const { data: portfolioStats } = useContractStats(facilityId, "this")
   const contracts: ExpiringContract[] = useMemo(() => data ?? [], [data])
   const rows = useMemo(() => contracts.map(toRow), [contracts])
 
@@ -120,10 +128,12 @@ export function RenewalsClient({
       expiring60: e60,
       expiring90: e90,
       atRisk: summary.atRisk,
-      totalContracts: rows.length,
+      // Portfolio-wide. The buckets below stay window-scoped — that is correct,
+      // they describe the window — but this one names the portfolio.
+      totalContracts: portfolioStats?.totalContracts ?? rows.length,
       criticalUnstarted,
     }
-  }, [rows, summary])
+  }, [rows, summary, portfolioStats?.totalContracts])
 
   const filteredRows = useMemo(() => {
     const needle = search.trim().toLowerCase()
@@ -185,8 +195,8 @@ export function RenewalsClient({
       ) : rows.length === 0 ? (
         <EmptyState
           icon={CalendarRange}
-          title="No contracts on file"
-          description="Add a contract to start tracking renewals here."
+          title="No contracts expiring in the next 365 days"
+          description="Contracts appear here as they approach their expiration date."
         />
       ) : (
         <Tabs

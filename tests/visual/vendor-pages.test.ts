@@ -306,10 +306,10 @@ test("vendor renewals page loads", async ({ page, context }) => {
  * This test cross-checks the two surfaces rather than hard-coding 5, so it
  * stays honest across reseeds. The fix belongs in
  * vendor-renewals-client.tsx, not here. When it lands this test starts
- * passing and Playwright will fail the run for an unexpected pass; drop
- * the `.fail` then.
+ * FIXED 2026-07-28: the hero now reads a portfolio-wide total, so the `.fail`
+ * marker is gone and this guards the fix.
  */
-test.fail(
+test(
   "vendor renewals headline describes the whole portfolio, not the 365-day window",
   async ({ page, context }) => {
     await loginAsVendor(page, context)
