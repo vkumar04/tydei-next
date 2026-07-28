@@ -369,6 +369,9 @@ export const queryKeys = {
       ["settings", "featureFlags", facilityId] as const,
     connections: (entityId: string) =>
       ["settings", "connections", entityId] as const,
+    /** Invite-dialog typeahead, keyed by the search text. */
+    connectionTargets: (query: string) =>
+      ["settings", "connections", "targets", query] as const,
     vendorOperatingMode: (vendorId: string) =>
       ["settings", "vendorOperatingMode", vendorId] as const,
     vendorAliases: (vendorId: string) =>

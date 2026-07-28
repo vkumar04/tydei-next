@@ -42,6 +42,10 @@ export interface ConnectionsTabProps {
   inviteFacilityDialogOpen: boolean
   onSetInviteFacilityDialogOpen: (open: boolean) => void
   newInviteFacilityName: string
+  /** Typeahead matches for the invite dialog (see the note beside the input). */
+  inviteMatches: { id: string; name: string }[]
+  selectedFacilityId: string | null
+  onSetSelectedFacilityId?: (id: string | null) => void
   onSetNewInviteFacilityName: (name: string) => void
   newInviteMessage: string
   onSetNewInviteMessage: (message: string) => void
@@ -59,6 +63,9 @@ export function ConnectionsTab({
   inviteFacilityDialogOpen,
   onSetInviteFacilityDialogOpen,
   newInviteFacilityName,
+  inviteMatches,
+  selectedFacilityId,
+  onSetSelectedFacilityId,
   onSetNewInviteFacilityName,
   newInviteMessage,
   onSetNewInviteMessage,
@@ -106,10 +113,47 @@ export function ConnectionsTab({
                   <Label htmlFor="facility-name">Facility Name</Label>
                   <Input
                     id="facility-name"
-                    placeholder="e.g., Memorial Hospital, St. Mary's Medical Center"
+                    placeholder="Start typing, then pick from the list…"
                     value={newInviteFacilityName}
-                    onChange={(e) => onSetNewInviteFacilityName(e.target.value)}
+                    autoComplete="off"
+                    onChange={(e) => {
+                      onSetNewInviteFacilityName(e.target.value)
+                      onSetSelectedFacilityId?.(null)
+                    }}
                   />
+                  {/* Charles 2026-07-28 ("invites not working"): the name was
+                      matched by EXACT case-insensitive equality, so "Lighthouse"
+                      failed against "Lighthouse Surgical Center". A looser string
+                      match would be worse — "Lighthouse" also matches
+                      "Lighthouse Community Hospital", and guessing between them
+                      connects the vendor to the wrong tenant. So: suggest, and
+                      send the id of whichever the user picks. */}
+                  {selectedFacilityId ? (
+                    <p className="text-xs text-emerald-600">
+                      Will invite <span className="font-medium">{newInviteFacilityName}</span>.
+                    </p>
+                  ) : inviteMatches.length > 0 ? (
+                    <ul className="max-h-40 divide-y overflow-y-auto rounded-md border">
+                      {inviteMatches.map((m) => (
+                        <li key={m.id}>
+                          <button
+                            type="button"
+                            className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                            onClick={() => {
+                              onSetNewInviteFacilityName(m.name)
+                              onSetSelectedFacilityId?.(m.id)
+                            }}
+                          >
+                            {m.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : newInviteFacilityName.trim().length >= 2 ? (
+                    <p className="text-xs text-muted-foreground">
+                      No facility on the platform matches that yet.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="invite-message">Message (Optional)</Label>
@@ -125,7 +169,7 @@ export function ConnectionsTab({
                 <Button variant="outline" onClick={() => onSetInviteFacilityDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={onSendInvite} disabled={!newInviteFacilityName.trim()}>
+                <Button onClick={onSendInvite} disabled={!selectedFacilityId}>
                   <Send className="mr-2 h-4 w-4" />
                   Send Invite
                 </Button>

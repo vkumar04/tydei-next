@@ -1,6 +1,9 @@
 "use client"
 
 import { useState } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { queryKeys } from "@/lib/query-keys"
+import { searchConnectionTargets } from "@/lib/actions/connections"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import {
@@ -63,6 +66,9 @@ export function VendorSettingsClient({
   const [showPassword, setShowPassword] = useState(false)
   const [inviteFacilityDialogOpen, setInviteFacilityDialogOpen] = useState(false)
   const [newInviteFacilityName, setNewInviteFacilityName] = useState("")
+  // The invite resolves by ID, not by name — "Lighthouse" matches two
+  // facilities, so a name alone cannot identify one (Charles 2026-07-28).
+  const [selectedFacilityId, setSelectedFacilityId] = useState<string | null>(null)
   const [newInviteMessage, setNewInviteMessage] = useState("")
 
   const profile = useVendorProfile(vendorId)
@@ -96,6 +102,13 @@ export function VendorSettingsClient({
     ? explicitMode === "one_way"
     : !hasTwoWayConnection
 
+  const inviteQuery = newInviteFacilityName.trim()
+  const inviteSearch = useQuery({
+    queryKey: queryKeys.settings.connectionTargets(inviteQuery),
+    queryFn: () => searchConnectionTargets(inviteQuery),
+    enabled: inviteQuery.length >= 2 && !selectedFacilityId,
+  })
+
   const handleSendInvite = () => {
     const name = newInviteFacilityName.trim()
     if (!name) return
@@ -103,9 +116,12 @@ export function VendorSettingsClient({
     // hiding server failures (e.g. "Facility not found with that email").
     sendInvite.mutate(
       {
-        // Resolved by facility NAME server-side — no fabricated email.
+        // Resolved by ID server-side. The name rides along for the audit
+        // trail and the toast, but it is the id that identifies the facility —
+        // a name is ambiguous.
         toEmail: "",
         toName: name,
+        toId: selectedFacilityId ?? undefined,
         message: newInviteMessage || undefined,
       },
       {
@@ -117,6 +133,7 @@ export function VendorSettingsClient({
       }
     )
     setNewInviteFacilityName("")
+    setSelectedFacilityId(null)
     setNewInviteMessage("")
     setInviteFacilityDialogOpen(false)
   }
@@ -279,6 +296,9 @@ export function VendorSettingsClient({
             inviteFacilityDialogOpen={inviteFacilityDialogOpen}
             onSetInviteFacilityDialogOpen={setInviteFacilityDialogOpen}
             newInviteFacilityName={newInviteFacilityName}
+            inviteMatches={inviteSearch.data ?? []}
+            selectedFacilityId={selectedFacilityId}
+            onSetSelectedFacilityId={setSelectedFacilityId}
             onSetNewInviteFacilityName={setNewInviteFacilityName}
             newInviteMessage={newInviteMessage}
             onSetNewInviteMessage={setNewInviteMessage}
