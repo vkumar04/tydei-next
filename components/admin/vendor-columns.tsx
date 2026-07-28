@@ -37,9 +37,7 @@ export function getAdminVendorColumns(
       ),
     },
     {
-      accessorKey: "status",
-      header: "Status",
-      meta: { filterVariant: "select" },
+      id: "status",
       /**
        * Charles 2026-07-28: "it says these are all active but only the ASFD is."
        *
@@ -51,19 +49,35 @@ export function getAdminVendorColumns(
        * The column that actually separates a real tenant from an import
        * artifact is `organizationId`: without an Organization there are no
        * Members, so nobody can sign in. Lead with that (`canHaveUsers`), and
-       * keep the status badge only when it carries real information — an
+       * keep the raw status only when it carries real information — an
        * explicitly deactivated vendor.
+       *
+       * This is an accessorFn, NOT accessorKey: the "select" filter builds its
+       * options from the column's ACTUAL values via getFacetedUniqueValues
+       * (column-filter.tsx:128). Keyed on `status` it offered exactly one
+       * choice — "active" — matching all 201 rows while the cells beside it read
+       * "Onboarded" / "Catalog only". Deriving the value makes the filter list
+       * the three labels that are actually rendered, so filtering and display
+       * agree.
        */
-      cell: ({ row }) => {
-        const { status, canHaveUsers } = row.original
-        if (status !== "active") {
+      accessorFn: (v) =>
+        v.status !== "active"
+          ? "Inactive"
+          : v.canHaveUsers
+            ? "Onboarded"
+            : "Catalog only",
+      header: "Status",
+      meta: { filterVariant: "select" },
+      cell: ({ getValue }) => {
+        const label = getValue<string>()
+        if (label === "Inactive") {
           return (
             <Badge variant="secondary">
               <XCircle className="mr-1 h-3 w-3" /> Inactive
             </Badge>
           )
         }
-        return canHaveUsers ? (
+        return label === "Onboarded" ? (
           <Badge variant="default">
             <CheckCircle className="mr-1 h-3 w-3" /> Onboarded
           </Badge>
