@@ -373,6 +373,11 @@ export const queryKeys = {
       ["settings", "vendorOperatingMode", vendorId] as const,
     vendorAliases: (vendorId: string) =>
       ["settings", "vendorAliases", vendorId] as const,
+    // Shares the "vendorAliases" prefix on purpose: adding or removing an alias
+    // changes which suggestions are still actionable, and one invalidation must
+    // refresh both.
+    vendorAliasSuggestions: (vendorId: string) =>
+      ["settings", "vendorAliases", vendorId, "suggestions"] as const,
     vendorDivisions: () => ["vendor-divisions"] as const,
     // Settings/Users feature ───────────────────────────────────────
     memberAccessTiers: (orgId: string) =>

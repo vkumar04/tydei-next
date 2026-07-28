@@ -27,10 +27,12 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Fingerprint, Loader2, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { queryKeys } from "@/lib/query-keys"
+import { vendorNameKey } from "@/lib/vendors/normalize"
 import {
   addVendorAlias,
   listVendorAliases,
   removeVendorAlias,
+  suggestVendorAliases,
 } from "@/lib/actions/vendor-aliases"
 
 export function IdentityTab({
@@ -48,6 +50,13 @@ export function IdentityTab({
     queryFn: () => listVendorAliases(),
   })
 
+  const suggestions = useQuery({
+    queryKey: queryKeys.settings.vendorAliasSuggestions(vendorId),
+    queryFn: () => suggestVendorAliases(),
+  })
+
+  // The suggestions key nests under the aliases key, so this one call refreshes
+  // both — a newly added alias must drop out of the suggestion list.
   const invalidate = () =>
     qc.invalidateQueries({
       queryKey: queryKeys.settings.vendorAliases(vendorId),
@@ -86,6 +95,8 @@ export function IdentityTab({
   }
 
   const rows = aliases.data ?? []
+  // Same normalization the server uses, so the badge and the add-guard agree.
+  const selfKey = vendorNameKey(vendorName)
 
   return (
     <Card>
@@ -133,12 +144,37 @@ export function IdentityTab({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Case, punctuation and corporate suffixes are ignored, so “Stryker
-          Corp.”, “STRYKER CORPORATION” and “Stryker, Inc” already resolve
-          without an entry. Add the ones that genuinely differ — a sales entity,
-          a subsidiary, or an acquired brand. An alias can belong to only one
-          company.
+          Case, punctuation and corporate suffixes are ignored, so “
+          {vendorName} Corp.”, “{vendorName.toUpperCase()} CORPORATION” and “
+          {vendorName}, Inc” already resolve without an entry. Add the ones that
+          genuinely differ — a sales entity, a subsidiary, or an acquired brand.
+          An alias can belong to only one company.
         </p>
+
+        {(suggestions.data?.length ?? 0) > 0 && (
+          <div className="rounded-lg border border-dashed p-3">
+            <p className="mb-2 text-xs font-medium">Suggested</p>
+            <div className="flex flex-wrap gap-2">
+              {suggestions.data?.map((s) => (
+                <button
+                  key={s.alias}
+                  type="button"
+                  title={s.reason}
+                  disabled={add.isPending}
+                  onClick={() => add.mutate(s.alias)}
+                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors hover:bg-accent disabled:opacity-50"
+                >
+                  <Plus className="h-3 w-3" />
+                  {s.alias}
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Spellings that look like this company but resolve elsewhere today.
+              Only add the ones that are genuinely yours — an alias moves spend.
+            </p>
+          </div>
+        )}
 
         {aliases.isLoading ? (
           <div className="space-y-2">
@@ -160,9 +196,21 @@ export function IdentityTab({
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{row.alias}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    matches as “{row.normalizedAlias}”
-                  </p>
+                  {/* An alias whose key equals the vendor's own name is a
+                      no-op — resolution already handles it. Say so rather than
+                      leaving it looking load-bearing: one of these ("Stryker
+                      Corp") is what made adding "Stryker" fail with a confusing
+                      message. Charles 2026-07-28. */}
+                  {row.normalizedAlias === selfKey ? (
+                    <p className="truncate text-xs text-amber-600">
+                      Redundant — “{vendorName}” already resolves this. Safe to
+                      remove.
+                    </p>
+                  ) : (
+                    <p className="truncate text-xs text-muted-foreground">
+                      matches as “{row.normalizedAlias}”
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-2">
                   {row.source !== "vendor" && (
