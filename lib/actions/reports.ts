@@ -360,10 +360,11 @@ export async function getPriceDiscrepancySummary(_facilityId?: string) {
  * computed over this array is therefore wrong in a way that scales with
  * facility size — such surfaces must aggregate server-side.
  *
- * KNOWN GAP (2026-07-28): `components/facility/reports/
- * price-variance-dashboard.tsx` still reduces over this array for its
- * severity cards, severity chart and per-vendor totals, with no
- * truncation notice. It needs its own companion aggregate.
+ * The two surfaces that need facility-wide numbers have their own
+ * companion aggregates over the SAME `priceDiscrepancyWhere` set:
+ * `getPriceDiscrepancySummary` (the line-item tab's four cards) and
+ * `getPriceVarianceSeverityBreakdown` (the severity tab's cards, chart,
+ * vendor table and major-line drill-down). Neither reduces this array.
  */
 export async function getPriceDiscrepancies(_facilityId?: string) {
   const { facility } = await requireFacility()
@@ -412,4 +413,364 @@ export async function getPriceDiscrepancies(_facilityId?: string) {
       }
     }),
   )
+}
+
+// ─── Price-variance severity breakdown ("By severity" tab) ───────
+
+/**
+ * Severity bands, expressed as Prisma predicates on
+ * `COGRecord.variancePercent`, so the histogram is computed by Postgres
+ * over the WHOLE qualifying set instead of by the client over the
+ * 1,500-row sample.
+ *
+ * These MUST stay in lockstep with the `SEVERITY_META` labels the
+ * dashboard prints on the cards
+ * (`components/facility/reports/price-variance-dashboard.tsx`):
+ * |variance%| < 2 minor, < 10 moderate, otherwise major — so the
+ * boundaries are inclusive on the LOW side of moderate and major
+ * (exactly 2 is moderate, exactly 10 is major). Bands are on the
+ * ABSOLUTE variance: a −12% line (a deep discount) is as "major" as a
+ * +12% one, which is why each band is a two-sided OR rather than a
+ * single range.
+ *
+ * NULL `variancePercent` (every off-contract line — 39,031 of the
+ * production snapshot's 44,812 qualifying rows) matches no band: SQL
+ * comparisons against NULL are never true. Those lines are counted in
+ * `totalLines` and reported as `unbandedLines` rather than silently
+ * vanishing between the cards and the facility total.
+ */
+const SEVERITY_BAND_WHERE = {
+  minor: { variancePercent: { gt: -2, lt: 2 } },
+  moderate: {
+    OR: [
+      { variancePercent: { gte: 2, lt: 10 } },
+      { variancePercent: { gt: -10, lte: -2 } },
+    ],
+  },
+  major: {
+    OR: [{ variancePercent: { gte: 10 } }, { variancePercent: { lte: -10 } }],
+  },
+} satisfies Record<string, Prisma.COGRecordWhereInput>
+
+type PriceVarianceSeverity = keyof typeof SEVERITY_BAND_WHERE
+
+/**
+ * How many major-severity lines the drill-down table shows. This one IS
+ * a top-N — a facility with 3,346 major lines does not want them all on
+ * a report page — so the dashboard labels it ("Top 25 of 3,346") instead
+ * of implying the list is exhaustive.
+ */
+const MAJOR_LINE_SAMPLE = 25
+
+const MAJOR_LINE_SELECT = {
+  id: true,
+  poNumber: true,
+  vendorId: true,
+  vendorName: true,
+  inventoryDescription: true,
+  vendorItemNo: true,
+  variancePercent: true,
+  savingsAmount: true,
+} satisfies Prisma.COGRecordSelect
+
+const UNKNOWN_VENDOR = "Unknown vendor"
+
+type SignedMoneyAggregate = {
+  _sum: { savingsAmount: Prisma.Decimal | null }
+  _count: { _all: number }
+}
+
+/**
+ * Dollars for one severity band, split by direction and NEVER netted —
+ * the same rule `getPriceDiscrepancySummary` follows. In the production
+ * snapshot the major band carries $1,901,307 of overcharge AND
+ * $4,176,877 of discount; netting them to "−$2.28M impact" would erase
+ * the $1.9M that is actually recoverable.
+ *
+ * `savingsAmount` is `(contractPrice − unitCost) × quantity` — POSITIVE
+ * when the facility paid LESS than contract — so the overcharge bucket
+ * is the negated sum of the negative rows. `|| 0` normalizes the −0 that
+ * negating 0 produces, so a card can never read "−$0".
+ */
+function priceVarianceBandBucket(
+  lines: number,
+  overcharge: SignedMoneyAggregate,
+  undercharge: SignedMoneyAggregate,
+) {
+  return {
+    lines,
+    overchargeTotal: -Number(overcharge._sum.savingsAmount ?? 0) || 0,
+    overchargeLines: overcharge._count._all,
+    underchargeTotal: Number(undercharge._sum.savingsAmount ?? 0) || 0,
+    underchargeLines: undercharge._count._all,
+    // Banded lines carrying no dollar figure: enrichment nulls
+    // `savingsAmount` when its kit-vs-component sanity check fires (199
+    // rows in the production snapshot), and an exactly-at-contract line
+    // sums to $0. Surfaced so `overchargeLines + underchargeLines +
+    // withoutDollarImpact = lines` reconciles on the card. Clamped
+    // because the three reads are separate round trips.
+    withoutDollarImpact: Math.max(
+      0,
+      lines - overcharge._count._all - undercharge._count._all,
+    ),
+  }
+}
+
+/**
+ * Facility-wide severity breakdown — the companion aggregate for the
+ * Price Discrepancy report's DEFAULT tab, over the same
+ * `priceDiscrepancyWhere` set as `getPriceDiscrepancies` and
+ * `getPriceDiscrepancySummary`.
+ *
+ * WHY THIS EXISTS. `price-variance-dashboard.tsx` used to build its
+ * severity cards, its severity chart, its per-vendor overcharge /
+ * undercharge totals and its major-line drill-down by reducing over
+ * `getPriceDiscrepancies()`, which stops at `PRICE_DISCREPANCY_ROW_CAP`
+ * (1,500) rows ordered by variance % DESC. Measured 2026-07-28 against
+ * the production snapshot's Lighthouse Surgical Center (44,812
+ * qualifying rows), that reducer produced:
+ *
+ *   card       shown (capped sample)      truth (full set)
+ *   Major      1,500 lines / +$1,295,024  3,346 lines / $1,901,307 over
+ *                                                     + $4,176,877 under
+ *   Moderate   0 lines / $0               2,435 lines / $5,684 over
+ *                                                     + $65,662 under
+ *   Minor      0 lines / $0               0 lines / $0
+ *
+ * — a major count that is exactly the cap, two cards reading zero for
+ * 2,435 real lines, and a dollar figure with the wrong SIGN, because
+ * variance-% DESC ordering keeps only the overcharge tail and drops
+ * every discount. The dev seed (1,135 rows, under the cap) showed 973
+ * major / $472,173 either way, which is why this never reproduced
+ * locally.
+ *
+ * Every number here comes from Postgres over the full set: three
+ * `count`s and six `aggregate`s for the bands, four `groupBy`s for the
+ * vendor table, and two `findMany`s for the top-N drill-down (one per
+ * direction, so the biggest discount can rank alongside the biggest
+ * overcharge). All issued in one parallel batch — never one query per
+ * band-and-vendor.
+ *
+ * The vendor list is NOT capped: it is one row per vendor (193 in the
+ * production snapshot), a dimension bounded by the vendor table rather
+ * than by the 44,812-row fact table. The dashboard renders a slice of it
+ * and states what the slice leaves out, computing that remainder from
+ * the full list it already holds.
+ */
+export async function getPriceVarianceSeverityBreakdown(_facilityId?: string) {
+  const { facility } = await requireFacility()
+  const where = priceDiscrepancyWhere(facility.id)
+
+  const band = (severity: PriceVarianceSeverity): Prisma.COGRecordWhereInput => ({
+    ...where,
+    ...SEVERITY_BAND_WHERE[severity],
+  })
+  const signedTotal = (
+    scope: Prisma.COGRecordWhereInput,
+    direction: "overcharge" | "undercharge",
+  ) =>
+    prisma.cOGRecord.aggregate({
+      where: {
+        ...scope,
+        savingsAmount: direction === "overcharge" ? { lt: 0 } : { gt: 0 },
+      },
+      _sum: { savingsAmount: true },
+      _count: { _all: true },
+    })
+
+  const [
+    totalLines,
+    minorLines,
+    moderateLines,
+    majorLines,
+    minorOver,
+    minorUnder,
+    moderateOver,
+    moderateUnder,
+    majorOver,
+    majorUnder,
+    overchargeByVendor,
+    underchargeByVendor,
+    linesByVendor,
+    majorLinesByVendor,
+    topOvercharges,
+    topDiscounts,
+  ] = await Promise.all([
+    prisma.cOGRecord.count({ where }),
+    prisma.cOGRecord.count({ where: band("minor") }),
+    prisma.cOGRecord.count({ where: band("moderate") }),
+    prisma.cOGRecord.count({ where: band("major") }),
+    signedTotal(band("minor"), "overcharge"),
+    signedTotal(band("minor"), "undercharge"),
+    signedTotal(band("moderate"), "overcharge"),
+    signedTotal(band("moderate"), "undercharge"),
+    signedTotal(band("major"), "overcharge"),
+    signedTotal(band("major"), "undercharge"),
+    prisma.cOGRecord.groupBy({
+      by: ["vendorId"],
+      where: { ...where, savingsAmount: { lt: 0 } },
+      _sum: { savingsAmount: true },
+      _count: { _all: true },
+    }),
+    prisma.cOGRecord.groupBy({
+      by: ["vendorId"],
+      where: { ...where, savingsAmount: { gt: 0 } },
+      _sum: { savingsAmount: true },
+      _count: { _all: true },
+    }),
+    prisma.cOGRecord.groupBy({
+      by: ["vendorId"],
+      where,
+      _count: { _all: true },
+    }),
+    prisma.cOGRecord.groupBy({
+      by: ["vendorId"],
+      where: band("major"),
+      _count: { _all: true },
+    }),
+    // Top-N by dollar impact, both directions. `savingsAmount` ASC is
+    // the biggest overcharge (most negative), DESC the biggest discount;
+    // Prisma cannot ORDER BY abs(), so we take the extremes from each
+    // end and merge. Nulls sort last either way and carry $0 impact, so
+    // they can never displace a real line.
+    prisma.cOGRecord.findMany({
+      where: { ...band("major"), savingsAmount: { lt: 0 } },
+      select: MAJOR_LINE_SELECT,
+      orderBy: { savingsAmount: "asc" },
+      take: MAJOR_LINE_SAMPLE,
+    }),
+    prisma.cOGRecord.findMany({
+      where: { ...band("major"), savingsAmount: { gt: 0 } },
+      select: MAJOR_LINE_SELECT,
+      orderBy: { savingsAmount: "desc" },
+      take: MAJOR_LINE_SAMPLE,
+    }),
+  ])
+
+  // Vendor display names come from the Vendor table, not from
+  // `COGRecord.vendorName`: that column is free text off the import and
+  // the production snapshot already has one vendorId carrying two
+  // spellings, which would split a vendor into two rows if it were part
+  // of the groupBy key. The ids are derived from this facility's own
+  // rows, never from the caller.
+  const vendorIds = [
+    ...new Set(
+      [
+        ...overchargeByVendor,
+        ...underchargeByVendor,
+        ...linesByVendor,
+        ...majorLinesByVendor,
+      ]
+        .map((group) => group.vendorId)
+        .filter((id): id is string => id != null),
+    ),
+  ]
+  const vendorRecords = vendorIds.length
+    ? await prisma.vendor.findMany({
+        where: { id: { in: vendorIds } },
+        select: { id: true, name: true },
+      })
+    : []
+  const vendorNameById = new Map(vendorRecords.map((v) => [v.id, v.name]))
+  const nameFor = (vendorId: string | null, fallback?: string | null) =>
+    (vendorId ? vendorNameById.get(vendorId) : null) ??
+    fallback ??
+    UNKNOWN_VENDOR
+
+  type VendorBucket = {
+    vendorId: string
+    vendorName: string
+    overchargeTotal: number
+    overchargeLines: number
+    underchargeTotal: number
+    underchargeLines: number
+    lines: number
+    majorLines: number
+  }
+  const vendorBuckets = new Map<string, VendorBucket>()
+  const bucketFor = (vendorId: string | null): VendorBucket => {
+    // Rows with no linked vendor collapse into one "Unknown vendor"
+    // bucket rather than disappearing.
+    const key = vendorId ?? ""
+    const existing = vendorBuckets.get(key)
+    if (existing) return existing
+    const created: VendorBucket = {
+      vendorId: key,
+      vendorName: nameFor(vendorId),
+      overchargeTotal: 0,
+      overchargeLines: 0,
+      underchargeTotal: 0,
+      underchargeLines: 0,
+      lines: 0,
+      majorLines: 0,
+    }
+    vendorBuckets.set(key, created)
+    return created
+  }
+
+  for (const group of linesByVendor) {
+    bucketFor(group.vendorId).lines = group._count._all
+  }
+  for (const group of overchargeByVendor) {
+    const bucket = bucketFor(group.vendorId)
+    bucket.overchargeTotal = -Number(group._sum.savingsAmount ?? 0) || 0
+    bucket.overchargeLines = group._count._all
+  }
+  for (const group of underchargeByVendor) {
+    const bucket = bucketFor(group.vendorId)
+    bucket.underchargeTotal = Number(group._sum.savingsAmount ?? 0) || 0
+    bucket.underchargeLines = group._count._all
+  }
+  for (const group of majorLinesByVendor) {
+    bucketFor(group.vendorId).majorLines = group._count._all
+  }
+
+  const vendors = [...vendorBuckets.values()].sort(
+    (a, b) =>
+      b.overchargeTotal - a.overchargeTotal ||
+      b.majorLines - a.majorLines ||
+      b.lines - a.lines ||
+      a.vendorName.localeCompare(b.vendorName),
+  )
+
+  const majorLineSample = [...topOvercharges, ...topDiscounts]
+    .map((r) => ({
+      id: r.id,
+      // No invoice backs a COG line — the PO number is the reference.
+      reference: r.poNumber ?? "",
+      vendorId: r.vendorId ?? "",
+      vendorName: nameFor(r.vendorId, r.vendorName),
+      itemDescription: r.inventoryDescription,
+      vendorItemNo: r.vendorItemNo,
+      variancePercent:
+        r.variancePercent != null ? Number(r.variancePercent) : null,
+      // POSITIVE = the facility overpaid, matching variancePercent's sign.
+      dollarImpact: -Number(r.savingsAmount ?? 0) || 0,
+    }))
+    .sort((a, b) => Math.abs(b.dollarImpact) - Math.abs(a.dollarImpact))
+    .slice(0, MAJOR_LINE_SAMPLE)
+
+  return serialize({
+    totalLines,
+    bands: {
+      minor: priceVarianceBandBucket(minorLines, minorOver, minorUnder),
+      moderate: priceVarianceBandBucket(
+        moderateLines,
+        moderateOver,
+        moderateUnder,
+      ),
+      major: priceVarianceBandBucket(majorLines, majorOver, majorUnder),
+    },
+    // Off-contract lines: no contract price, so no variance % and no
+    // band. Counted in `totalLines`, named here so the three cards plus
+    // this number reconcile to the facility total instead of leaving
+    // 87% of the report's rows unaccounted for.
+    unbandedLines: Math.max(
+      0,
+      totalLines - minorLines - moderateLines - majorLines,
+    ),
+    vendors,
+    majorLineSample,
+    majorLineSampleSize: MAJOR_LINE_SAMPLE,
+  })
 }

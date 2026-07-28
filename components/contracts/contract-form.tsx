@@ -11,7 +11,7 @@ import { getVendors } from "@/lib/actions/vendors"
 import { FacilityMultiSelect } from "@/components/contracts/facility-multi-select"
 import { useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
-import { Link2, X } from "lucide-react"
+import { Check, ChevronDown, Link2, X } from "lucide-react"
 import { GroupedVendorPicker } from "@/components/contracts/grouped-vendor-picker"
 import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
@@ -23,6 +23,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -33,6 +46,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { computeContractYears } from "@/lib/contracts/term-years"
+import { formatDateRange } from "@/lib/formatting"
 import { BasicInformationCard } from "@/components/contracts/_form/_basic-information-card"
 import { ContractDatesCard } from "@/components/contracts/_form/_contract-dates-card"
 
@@ -57,6 +71,125 @@ interface MsbcUiRow {
   _uid: string
   category: string
   commitmentPct: number
+}
+
+// ─── Linked-contract picker scope ───────────────────────────────
+//
+// The capital tie-in picker used to fetch `getContracts({ pageSize: 100 })`,
+// map the page straight into a `<Select>`, and ignore the `total` the action
+// returns. Ordered `updatedAt desc`, that made contract 101 — any contract not
+// touched recently — impossible to link, with nothing on screen saying so and
+// no way to search from inside the dropdown. `pageSize` is capped at 100 by
+// `contractFiltersSchema`, so "just fetch them all" is not on the table: the
+// list is server-SEARCHED instead, and states its cap.
+
+/** One page of link candidates. Small on purpose — search reaches the rest. */
+export const CONTRACT_LINK_PAGE_SIZE = 25
+
+/**
+ * Args for the link picker's `getContracts` read. The search term goes to the
+ * SERVER (`getContracts` matches name / vendor name / contract number over the
+ * whole facility scope); filtering the fetched page client-side would only
+ * ever search the page.
+ */
+export function contractLinkQueryArgs(search: string): {
+  search?: string
+  pageSize: number
+} {
+  const trimmed = search.trim()
+  return {
+    ...(trimmed ? { search: trimmed } : {}),
+    pageSize: CONTRACT_LINK_PAGE_SIZE,
+  }
+}
+
+/**
+ * The line printed under the candidate list when the server holds more
+ * matches than one page. `null` when the list is complete — a cap that is
+ * really there gets named, and one that isn't stays quiet.
+ */
+export function contractLinkCapNotice(
+  loaded: number,
+  total: number,
+  search: string,
+): string | null {
+  if (total <= loaded) return null
+  const scope = search.trim() ? "matching contracts" : "contracts"
+  return (
+    `Showing ${loaded} of ${total} ${scope}, most recently updated first. ` +
+    `Type above to reach the other ${total - loaded} — search runs across ` +
+    `every contract, not just this list.`
+  )
+}
+
+// ─── Derived-metric captions ────────────────────────────────────
+//
+// Same bug class as the picker above, one card over. `computeContractMetrics`
+// measures a NARROW universe: this contract's vendor set only, the contract's
+// categories only, and only inside the contract's effective window (clamped to
+// today and to five years back). The captions read
+//
+//   "From 412 of 1,138 COG rows in contract categories"
+//   "Vendor $105,000 of $3,290,000 category spend"
+//
+// with no vendor and no window in either sentence, so the denominators looked
+// like every COG row / every dollar in those categories for all time. The
+// action already returns `windowStart`/`windowEnd` for exactly this — its
+// comment says "so the form can show 'computed from N rows over period X'" —
+// and the form was throwing them away. Pure + exported so the scope claims are
+// unit-testable without the server-action module graph.
+
+export interface ContractMetricsScope {
+  cogRowsOnContract: number
+  cogRowsTotal: number
+  vendorSpendInCategories: number
+  totalSpendInCategories: number
+  windowStart: string
+  windowEnd: string
+}
+
+/**
+ * Compliance denominator = COG rows for THIS CONTRACT'S VENDOR SET inside the
+ * contract's categories and window (lib/actions/contracts/derived-metrics.ts).
+ * Never "every row in those categories".
+ */
+export function describeComplianceScope(m: ContractMetricsScope): string {
+  return (
+    `From ${m.cogRowsOnContract.toLocaleString()} of ` +
+    `${m.cogRowsTotal.toLocaleString()} COG rows for this vendor in the ` +
+    `contract's categories, ${formatDateRange(m.windowStart, m.windowEnd)}`
+  )
+}
+
+/**
+ * Market-share denominator = spend by EVERY vendor in those categories at the
+ * caller's facility, same window. `null` when the denominator is 0, so the
+ * caller falls back to the generic explainer rather than printing a ratio that
+ * was never computed.
+ */
+export function describeMarketShareScope(
+  m: ContractMetricsScope,
+): string | null {
+  if (!(m.totalSpendInCategories > 0)) return null
+  return (
+    `Vendor $${Math.round(m.vendorSpendInCategories).toLocaleString()} of ` +
+    `$${Math.round(m.totalSpendInCategories).toLocaleString()} spent by all ` +
+    `vendors in those categories at this facility, ` +
+    `${formatDateRange(m.windowStart, m.windowEnd)}`
+  )
+}
+
+/**
+ * Debounce for the server-backed search. `getContracts` runs several batched
+ * aggregations per call, so one request per keystroke is not acceptable.
+ */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs)
+    return () => clearTimeout(timer)
+  }, [value, delayMs])
+  return debounced
 }
 
 interface ContractFormProps {
@@ -146,7 +279,16 @@ export function ContractFormBasicInfo({
     setMsbcRows(msbcRows.filter((row) => row._uid !== uid))
   }
   const [cogAutoFilled, setCogAutoFilled] = useState(false)
-  const [linkedContractId, setLinkedContractId] = useState<string>("")
+  // The selected candidate is held as {id, name} because the picker's list is
+  // a server page: search away from the selection and the chosen row is no
+  // longer in `contractsData`, so its label has to travel with the id.
+  const [linkedContract, setLinkedContract] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [linkPickerOpen, setLinkPickerOpen] = useState(false)
+  const [linkSearch, setLinkSearch] = useState("")
+  const linkSearchTerm = useDebouncedValue(linkSearch, 250)
   // Mirror form state so the grouped vendor list actually rides along to
   // the create/update action. Previously this was local-only state and
   // the selections were silently dropped on save (Vick screenshot
@@ -176,12 +318,25 @@ export function ContractFormBasicInfo({
     [liveVendorsData, vendors],
   )
 
-  // Fetch existing contracts for tie-in / capital linking
-  const { data: contractsData } = useQuery({
-    queryKey: queryKeys.contracts.linkOptions(),
-    queryFn: () => getContracts({ pageSize: 100 }),
+  // Fetch existing contracts for tie-in / capital linking. Server-searched:
+  // the debounced term is part of the key (prefixed by the factory key so
+  // invalidating `contracts.linkOptions()` still clears every search) and is
+  // passed to `getContracts`, so a contract past the page boundary is one
+  // keystroke away instead of unreachable.
+  const { data: contractsData, isFetching: linkOptionsFetching } = useQuery({
+    queryKey: [...queryKeys.contracts.linkOptions(), linkSearchTerm],
+    queryFn: () => getContracts(contractLinkQueryArgs(linkSearchTerm)),
     enabled: contractType === "capital",
+    // Keep the previous page visible while the next search resolves.
+    placeholderData: (prev) => prev,
   })
+  const linkOptions = contractsData?.contracts ?? []
+  const linkTotal = contractsData?.total ?? 0
+  const linkCapNotice = contractLinkCapNotice(
+    linkOptions.length,
+    linkTotal,
+    linkSearchTerm,
+  )
 
   // Auto-populate contract total from vendor COG spend when vendor changes
   const lookupCOGSpend = useCallback(
@@ -390,33 +545,87 @@ export function ContractFormBasicInfo({
             <Field label="Related Contract">
               <div className="flex gap-2">
                 <div className="flex-1">
-                  <Select
-                    value={linkedContractId}
-                    onValueChange={setLinkedContractId}
+                  {/* Was a plain <Select> over one 100-row page: no search
+                      inside it, so anything below the fold of `updatedAt
+                      desc` could not be linked at all. */}
+                  <Popover
+                    open={linkPickerOpen}
+                    onOpenChange={setLinkPickerOpen}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a contract to link..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {contractsData?.contracts?.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          <div className="flex items-center justify-between w-full gap-2">
-                            <span>{c.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {c.vendor?.name}
-                            </span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role, jsx-a11y/role-has-required-aria-props -- shadcn combobox pattern: Radix Popover trigger keeps role="combobox"; Radix wires aria-controls to the popover content at runtime.
+                        role="combobox"
+                        aria-expanded={linkPickerOpen}
+                        className="w-full justify-between font-normal"
+                      >
+                        <span className="truncate text-left">
+                          {linkedContract?.name ??
+                            "Select a contract to link..."}
+                        </span>
+                        <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-[var(--radix-popover-trigger-width)] p-0"
+                      align="start"
+                      sideOffset={4}
+                    >
+                      {/* shouldFilter={false}: the SERVER already filtered.
+                          cmdk's client filter matches the rendered label
+                          only, so it would hide rows the server matched on
+                          contract number or vendor name. */}
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Search every contract..."
+                          value={linkSearch}
+                          onValueChange={setLinkSearch}
+                        />
+                        <CommandList className="!max-h-[50vh]">
+                          <CommandEmpty>
+                            {linkOptionsFetching
+                              ? "Searching..."
+                              : "No contract matches."}
+                          </CommandEmpty>
+                          <CommandGroup>
+                            {linkOptions.map((c) => (
+                              <CommandItem
+                                key={c.id}
+                                value={c.id}
+                                onSelect={() => {
+                                  setLinkedContract({ id: c.id, name: c.name })
+                                  setLinkPickerOpen(false)
+                                }}
+                              >
+                                <span className="truncate">{c.name}</span>
+                                <span className="ml-auto shrink-0 pl-2 text-xs text-muted-foreground">
+                                  {c.vendor?.name}
+                                </span>
+                                {linkedContract?.id === c.id && (
+                                  <Check className="ml-2 h-4 w-4 shrink-0" />
+                                )}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                      {/* A cap that stays has to be visible. */}
+                      {linkCapNotice && (
+                        <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                          {linkCapNotice}
+                        </p>
+                      )}
+                    </PopoverContent>
+                  </Popover>
                 </div>
-                {linkedContractId && (
+                {linkedContract && (
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
-                    onClick={() => setLinkedContractId("")}
+                    onClick={() => setLinkedContract(null)}
                     aria-label="Unlink contract"
                     title="Unlink contract"
                   >
@@ -525,7 +734,7 @@ export function ContractFormBasicInfo({
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {metricsQuery.data
-                  ? `From ${metricsQuery.data.cogRowsOnContract.toLocaleString()} of ${metricsQuery.data.cogRowsTotal.toLocaleString()} COG rows in contract categories`
+                  ? describeComplianceScope(metricsQuery.data)
                   : "Calculated from COG + pricing files. Pick a vendor + categories."}
               </p>
             </Field>
@@ -541,10 +750,9 @@ export function ContractFormBasicInfo({
                 <span className="text-xs text-muted-foreground">computed</span>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
-                {metricsQuery.data &&
-                metricsQuery.data.totalSpendInCategories > 0
-                  ? `Vendor $${Math.round(metricsQuery.data.vendorSpendInCategories).toLocaleString()} of $${Math.round(metricsQuery.data.totalSpendInCategories).toLocaleString()} category spend`
-                  : "Vendor's category spend ÷ total facility spend in those categories."}
+                {(metricsQuery.data &&
+                  describeMarketShareScope(metricsQuery.data)) ||
+                  "Vendor's category spend ÷ total facility spend in those categories."}
               </p>
             </Field>
             <Field

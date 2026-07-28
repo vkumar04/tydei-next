@@ -45,18 +45,51 @@ export function getFacilityColumns(
       },
     },
     {
-      accessorKey: "status",
+      id: "status",
+      /**
+       * Checked on 2026-07-28 against the vendor console, where the equivalent
+       * columns were rewritten, and KEPT — `Facility.status` is the one
+       * `@default` on either console that a real writer moves.
+       * lib/billing/stripe-webhook.ts sets it to "inactive" on
+       * `customer.subscription.deleted` and on any non-active subscription
+       * update, so "Inactive" here means a specific thing: the subscription
+       * lapsed. (Contrast `Vendor.tier`, which no write path sets at all, and
+       * `Vendor.status`, which bulk ingestion leaves at the default for every
+       * auto-minted row.)
+       *
+       * What "Active" does NOT mean is that anyone reviewed this facility: with
+       * no Stripe subscription the row is born active and stays there — both
+       * production facilities read Active for that reason. The badge says so
+       * rather than leaving the operator to infer it.
+       *
+       * accessorFn, not accessorKey: the "select" filter builds its options
+       * from the column's ACTUAL values (getFacetedUniqueValues,
+       * column-filter.tsx:128). Keyed on `status` it listed the raw enum,
+       * "active"/"inactive", beside cells reading "Active"/"Inactive" — the
+       * filter and the rows disagreeing about their own labels. Deriving the
+       * rendered label makes the list and the cells the same strings. Note the
+       * options are still faceted over the rows the client HOLDS, i.e. one
+       * server page; the caption under the table says so.
+       */
+      accessorFn: (f) => (f.status === "active" ? "Active" : "Inactive"),
       header: "Status",
       meta: { filterVariant: "select" },
-      cell: ({ row }) => (
-        <Badge variant={row.original.status === "active" ? "default" : "secondary"}>
-          {row.original.status === "active" ? (
-            <><CheckCircle className="mr-1 h-3 w-3" /> Active</>
-          ) : (
-            <><XCircle className="mr-1 h-3 w-3" /> Inactive</>
-          )}
-        </Badge>
-      ),
+      cell: ({ getValue }) =>
+        getValue<string>() === "Active" ? (
+          <Badge
+            variant="default"
+            title="The Stripe subscription is active — or the facility has no subscription and was never flipped off the @default(&quot;active&quot;)."
+          >
+            <CheckCircle className="mr-1 h-3 w-3" /> Active
+          </Badge>
+        ) : (
+          <Badge
+            variant="secondary"
+            title="The Stripe subscription was cancelled or is no longer active."
+          >
+            <XCircle className="mr-1 h-3 w-3" /> Inactive
+          </Badge>
+        ),
     },
     {
       accessorKey: "userCount",

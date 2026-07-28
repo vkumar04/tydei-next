@@ -9,6 +9,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -19,26 +20,34 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  Legend,
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
 } from "recharts"
 import { queryKeys } from "@/lib/query-keys"
-import { getPriceDiscrepancies } from "@/lib/actions/reports"
-import { formatCurrency, formatPercent } from "@/lib/formatting"
-import { AlertTriangle, DollarSign, TrendingUp } from "lucide-react"
+import { getPriceVarianceSeverityBreakdown } from "@/lib/actions/reports"
+import {
+  formatCompactCurrency,
+  formatCurrency,
+  formatNumber,
+  formatPercent,
+} from "@/lib/formatting"
+import { AlertTriangle, DollarSign, FileWarning, TrendingUp } from "lucide-react"
 
 // ─── Severity helpers ───────────────────────────────────────────
 
-type Severity = "minor" | "moderate" | "major"
+export type Severity = "minor" | "moderate" | "major"
 
-function severityFor(variancePercent: number | null | undefined): Severity | null {
-  if (variancePercent === null || variancePercent === undefined) return null
-  const abs = Math.abs(variancePercent)
-  if (abs < 2) return "minor"
-  if (abs < 10) return "moderate"
-  return "major"
-}
+export const SEVERITY_ORDER = ["major", "moderate", "minor"] as const satisfies
+  readonly Severity[]
 
+/**
+ * Labels for the three |variance %| bands. The thresholds quoted here
+ * are the user-visible contract for `SEVERITY_BAND_WHERE` in
+ * `lib/actions/reports.ts`, which is where the bucketing actually
+ * happens (in Postgres, over the whole facility). Change one and you
+ * must change the other.
+ */
 const SEVERITY_META: Record<
   Severity,
   { label: string; className: string; dot: string }
@@ -71,6 +80,211 @@ function SeverityBadge({ severity }: { severity: Severity }) {
   )
 }
 
+// ─── Scope captions (pure — unit-tested) ────────────────────────
+
+type Breakdown = Awaited<ReturnType<typeof getPriceVarianceSeverityBreakdown>>
+
+export type VendorVarianceRow = Breakdown["vendors"][number]
+
+/** How many vendors the "Vendor totals" table renders. */
+export const VENDOR_ROW_LIMIT = 20
+
+/**
+ * Subtitle under a severity card's line count. The card's headline is a
+ * COUNT, so the money beside it must name both directions rather than a
+ * single netted "impact": in the production snapshot the major band
+ * holds $1.9M of overcharge AND $4.2M of discount, and one netted
+ * figure would report −$2.28M — hiding every recoverable dollar behind
+ * the discounts that happen to outweigh them.
+ */
+export function buildSeverityCardSubtitle(bucket: {
+  overchargeTotal: number
+  underchargeTotal: number
+}): string {
+  return (
+    `${formatCompactCurrency(bucket.overchargeTotal)} over contract · ` +
+    `${formatCompactCurrency(bucket.underchargeTotal)} under`
+  )
+}
+
+/**
+ * The scope line under a severity card's money.
+ *
+ * Two things have to be said out loud here, both of them "the number is
+ * over a narrower set than the label suggests":
+ *
+ *  • `withoutDollarImpact` — banded lines carrying no dollar figure, so
+ *    the two money figures beside them do not add up to the count above.
+ *  • The MINOR band is structurally empty on this report. The matcher
+ *    (`PRICE_VARIANCE_THRESHOLD` in lib/contracts/match.ts) stamps
+ *    anything within ±2% of contract as `on_contract`, and the report's
+ *    set is `price_variance` + `off_contract_item` only — so a line
+ *    inside ±2% never reaches this tab. Without the note, a permanent
+ *    "Minor (<2%) — 0 — facility-wide" reads as "this facility has no
+ *    small price variances", which is false: it has them, they are just
+ *    not discrepancies. Kept as a note rather than deleting the card so
+ *    a re-import that ever does produce one still has somewhere to land.
+ */
+export function buildSeverityCardScopeLine(input: {
+  severity: Severity
+  lines: number
+  withoutDollarImpact: number
+}): string {
+  const parts = ["facility-wide"]
+  if (input.withoutDollarImpact > 0) {
+    parts.push(
+      `${formatNumber(input.withoutDollarImpact)} with no dollar figure`,
+    )
+  }
+  if (input.severity === "minor" && input.lines === 0) {
+    parts.push("within ±2% counts as on-contract, not a discrepancy")
+  }
+  return parts.join(" · ")
+}
+
+/**
+ * The bands partition only the lines that HAVE a variance % — an
+ * off-contract purchase has no contract price to vary from, so it lands
+ * in no band. Those lines are 39,031 of the production snapshot's
+ * 44,812, so three cards summing to 5,781 above a report titled "price
+ * discrepancy" needs the remainder named out loud, or the reader takes
+ * the banded total for the facility's whole discrepancy set.
+ *
+ * Returns null when every line is banded (nothing to disclose).
+ */
+export function buildBandCoverageNotice(input: {
+  totalLines: number
+  bandedLines: number
+  unbandedLines: number
+}): string | null {
+  if (input.unbandedLines <= 0) return null
+  return (
+    `These bands cover ${formatNumber(input.bandedLines)} of ` +
+    `${formatNumber(input.totalLines)} discrepancy lines facility-wide. ` +
+    `The other ${formatNumber(input.unbandedLines)} are off-contract ` +
+    `purchases with no contract price to compare, so they carry no ` +
+    `variance % and fall in no severity band.`
+  )
+}
+
+/**
+ * Split the (uncapped) vendor aggregate into the slice the table paints
+ * and an exact accounting of what that slice leaves out. The remainder
+ * is computed from the full list the client already holds — it is never
+ * a guess, and never "and more".
+ */
+export function splitVendorRows(
+  vendors: VendorVarianceRow[],
+  limit: number,
+): {
+  shown: VendorVarianceRow[]
+  hidden: {
+    vendors: number
+    overchargeTotal: number
+    underchargeTotal: number
+    lines: number
+    majorLines: number
+  }
+  facilityTotals: {
+    overchargeTotal: number
+    underchargeTotal: number
+    lines: number
+    majorLines: number
+  }
+} {
+  const shown = vendors.slice(0, Math.max(0, limit))
+  const sum = (rows: VendorVarianceRow[]) =>
+    rows.reduce(
+      (acc, v) => ({
+        overchargeTotal: acc.overchargeTotal + v.overchargeTotal,
+        underchargeTotal: acc.underchargeTotal + v.underchargeTotal,
+        lines: acc.lines + v.lines,
+        majorLines: acc.majorLines + v.majorLines,
+      }),
+      { overchargeTotal: 0, underchargeTotal: 0, lines: 0, majorLines: 0 },
+    )
+  return {
+    shown,
+    hidden: {
+      vendors: vendors.length - shown.length,
+      ...sum(vendors.slice(shown.length)),
+    },
+    facilityTotals: sum(vendors),
+  }
+}
+
+/**
+ * Caption for the vendor table when it paints fewer vendors than the
+ * facility has. Silent truncation is the bug; a truncation that quotes
+ * exactly what is off-screen is a feature.
+ */
+export function buildVendorSampleNotice(input: {
+  shown: number
+  total: number
+  hidden: { overchargeTotal: number; underchargeTotal: number; lines: number }
+}): string | null {
+  const hiddenVendors = input.total - input.shown
+  if (hiddenVendors <= 0) return null
+  return (
+    `Top ${formatNumber(input.shown)} of ${formatNumber(input.total)} vendors ` +
+    `by overcharge. The ${formatNumber(hiddenVendors)} not shown carry ` +
+    `${formatCompactCurrency(input.hidden.overchargeTotal)} over contract and ` +
+    `${formatCompactCurrency(input.hidden.underchargeTotal)} under, across ` +
+    `${formatNumber(input.hidden.lines)} lines — the footer row totals all ` +
+    `${formatNumber(input.total)}.`
+  )
+}
+
+/**
+ * Caption for the major-severity drill-down. This list is a genuine
+ * top-N (a facility with 3,346 major lines does not want them all on a
+ * report page), and it is ranked by ABSOLUTE dollar impact across both
+ * directions, so it must say both things — otherwise the reader reads
+ * 25 rows as "the major lines".
+ */
+export function buildMajorLineNotice(input: {
+  shown: number
+  total: number
+}): string | null {
+  // Nothing to rank: `buildMajorLineEmptyMessage` carries the disclosure
+  // instead. Without this guard the card printed "Top 0 of 199
+  // major-severity lines…" directly above "No major-severity lines
+  // detected. Good news!" — two contradictory claims, neither true.
+  if (input.shown <= 0) return null
+  if (input.total <= input.shown) return null
+  return (
+    `Top ${formatNumber(input.shown)} of ${formatNumber(input.total)} ` +
+    `major-severity lines, ranked by absolute dollar impact — the largest ` +
+    `overcharges and the largest discounts both qualify. Band totals above ` +
+    `cover all ${formatNumber(input.total)}.`
+  )
+}
+
+/**
+ * What the drill-down says when it has no rows to show.
+ *
+ * The drill-down's scope is "major lines that carry a dollar figure",
+ * NOT "major lines": it is two top-N reads on `savingsAmount`, and
+ * enrichment nulls that column whenever its kit-vs-component sanity
+ * check fires (199 rows in the production snapshot). So an empty list
+ * does NOT mean an empty band — a facility whose major lines all had
+ * their savings suppressed used to be told "No major-severity lines
+ * detected. Good news!" while the Major card beside it read a non-zero
+ * count. Report the band's real size instead.
+ */
+export function buildMajorLineEmptyMessage(input: {
+  majorLines: number
+}): string {
+  if (input.majorLines <= 0) return "No major-severity lines detected. Good news!"
+  return (
+    `All ${formatNumber(input.majorLines)} major-severity lines carry no ` +
+    `dollar figure — their savings amount was suppressed as untrustworthy ` +
+    `(a kit matched against a component) or is exactly $0 — so there is ` +
+    `nothing to rank by dollar impact. The band totals above still count ` +
+    `all ${formatNumber(input.majorLines)}.`
+  )
+}
+
 // ─── Component ──────────────────────────────────────────────────
 
 interface PriceVarianceDashboardProps {
@@ -80,113 +294,45 @@ interface PriceVarianceDashboardProps {
 export function PriceVarianceDashboard({
   facilityId,
 }: PriceVarianceDashboardProps) {
+  // Every number on this tab is a facility-wide aggregate computed in
+  // Postgres. The tab deliberately does NOT read `getPriceDiscrepancies`:
+  // that action caps at 1,500 rows ordered by variance % DESC, and
+  // reducing over it is what made the Moderate card read 0 for a
+  // facility with 2,435 moderate lines.
+  //
+  // Keyed off the row query's key so any invalidation that refreshes the
+  // rows (prefix match) refreshes this breakdown too — the severity tab
+  // and the line-item tab must never describe different snapshots.
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.reports.priceDiscrepancies(facilityId),
-    queryFn: () => getPriceDiscrepancies(facilityId),
+    queryKey: [
+      ...queryKeys.reports.priceDiscrepancies(facilityId),
+      "severity-breakdown",
+    ] as const,
+    queryFn: () => getPriceVarianceSeverityBreakdown(facilityId),
   })
 
-  const rows = data ?? []
+  const bands = data?.bands
+  const vendors = useMemo(() => data?.vendors ?? [], [data?.vendors])
 
-  const analysis = useMemo(() => {
-    // Bucket variance rows by severity + by vendor.
-    const severityBuckets: Record<
-      Severity,
-      { count: number; dollarImpact: number }
-    > = {
-      minor: { count: 0, dollarImpact: 0 },
-      moderate: { count: 0, dollarImpact: 0 },
-      major: { count: 0, dollarImpact: 0 },
-    }
-    type VendorBucket = {
-      vendorId: string
-      vendorName: string
-      overchargeTotal: number
-      underchargeTotal: number
-      count: number
-      majorCount: number
-    }
-    const vendorMap = new Map<string, VendorBucket>()
-    const majorRows: Array<{
-      id: string
-      invoiceNumber: string
-      invoiceId: string
-      vendorName: string
-      itemDescription: string
-      vendorItemNo: string | null
-      variancePercent: number
-      dollarImpact: number
-    }> = []
-
-    for (const row of rows) {
-      const severity = severityFor(row.variancePercent)
-      if (!severity) continue
-      const dollarImpact =
-        row.contractPrice != null
-          ? (row.invoicePrice - row.contractPrice) * row.quantity
-          : 0
-      severityBuckets[severity].count += 1
-      severityBuckets[severity].dollarImpact += dollarImpact
-
-      const bucket =
-        vendorMap.get(row.vendorId) ??
-        ({
-          vendorId: row.vendorId,
-          vendorName: row.vendorName,
-          overchargeTotal: 0,
-          underchargeTotal: 0,
-          count: 0,
-          majorCount: 0,
-        } as VendorBucket)
-      if (dollarImpact > 0) bucket.overchargeTotal += dollarImpact
-      else bucket.underchargeTotal += Math.abs(dollarImpact)
-      bucket.count += 1
-      if (severity === "major") bucket.majorCount += 1
-      vendorMap.set(row.vendorId, bucket)
-
-      if (severity === "major" && row.variancePercent !== null) {
-        majorRows.push({
-          id: row.id,
-          invoiceNumber: row.invoiceNumber,
-          invoiceId: row.invoiceId,
-          vendorName: row.vendorName,
-          itemDescription: row.itemDescription,
-          vendorItemNo: row.vendorItemNo,
-          variancePercent: row.variancePercent,
-          dollarImpact,
-        })
-      }
-    }
-
-    const vendorRows = [...vendorMap.values()].sort(
-      (a, b) => b.overchargeTotal - a.overchargeTotal
-    )
-
-    majorRows.sort((a, b) => Math.abs(b.dollarImpact) - Math.abs(a.dollarImpact))
-
-    return {
-      severityBuckets,
-      vendorRows,
-      majorRows: majorRows.slice(0, 25),
-      totalOvercharge: vendorRows.reduce(
-        (sum, v) => sum + v.overchargeTotal,
-        0
-      ),
-      totalUndercharge: vendorRows.reduce(
-        (sum, v) => sum + v.underchargeTotal,
-        0
-      ),
-    }
-  }, [rows])
-
-  const chartData = (["minor", "moderate", "major"] as Severity[]).map(
-    (severity) => ({
-      severity: SEVERITY_META[severity].label,
-      Count: analysis.severityBuckets[severity].count,
-      Impact: analysis.severityBuckets[severity].dollarImpact,
-    })
+  const vendorSplit = useMemo(
+    () => splitVendorRows(vendors, VENDOR_ROW_LIMIT),
+    [vendors],
   )
 
-  if (isLoading) {
+  const chartData = useMemo(
+    () =>
+      bands
+        ? SEVERITY_ORDER.map((severity) => ({
+            severity: SEVERITY_META[severity].label,
+            Lines: bands[severity].lines,
+            "Over contract": bands[severity].overchargeTotal,
+            "Under contract": bands[severity].underchargeTotal,
+          })).reverse()
+        : [],
+    [bands],
+  )
+
+  if (isLoading || !data) {
     return (
       <div className="space-y-6">
         <div className="grid gap-4 md:grid-cols-3">
@@ -200,7 +346,7 @@ export function PriceVarianceDashboard({
     )
   }
 
-  if (rows.length === 0) {
+  if (data.totalLines === 0) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -220,27 +366,53 @@ export function PriceVarianceDashboard({
     )
   }
 
+  const bandedLines =
+    data.bands.minor.lines + data.bands.moderate.lines + data.bands.major.lines
+  const coverageNotice = buildBandCoverageNotice({
+    totalLines: data.totalLines,
+    bandedLines,
+    unbandedLines: data.unbandedLines,
+  })
+  const vendorNotice = buildVendorSampleNotice({
+    shown: vendorSplit.shown.length,
+    total: vendors.length,
+    hidden: vendorSplit.hidden,
+  })
+  const majorNotice = buildMajorLineNotice({
+    shown: data.majorLineSample.length,
+    total: data.bands.major.lines,
+  })
+
   return (
     <div className="space-y-6">
-      {/* Severity totals */}
+      {/* Severity totals — facility-wide, never a reduce over a sample */}
       <div className="grid gap-4 md:grid-cols-3">
-        {(["major", "moderate", "minor"] as Severity[]).map((severity) => {
-          const bucket = analysis.severityBuckets[severity]
+        {SEVERITY_ORDER.map((severity) => {
+          const bucket = data.bands[severity]
           const meta = SEVERITY_META[severity]
           return (
             <Card key={severity}>
               <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
                       <span className={`inline-block h-2 w-2 rounded-full ${meta.dot}`} />
                       <p className="text-sm text-muted-foreground">
                         {meta.label}
                       </p>
                     </div>
-                    <p className="text-2xl font-bold">{bucket.count}</p>
+                    <p className="text-2xl font-bold">
+                      {formatNumber(bucket.lines)}
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      {formatCurrency(bucket.dollarImpact, true)} impact
+                      {buildSeverityCardSubtitle(bucket)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {buildSeverityCardScopeLine({
+                        severity,
+                        lines: bucket.lines,
+                        withoutDollarImpact: bucket.withoutDollarImpact,
+                      })}
                     </p>
                   </div>
                   <div className="rounded-lg bg-muted/50 p-2.5">
@@ -259,44 +431,63 @@ export function PriceVarianceDashboard({
         })}
       </div>
 
+      {/* What the bands do NOT cover */}
+      {coverageNotice && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <FileWarning className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{coverageNotice}</span>
+        </div>
+      )}
+
       {/* Chart */}
       <Card>
         <CardHeader>
           <CardTitle>Variance by severity</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-[260px] w-full">
+          <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                 <XAxis dataKey="severity" className="text-xs" />
-                <YAxis yAxisId="left" className="text-xs" />
+                <YAxis
+                  yAxisId="left"
+                  className="text-xs"
+                  tickFormatter={(v: number) => formatNumber(v)}
+                />
                 <YAxis
                   yAxisId="right"
                   orientation="right"
                   className="text-xs"
-                  tickFormatter={(v: number) => formatCurrency(v, true)}
+                  tickFormatter={(v: number) => formatCompactCurrency(v)}
                 />
                 <RechartsTooltip
                   formatter={(value, name) => {
                     const numeric =
                       typeof value === "number" ? value : Number(value ?? 0)
-                    if (name === "Impact") {
-                      return [formatCurrency(numeric, true), "Dollar impact"]
-                    }
-                    return [numeric, String(name ?? "")]
+                    const label = String(name ?? "")
+                    return label === "Lines"
+                      ? [formatNumber(numeric), "Lines"]
+                      : [formatCurrency(numeric, true), label]
                   }}
                 />
+                <Legend wrapperStyle={{ fontSize: "0.75rem" }} />
                 <Bar
                   yAxisId="left"
-                  dataKey="Count"
-                  fill="var(--chart-8)"
+                  dataKey="Lines"
+                  fill="var(--chart-1)"
                   radius={[4, 4, 0, 0]}
                 />
                 <Bar
                   yAxisId="right"
-                  dataKey="Impact"
+                  dataKey="Over contract"
                   fill="var(--destructive)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  yAxisId="right"
+                  dataKey="Under contract"
+                  fill="var(--chart-3)"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>
@@ -310,48 +501,82 @@ export function PriceVarianceDashboard({
         <CardHeader>
           <CardTitle>Vendor totals</CardTitle>
         </CardHeader>
-        <CardContent>
-          {analysis.vendorRows.length === 0 ? (
+        <CardContent className="space-y-3">
+          {vendorNotice && (
+            <p className="text-xs text-muted-foreground">{vendorNotice}</p>
+          )}
+          {vendorSplit.shown.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
               No vendor-level variance totals to display.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead className="text-right">Overcharge</TableHead>
-                  <TableHead className="text-right">Undercharge</TableHead>
-                  <TableHead className="text-right">Lines</TableHead>
-                  <TableHead className="text-right">Major</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {analysis.vendorRows.slice(0, 20).map((v) => (
-                  <TableRow key={v.vendorId}>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Vendor</TableHead>
+                    <TableHead className="text-right">Over contract</TableHead>
+                    <TableHead className="text-right">Under contract</TableHead>
+                    <TableHead className="text-right">Lines</TableHead>
+                    <TableHead className="text-right">Major</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {vendorSplit.shown.map((v) => (
+                    <TableRow key={v.vendorId || v.vendorName}>
+                      <TableCell className="font-medium">
+                        {v.vendorName}
+                      </TableCell>
+                      <TableCell className="text-right text-red-600 dark:text-red-400">
+                        {formatCurrency(v.overchargeTotal, true)}
+                      </TableCell>
+                      <TableCell className="text-right text-green-600 dark:text-green-400">
+                        {formatCurrency(v.underchargeTotal, true)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatNumber(v.lines)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {v.majorLines > 0 ? (
+                          <Badge className="border-0 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
+                            {formatNumber(v.majorLines)}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">0</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  {/* Totals across ALL vendors, so the visible slice can
+                      never be mistaken for the facility's whole book. */}
+                  <TableRow>
                     <TableCell className="font-medium">
-                      {v.vendorName}
+                      All {formatNumber(vendors.length)} vendors
                     </TableCell>
-                    <TableCell className="text-right text-red-600 dark:text-red-400">
-                      {formatCurrency(v.overchargeTotal, true)}
-                    </TableCell>
-                    <TableCell className="text-right text-green-600 dark:text-green-400">
-                      {formatCurrency(v.underchargeTotal, true)}
-                    </TableCell>
-                    <TableCell className="text-right">{v.count}</TableCell>
-                    <TableCell className="text-right">
-                      {v.majorCount > 0 ? (
-                        <Badge className="border-0 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300">
-                          {v.majorCount}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">0</span>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(
+                        vendorSplit.facilityTotals.overchargeTotal,
+                        true,
                       )}
                     </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(
+                        vendorSplit.facilityTotals.underchargeTotal,
+                        true,
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatNumber(vendorSplit.facilityTotals.lines)}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatNumber(vendorSplit.facilityTotals.majorLines)}
+                    </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableFooter>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -361,53 +586,77 @@ export function PriceVarianceDashboard({
         <CardHeader>
           <CardTitle>Top major-severity lines</CardTitle>
         </CardHeader>
-        <CardContent>
-          {analysis.majorRows.length === 0 ? (
+        <CardContent className="space-y-3">
+          {majorNotice && (
+            <p className="text-xs text-muted-foreground">{majorNotice}</p>
+          )}
+          {data.majorLineSample.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              No major-severity lines detected. Good news!
+              {buildMajorLineEmptyMessage({
+                majorLines: data.bands.major.lines,
+              })}
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Item</TableHead>
-                  <TableHead>Vendor</TableHead>
-                  <TableHead>PO / Ref</TableHead>
-                  <TableHead className="text-right">Variance %</TableHead>
-                  <TableHead className="text-right">Dollar impact</TableHead>
-                  <TableHead>Severity</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {analysis.majorRows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell className="max-w-[240px]">
-                      <span className="block truncate font-medium">
-                        {row.itemDescription}
-                      </span>
-                      {row.vendorItemNo && (
-                        <span className="text-xs text-muted-foreground">
-                          #{row.vendorItemNo}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>{row.vendorName}</TableCell>
-                    <TableCell>{row.invoiceNumber}</TableCell>
-                    <TableCell className="text-right">
-                      <span className="font-mono text-red-600 dark:text-red-400">
-                        +{formatPercent(row.variancePercent)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(row.dollarImpact, true)}
-                    </TableCell>
-                    <TableCell>
-                      <SeverityBadge severity="major" />
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Item</TableHead>
+                    <TableHead>Vendor</TableHead>
+                    <TableHead>PO / Ref</TableHead>
+                    <TableHead className="text-right">Variance %</TableHead>
+                    <TableHead className="text-right">Dollar impact</TableHead>
+                    <TableHead>Severity</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {data.majorLineSample.map((row) => {
+                    // A major line can be a deep DISCOUNT as easily as an
+                    // overcharge (|variance| ≥ 10% either way), so sign and
+                    // colour follow the row instead of assuming "+ / red".
+                    const overcharged = row.dollarImpact > 0
+                    const money = overcharged
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-green-600 dark:text-green-400"
+                    return (
+                      <TableRow key={row.id}>
+                        <TableCell className="max-w-[240px]">
+                          <span className="block truncate font-medium">
+                            {row.itemDescription}
+                          </span>
+                          {row.vendorItemNo && (
+                            <span className="text-xs text-muted-foreground">
+                              #{row.vendorItemNo}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>{row.vendorName}</TableCell>
+                        <TableCell>{row.reference || "—"}</TableCell>
+                        <TableCell className="text-right">
+                          {row.variancePercent == null ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : (
+                            <span className={`font-mono ${money}`}>
+                              {row.variancePercent > 0 ? "+" : ""}
+                              {formatPercent(row.variancePercent)}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell
+                          className={`text-right font-mono ${money}`}
+                        >
+                          {overcharged ? "+" : ""}
+                          {formatCurrency(row.dollarImpact, true)}
+                        </TableCell>
+                        <TableCell>
+                          <SeverityBadge severity="major" />
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -53,21 +53,55 @@ export interface PriceDiscrepancy {
   isFlagged: boolean
 }
 
-type DiscrepancyType =
-  | "all"
+/**
+ * What a row IS — and every member must be REACHABLE from
+ * `classifyDiscrepancy`, or the filter bar ends up offering a value no
+ * cell can ever carry.
+ *
+ * `match` (invoice price == contract price) used to be spelled `"all"` —
+ * the same string the type dropdown uses for its "show everything"
+ * sentinel — so a zero-variance row was classified as the sentinel and
+ * the faceted column filter offered "all" as if it were a category. The
+ * sentinel now lives in its own union (`DiscrepancyTypeFilter`) and
+ * never appears as a row's type.
+ *
+ * `price_increase` used to sit here too, with a label, a badge colour
+ * and a slot in the filter-bar dropdown — but `classifyDiscrepancy` has
+ * only ever returned four values, so "Price Increase" was a filter that
+ * emptied the table 100% of the time (verified against both the dev
+ * seed and the production snapshot: zero rows can reach it). Same defect
+ * as the "all" sentinel, one layer up. Removed rather than relabelled:
+ * a row-type nothing produces is not a category.
+ */
+export type DiscrepancyType =
+  | "match"
   | "overcharge"
   | "undercharge"
   | "no_contract"
-  | "price_increase"
+
+/** The filter-bar value: any concrete type, or the "all" sentinel. */
+export type DiscrepancyTypeFilter = DiscrepancyType | "all"
+
+/**
+ * ONE vocabulary for row types. The cells, the filter-bar dropdown and
+ * the column's faceted filter all read from this map, so the user is
+ * never offered a value they have not seen in a cell.
+ */
+export const DISCREPANCY_TYPE_LABEL: Record<DiscrepancyType, string> = {
+  overcharge: "Overcharge",
+  undercharge: "Undercharge",
+  no_contract: "No Contract",
+  match: "Match",
+}
 
 // ─── Helpers ────────────────────────────────────────────────────
 
-function classifyDiscrepancy(d: PriceDiscrepancy): DiscrepancyType {
+export function classifyDiscrepancy(d: PriceDiscrepancy): DiscrepancyType {
   if (d.contractPrice == null) return "no_contract"
   const variance = d.invoicePrice - d.contractPrice
   if (variance > 0) return "overcharge"
   if (variance < 0) return "undercharge"
-  return "all" // no variance
+  return "match" // paid exactly the contract price
 }
 
 function getVarianceDollar(d: PriceDiscrepancy): number | null {
@@ -81,75 +115,108 @@ function getVarianceBand(d: PriceDiscrepancy): V0CogVarianceBand | null {
   return v0CogPriceVarianceBand(d.invoicePrice, d.contractPrice).band
 }
 
-function bandBadge(band: V0CogVarianceBand | null) {
+/**
+ * ONE vocabulary for the v0 §6 variance bands, for exactly the same
+ * reason as `DISCREPANCY_TYPE_LABEL`: the Severity column's faceted
+ * filter is built from its ACCESSOR's values, so if the accessor keeps
+ * emitting the raw enum while the cell prints a label, the dropdown
+ * offers `at_contract` / `minor_overcharge` — strings that appear
+ * nowhere on screen.
+ */
+export const V0_BAND_LABEL: Record<V0CogVarianceBand, string> = {
+  significant_overcharge: "Significant overcharge",
+  minor_overcharge: "Minor overcharge",
+  at_contract: "At contract",
+  minor_discount: "Minor discount",
+  significant_discount: "Significant discount",
+}
+
+const V0_BAND_BADGE_CLASS: Record<V0CogVarianceBand, string | null> = {
+  significant_overcharge:
+    "bg-red-500/15 text-red-600 dark:text-red-400 border-0",
+  minor_overcharge:
+    "bg-orange-500/15 text-orange-600 dark:text-orange-400 border-0",
+  // null → the plain `secondary` badge.
+  at_contract: null,
+  minor_discount:
+    "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-0",
+  significant_discount:
+    "bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 border-0",
+}
+
+export function bandBadge(band: V0CogVarianceBand | null) {
   if (band == null) return <span className="text-muted-foreground">—</span>
-  switch (band) {
-    case "significant_overcharge":
-      return (
-        <Badge className="bg-red-500/15 text-red-600 dark:text-red-400 border-0">
-          Significant overcharge
-        </Badge>
-      )
-    case "minor_overcharge":
-      return (
-        <Badge className="bg-orange-500/15 text-orange-600 dark:text-orange-400 border-0">
-          Minor overcharge
-        </Badge>
-      )
-    case "at_contract":
-      return <Badge variant="secondary">At contract</Badge>
-    case "minor_discount":
-      return (
-        <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-0">
-          Minor discount
-        </Badge>
-      )
-    case "significant_discount":
-      return (
-        <Badge className="bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 border-0">
-          Significant discount
-        </Badge>
-      )
-  }
+  const className = V0_BAND_BADGE_CLASS[band]
+  return className == null ? (
+    <Badge variant="secondary">{V0_BAND_LABEL[band]}</Badge>
+  ) : (
+    <Badge className={className}>{V0_BAND_LABEL[band]}</Badge>
+  )
 }
 
-function getTypeBadge(type: DiscrepancyType) {
-  switch (type) {
-    case "overcharge":
-      return (
-        <Badge className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 border-0">
-          Overcharge
-        </Badge>
-      )
-    case "undercharge":
-      return (
-        <Badge className="bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-0">
-          Undercharge
-        </Badge>
-      )
-    case "no_contract":
-      return (
-        <Badge className="bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300 border-0">
-          No Contract
-        </Badge>
-      )
-    case "price_increase":
-      return (
-        <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300 border-0">
-          Price Increase
-        </Badge>
-      )
-    default:
-      return <Badge variant="secondary">Match</Badge>
-  }
+const DISCREPANCY_TYPE_BADGE_CLASS: Record<DiscrepancyType, string | null> = {
+  overcharge: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 border-0",
+  undercharge:
+    "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 border-0",
+  no_contract:
+    "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300 border-0",
+  // null → the plain `secondary` badge.
+  match: null,
 }
 
-const DISCREPANCY_TYPE_OPTIONS: { value: DiscrepancyType; label: string }[] = [
+export function getTypeBadge(type: DiscrepancyType) {
+  const className = DISCREPANCY_TYPE_BADGE_CLASS[type]
+  return className == null ? (
+    <Badge variant="secondary">{DISCREPANCY_TYPE_LABEL[type]}</Badge>
+  ) : (
+    <Badge className={className}>{DISCREPANCY_TYPE_LABEL[type]}</Badge>
+  )
+}
+
+/**
+ * The faceted-filter value for the Type / Severity columns. These are
+ * the column accessors: TanStack builds the `select` dropdown from the
+ * accessor's values, so returning anything other than the string the
+ * cell prints puts vocabulary in the dropdown that appears nowhere in
+ * the table. Kept as named functions so a test can pin
+ * accessor-equals-cell without rendering.
+ */
+export function discrepancyTypeFilterValue(row: {
+  _type: DiscrepancyType
+}): string {
+  return DISCREPANCY_TYPE_LABEL[row._type]
+}
+
+export function varianceBandFilterValue(row: {
+  _band: V0CogVarianceBand | null
+}): string {
+  // Off-contract rows have no band. `""` (rather than null) keeps the
+  // value out of the faceted option list — SelectFilter drops empty
+  // values — while the cell still renders its em-dash.
+  return row._band == null ? "" : V0_BAND_LABEL[row._band]
+}
+
+/**
+ * Filter-bar options. Every concrete entry reuses the badge label, so
+ * the dropdown, the cells and the column filter cannot drift apart —
+ * and every entry must be a type `classifyDiscrepancy` can actually
+ * return, pinned by a test. An option no row can carry is a filter that
+ * silently empties the table, which is the same lie as an unlabelled
+ * cap: the reader concludes "there are none of those".
+ *
+ * `match` is intentionally absent: the bar filters DISCREPANCIES, and a
+ * line paid at contract is the absence of one — the Severity/Type
+ * column filters can still isolate them.
+ */
+export const DISCREPANCY_TYPE_OPTIONS: {
+  value: DiscrepancyTypeFilter
+  label: string
+}[] = [
   { value: "all", label: "All Types" },
-  { value: "overcharge", label: "Overcharge" },
-  { value: "undercharge", label: "Undercharge" },
-  { value: "no_contract", label: "No Contract" },
-  { value: "price_increase", label: "Price Increase" },
+  ...(["overcharge", "undercharge", "no_contract"] as const).map((value) => ({
+    value,
+    label: DISCREPANCY_TYPE_LABEL[value],
+  })),
 ]
 
 // ─── Summary Cards ──────────────────────────────────────────────
@@ -444,17 +511,28 @@ function buildColumns(): ColumnDef<
         )
       },
     },
+    // The next two are `select` columns, whose faceted options come from
+    // the ACCESSOR's values (TanStack v8 getFacetedUniqueValues). Their
+    // accessors used to return the raw enum while the cell rendered a
+    // human label, so the dropdown listed `at_contract`,
+    // `minor_overcharge`, `no_contract` — vocabulary the user has never
+    // seen in a cell. The accessor now returns the SAME label the cell
+    // prints; the raw enum stays on `row.original` for the badge styling.
+    // `accessorFn` needs an explicit `id` (it is only optional with an
+    // object-key accessor).
     {
-      accessorKey: "_type",
+      id: "_type",
       header: "Type",
       meta: { filterVariant: "select", filterLabel: "Type" },
-      cell: ({ getValue }) => getTypeBadge(getValue<DiscrepancyType>()),
+      accessorFn: discrepancyTypeFilterValue,
+      cell: ({ row }) => getTypeBadge(row.original._type),
     },
     {
-      accessorKey: "_band",
+      id: "_band",
       header: "Severity",
       meta: { filterVariant: "select", filterLabel: "Severity" },
-      cell: ({ getValue }) => bandBadge(getValue<V0CogVarianceBand | null>()),
+      accessorFn: varianceBandFilterValue,
+      cell: ({ row }) => bandBadge(row.original._band),
     },
     {
       id: "actions",
@@ -494,7 +572,7 @@ export function PriceDiscrepancyTable({
   facilityId = "current",
 }: PriceDiscrepancyTableProps) {
   const [searchQuery, setSearchQuery] = useState("")
-  const [typeFilter, setTypeFilter] = useState<DiscrepancyType>("all")
+  const [typeFilter, setTypeFilter] = useState<DiscrepancyTypeFilter>("all")
 
   // ── Facility-wide totals (NOT reduced from the capped rows) ──
   // Keyed off the row query's key so every invalidation that refreshes
@@ -579,7 +657,7 @@ export function PriceDiscrepancyTable({
 
         <Select
           value={typeFilter}
-          onValueChange={(v) => setTypeFilter(v as DiscrepancyType)}
+          onValueChange={(v) => setTypeFilter(v as DiscrepancyTypeFilter)}
         >
           <SelectTrigger className="w-[180px]">
             <FileWarning className="mr-2 h-4 w-4" />

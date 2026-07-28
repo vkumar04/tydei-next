@@ -714,11 +714,33 @@ export async function generateSurgeonScorecard(
   const caseWhere: Record<string, unknown> = { facilityId }
   if (surgeonName) caseWhere.surgeonName = surgeonName
 
-  const cases = await prisma.case.findMany({
-    where: caseWhere,
-    orderBy: { dateOfSurgery: "desc" },
-    take: 500,
-  })
+  // Aggregated over the FULL matching set, not a page of it.
+  //
+  // This was `findMany({ take: 500 })` and every figure below was reduced over
+  // those rows — so a facility past 500 cases downloaded a "Performance Summary"
+  // reading "Total Cases: 500" with Average Case Cost and Margin % computed on a
+  // capped denominator. Production is already past it: 674 cases, all on one
+  // facility, so an unfiltered surgeon scorecard has been understating spend,
+  // reimbursement and margin by every case older than the 500th. A PDF is the
+  // worst place for a silent cap — the file outlives any on-screen caveat.
+  //
+  // Neither the summary nor the per-surgeon table needs the raw rows: both are
+  // pure aggregates, so one `aggregate` and one `groupBy` replace the read.
+  // `_sum` returns null when nothing matches, hence the ?? 0 coalescing
+  // (verified against prisma.io/docs 2026-07-28).
+  const [caseTotals, perSurgeon] = await Promise.all([
+    prisma.case.aggregate({
+      where: caseWhere,
+      _count: { _all: true },
+      _sum: { totalSpend: true, totalReimbursement: true, margin: true },
+    }),
+    prisma.case.groupBy({
+      by: ["surgeonName"],
+      where: caseWhere,
+      _count: { _all: true },
+      _sum: { totalSpend: true, totalReimbursement: true, margin: true },
+    }),
+  ])
 
   // Get surgeon usage data
   const usageWhere: Record<string, unknown> = { facilityId }
@@ -729,27 +751,6 @@ export async function generateSurgeonScorecard(
     include: { contract: { select: { name: true } } },
     orderBy: { periodStart: "desc" },
   })
-
-  // Group cases by surgeon
-  const surgeonMap = new Map<
-    string,
-    { cases: typeof cases; totalSpend: number; totalReimbursement: number; totalMargin: number }
-  >()
-
-  for (const c of cases) {
-    const name = c.surgeonName ?? "Unknown"
-    const existing = surgeonMap.get(name) ?? {
-      cases: [],
-      totalSpend: 0,
-      totalReimbursement: 0,
-      totalMargin: 0,
-    }
-    existing.cases.push(c)
-    existing.totalSpend += Number(c.totalSpend)
-    existing.totalReimbursement += Number(c.totalReimbursement)
-    existing.totalMargin += Number(c.margin)
-    surgeonMap.set(name, existing)
-  }
 
   const doc = new jsPDF()
   const title = surgeonName
@@ -766,10 +767,10 @@ export async function generateSurgeonScorecard(
   doc.text("Performance Summary", 14, y)
   y += 6
 
-  const totalCases = cases.length
-  const totalSpend = cases.reduce((s, c) => s + Number(c.totalSpend), 0)
-  const totalReimbursement = cases.reduce((s, c) => s + Number(c.totalReimbursement), 0)
-  const totalMargin = cases.reduce((s, c) => s + Number(c.margin), 0)
+  const totalCases = caseTotals._count._all
+  const totalSpend = Number(caseTotals._sum.totalSpend ?? 0)
+  const totalReimbursement = Number(caseTotals._sum.totalReimbursement ?? 0)
+  const totalMargin = Number(caseTotals._sum.margin ?? 0)
   const avgCaseCost = totalCases > 0 ? totalSpend / totalCases : 0
   const marginPct = totalReimbursement > 0 ? (totalMargin / totalReimbursement) * 100 : 0
 
@@ -782,7 +783,7 @@ export async function generateSurgeonScorecard(
       ["Total Margin", fmtCurrency(totalMargin)],
       ["Average Case Cost", fmtCurrency(avgCaseCost)],
       ["Margin %", `${marginPct.toFixed(1)}%`],
-      ["Surgeons", String(surgeonMap.size)],
+      ["Surgeons", String(perSurgeon.length)],
     ],
     theme: "plain",
     styles: { fontSize: 9, cellPadding: 3 },
@@ -809,22 +810,32 @@ export async function generateSurgeonScorecard(
   y += 6
 
   const surgeonHeaders = [["Surgeon", "Cases", "Spend", "Reimbursement", "Margin", "Margin %"]]
-  const surgeonRows = Array.from(surgeonMap.entries())
-    .sort((a, b) => b[1].totalSpend - a[1].totalSpend)
-    .map(([name, data]) => {
-      const mPct =
-        data.totalReimbursement > 0
-          ? ((data.totalMargin / data.totalReimbursement) * 100).toFixed(1) + "%"
-          : "N/A"
-      return [
-        name,
-        String(data.cases.length),
-        fmtCurrency(data.totalSpend),
-        fmtCurrency(data.totalReimbursement),
-        fmtCurrency(data.totalMargin),
-        mPct,
-      ]
+  const surgeonRows = perSurgeon
+    .map((g) => {
+      const spend = Number(g._sum.totalSpend ?? 0)
+      const reimbursement = Number(g._sum.totalReimbursement ?? 0)
+      const margin = Number(g._sum.margin ?? 0)
+      return {
+        name: g.surgeonName ?? "Unknown",
+        count: g._count._all,
+        spend,
+        reimbursement,
+        margin,
+        mPct:
+          reimbursement > 0
+            ? ((margin / reimbursement) * 100).toFixed(1) + "%"
+            : "N/A",
+      }
     })
+    .sort((a, b) => b.spend - a.spend)
+    .map((r) => [
+      r.name,
+      String(r.count),
+      fmtCurrency(r.spend),
+      fmtCurrency(r.reimbursement),
+      fmtCurrency(r.margin),
+      r.mPct,
+    ])
 
   autoTable(doc, {
     startY: y,

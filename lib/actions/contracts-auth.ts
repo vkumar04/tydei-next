@@ -77,11 +77,14 @@ export function facilityScopeClause(
   scope: FacilityScope,
   facilityId: string,
   /**
-   * The caller's accessible facility set (enterprise = all in health
-   * system, scoped = assignment set). When provided, the `"all"` scope is
-   * BOUNDED to this set instead of returning an unbounded `{}` — closing
-   * the hole where a scoped facility user saw every facility's contracts.
-   * Omitted ⇒ legacy unbounded `"all"` (back-compat for existing callers).
+   * The caller's accessible facility set — for an enterprise (Super) user
+   * every facility in their `HealthSystem`, for a scoped user their
+   * `FacilityAssignment` set UNIONed with their home facility. Resolve it
+   * with `getCallerFacilityIds()` (`lib/actions/facility-assignment.ts`),
+   * which is the canonical owner of that set; do not re-derive it.
+   *
+   * Only the `"all"` scope reads it — `"this"` and `"shared"` are already
+   * bounded by `facilityId`, so callers on those paths pay nothing.
    */
   facilityIds?: string[],
 ): Prisma.ContractWhereInput {
@@ -95,7 +98,24 @@ export function facilityScopeClause(
       ],
     }
   }
-  // scope === "all" — bounded to the accessible set when known.
-  if (facilityIds) return contractsOwnedByFacilities(facilityIds)
-  return {}
+  // scope === "all" — "every facility THIS CALLER can reach", never "every
+  // facility in the database".
+  //
+  // This branch used to `return {}` when no set was passed. `{}` is an
+  // UNBOUNDED Prisma predicate: it matched every row of `Contract`, so a
+  // facility user who flipped the contracts list to "All" read — and had
+  // counted, summed and CSV-exported — every other tenant's contracts.
+  // Against the dev seed that is 19 contracts across 3 unrelated health
+  // systems where a Lighthouse Health user may see 10.
+  //
+  // It now fails CLOSED. An omitted set degrades to the caller's own
+  // facility (identical to scope `"this"`), so a future caller that forgets
+  // to thread the set under-counts rather than leaking. Both current call
+  // sites — `getContracts` and `getContractStats` — do pass it.
+  //
+  // An EMPTY set is deliberately not the same as an omitted one: `[]` means
+  // "this caller reaches no facility" and correctly matches nothing (see
+  // `contractsOwnedByFacilities`, pinned by facility-assignment-scope.test).
+  if (!facilityIds) return contractsOwnedByFacility(facilityId)
+  return contractsOwnedByFacilities(facilityIds)
 }

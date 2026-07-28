@@ -58,6 +58,19 @@ export interface PurchaseAudit {
  * sample presented as the facility's audit, with the Critical/Warning
  * counts flat-lining at the cap. Never derive a headline number from
  * `audits.length`.
+ *
+ * Disclosing the cap is HALF the fix — every consumer must render
+ * `auditSampleTruncated` / `auditSampleLimit` / `scanTruncated`, and must
+ * not re-slice `audits` on top of them without saying so. A cap nobody
+ * displays is the same silent truncation, one layer down. See
+ * `buildAuditSampleNotice` in
+ * `components/facility/reports/compliance-report-client.tsx`.
+ *
+ * One more scope trap for consumers: when `scanTruncated` is true,
+ * `totalPurchases` is NOT the window's row count — it is the scanned
+ * prefix. Any copy that reads "<totalPurchases> purchases in this
+ * window" has to change wording in that branch, or the page swaps one
+ * silent truncation for a mislabelled one.
  */
 export interface ComplianceReport {
   totalPurchases: number
@@ -145,9 +158,17 @@ async function _evaluatePurchaseComplianceImpl(input: {
     contractsByVendor.set(c.vendorId, arr)
   }
 
+  // `limit` is client-supplied, so a non-finite value has to be replaced
+  // rather than clamped — `Math.min(MAX, NaN)` is NaN, which would leave
+  // `auditSampleLimit: NaN` in the payload and render "NaN" inside the
+  // truncation notice that now reads this field.
+  const requestedLimit =
+    typeof input.limit === "number" && Number.isFinite(input.limit)
+      ? input.limit
+      : DEFAULT_AUDIT_SAMPLE
   const auditSampleLimit = Math.max(
     0,
-    Math.min(MAX_AUDIT_SAMPLE, Math.trunc(input.limit ?? DEFAULT_AUDIT_SAMPLE)),
+    Math.min(MAX_AUDIT_SAMPLE, Math.trunc(requestedLimit)),
   )
 
   const audits: PurchaseAudit[] = []
