@@ -353,8 +353,15 @@ const BASELINE_HITS = new Set<string>([
   // bumped again 2026-06-21 after the trailing-12mo window dedup
   // (getTrailing12MonthWindow) collapsed two inline window blocks above,
   // shifting these by -3.
-  "lib/actions/contracts.ts:1651",
-  "lib/actions/contracts.ts:1671",
+  // bumped +55 on 2026-07-28 after getContractStats absorbed the hero's
+  // `activeContracts` / `expiringSoon` counts (they were being tallied
+  // client-side off a 20-row page) — the groupBy + scoped expiring count
+  // and their rationale comment sit above these operations.
+  // bumped +14 same day (review pass) after the YTD rebate aggregate was
+  // narrowed through the same facility-scope clause the contract counts
+  // use, adding its `rebateWhere` block above these operations.
+  "lib/actions/contracts.ts:1720",
+  "lib/actions/contracts.ts:1740",
   // imports/case-costing-import.ts: REMOVED from baseline 2026-06-09
   // (case-costing audit batch) — the remaining by-id ops (primaryCptCode
   // update, margin-rollup re-read + update) now carry inline
@@ -398,8 +405,12 @@ const BASELINE_HITS = new Set<string>([
   // shifted these lines and skip-comments are drift-proof). Covers
   // getFacilityProfile/getVendorProfile own-row reads and the
   // remove/update/access-tier member target fetches.
-  // vendors.ts: read-only by id (Vendor is a shared resource)
-  "lib/actions/vendors.ts:74",
+  // vendors.ts: line-number baseline entry REMOVED 2026-07-28 — getVendor's
+  // read-only-by-id lookup (Vendor is a shared, untenanted catalog row) now
+  // carries an inline `auth-scope-scanner-skip:` comment instead, the same
+  // migration settings.ts / invoices.ts / case-costing-import.ts already made.
+  // The entry was "lib/actions/vendors.ts:74"; getVendorList gaining real
+  // pagination shifted the line, and a skip comment is drift-proof.
 ])
 
 describe("server-action auth-scope scanner (Charles audit suggestion #1)", () => {

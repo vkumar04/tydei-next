@@ -32,15 +32,41 @@ export async function adminGetFacilities(input: {
   status?: string
   page?: number
   pageSize?: number
-}): Promise<{ facilities: AdminFacilityRow[]; total: number }> {
+}): Promise<{
+  facilities: AdminFacilityRow[]
+  /** Facilities matching the filter — NOT the length of `facilities`. */
+  total: number
+  /** Of those, the ones whose `status` is "active". */
+  activeTotal: number
+  /** Members of those facilities' Organizations — the `userCount` column, summed. */
+  userTotal: number
+  /** Contracts belonging to those facilities — the `contractCount` column, summed. */
+  contractTotal: number
+}> {
   await requireAdmin()
   const { search, status, page = 1, pageSize = 20 } = input
 
-  const where: Record<string, unknown> = {}
+  const where: Prisma.FacilityWhereInput = {}
   if (search) where.name = { contains: search, mode: "insensitive" }
   if (status) where.status = status
 
-  const [facilities, total] = await Promise.all([
+  /**
+   * EVERY total below is computed over `where` — the whole filtered facility
+   * set — and none of them over the returned page. See adminGetVendors for the
+   * incident: a stat row that mixes one server-side total with page-derived
+   * neighbours reads as authoritative while three of its four numbers are the
+   * size of `take: 20`.
+   *
+   * One `groupBy` carries two cards: the totals sum to the row count and the
+   * "active" bucket is the Active card, so no separate `count()` is needed.
+   *
+   * Users and contracts live on other models, so they are counted THROUGH the
+   * same facility filter. `isNot: null` is load-bearing on both: Organization
+   * and Contract each have a nullable facility, and members of a *vendor* org
+   * (or a contract orphaned by a facility delete, `facilityId -> NULL`) must
+   * not land in a facility-scoped number.
+   */
+  const [facilities, statusGroups, userTotal, contractTotal] = await Promise.all([
     prisma.facility.findMany({
       where,
       include: {
@@ -52,8 +78,15 @@ export async function adminGetFacilities(input: {
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
-    prisma.facility.count({ where }),
+    prisma.facility.groupBy({ by: ["status"], _count: true, where }),
+    prisma.member.count({
+      where: { organization: { facility: { is: where, isNot: null } } },
+    }),
+    prisma.contract.count({ where: { facility: { is: where, isNot: null } } }),
   ])
+
+  const total = statusGroups.reduce((sum, g) => sum + g._count, 0)
+  const activeTotal = statusGroups.find((g) => g.status === "active")?._count ?? 0
 
   return serialize({
     facilities: facilities.map((f) => ({
@@ -72,6 +105,9 @@ export async function adminGetFacilities(input: {
       createdAt: f.createdAt.toISOString(),
     })),
     total,
+    activeTotal,
+    userTotal,
+    contractTotal,
   })
 }
 

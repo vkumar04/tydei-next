@@ -67,13 +67,21 @@ export function FacilityTable() {
   )
 
   const facilities = data?.facilities ?? []
-  // The list is PAGINATED (pageSize 20), so `facilities.length` is the size of the
-  // current page, not the tenant count. It reported "20 Total Vendors" against
-  // 201 real rows (Charles 2026-07-28). `total` is the server's count().
-  const totalFacilities = data?.total ?? facilities.length
-  const activeFacilities = facilities.filter((f) => f.status === "active")
-  const totalUsers = facilities.reduce((sum, f) => sum + f.userCount, 0)
-  const totalContracts = facilities.reduce((sum, f) => sum + f.contractCount, 0)
+
+  /**
+   * EVERY card below reads a server-side total covering all facilities. None
+   * of them reduce over `facilities`, which is one PAGE (pageSize 20).
+   *
+   * Same defect as the vendor row: the 2026-07-27 pass fixed only "Total
+   * Facilities", leaving Active / Total Users / Total Contracts summed over the
+   * page — one true number lending authority to three false ones. Facilities
+   * happen to fit in a page today, which is exactly why nobody caught it here
+   * first; do not rely on that staying true (Charles 2026-07-28).
+   *
+   * Renders "—" until the query resolves: a placeholder 0 is also a wrong
+   * number under a confident label.
+   */
+  const stat = (value: number | undefined) => value ?? "—"
 
   return (
     <>
@@ -86,7 +94,7 @@ export function FacilityTable() {
                 <Building2 className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{totalFacilities}</p>
+                <p className="text-2xl font-bold">{stat(data?.total)}</p>
                 <p className="text-xs text-muted-foreground">Total Facilities</p>
               </div>
             </div>
@@ -99,7 +107,7 @@ export function FacilityTable() {
                 <CheckCircle className="h-5 w-5 text-green-700 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{activeFacilities.length}</p>
+                <p className="text-2xl font-bold">{stat(data?.activeTotal)}</p>
                 <p className="text-xs text-muted-foreground">Active</p>
               </div>
             </div>
@@ -112,7 +120,7 @@ export function FacilityTable() {
                 <Users className="h-5 w-5 text-blue-700 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{totalUsers}</p>
+                <p className="text-2xl font-bold">{stat(data?.userTotal)}</p>
                 <p className="text-xs text-muted-foreground">Total Users</p>
               </div>
             </div>
@@ -125,7 +133,7 @@ export function FacilityTable() {
                 <FileText className="h-5 w-5 text-purple-700" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{totalContracts}</p>
+                <p className="text-2xl font-bold">{stat(data?.contractTotal)}</p>
                 <p className="text-xs text-muted-foreground">Total Contracts</p>
               </div>
             </div>
@@ -146,6 +154,18 @@ export function FacilityTable() {
           </Button>
         }
       />
+      {/*
+        The rows are one server page while the cards above are tenant-wide, so
+        SAY which is which. A silent cap is the bug; a labelled one is a fact
+        the operator can act on.
+      */}
+      {data && data.total > facilities.length && (
+        <p className="text-xs text-muted-foreground">
+          Showing the first {facilities.length} facilities alphabetically of{" "}
+          {data.total}. Search, sorting and column filters apply to these{" "}
+          {facilities.length} rows only — the totals above cover all {data.total}.
+        </p>
+      )}
       <FacilityFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}

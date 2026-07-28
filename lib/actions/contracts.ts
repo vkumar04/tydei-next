@@ -825,20 +825,22 @@ export async function getContract(
 
 // ─── Contract Stats ──────────────────────────────────────────────
 
+/**
+ * Window (in days) behind the contracts-hero "expiring soon" pill.
+ *
+ * Module-local const — a `"use server"` file may only export async
+ * functions — and echoed back on the payload as `expiringSoonWindowDays`
+ * so the badge's label ("expiring in N days") is rendered from the same
+ * constant the count was filtered by.
+ */
+const EXPIRING_SOON_WINDOW_DAYS = 30
+
 export async function getContractStats(
   input: { facilityScope?: FacilityScope } = {},
 ) {
   const { facility } = await requireFacility()
   const scope: FacilityScope = input.facilityScope ?? "this"
   const where = facilityScopeClause(scope, facility.id)
-
-  const [totalContracts, aggregates] = await Promise.all([
-    prisma.contract.count({ where }),
-    prisma.contract.aggregate({
-      where,
-      _sum: { totalValue: true, annualValue: true },
-    }),
-  ])
 
   // Earned counts only periods that have actually closed — pre-recorded
   // rows for upcoming periods are projections, not earned. When scope is
@@ -852,19 +854,86 @@ export async function getContractStats(
   // in-memory `sumEarnedRebatesYTD` helper — keep them in sync (W1.U-B).
   const today = new Date()
   const startOfYear = new Date(today.getFullYear(), 0, 1)
-  const rebateResult = await prisma.rebate.aggregate({
-    where:
-      scope === "all"
-        ? { payPeriodEnd: { gte: startOfYear, lte: today } }
-        : {
-            facilityId: facility.id,
-            payPeriodEnd: { gte: startOfYear, lte: today },
-          },
-    _sum: { rebateEarned: true },
-  })
+  const expiringCutoff = new Date(
+    today.getTime() + EXPIRING_SOON_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  )
+
+  // 2026-07-28 (same wrong-scope sweep): "Rebates Earned (YTD)" sits on the
+  // same hero row as the contract counts, so it has to describe the SAME
+  // contracts. Filtering the ledger by `facilityId` alone did not: under
+  // scope "shared" the hero counted only multi-facility contracts while this
+  // summed every rebate the facility had ever earned, single-facility
+  // contracts included — money and counts, one row, two different sets.
+  // Routing the ledger through the same `where` fixes that. The `facilityId`
+  // clause stays on top of it so a shared contract's PEER-facility rebate
+  // rows can never leak into this facility's total.
+  //
+  // scope "all" keeps the legacy unbounded shape (`facilityScopeClause`
+  // returns `{}` when no accessible-facility set is passed) so the card
+  // still matches the contract universe the list itself renders.
+  const scopeIsUnbounded = Object.keys(where).length === 0
+  const rebateWhere: Prisma.RebateWhereInput = {
+    payPeriodEnd: { gte: startOfYear, lte: today },
+    ...(scopeIsUnbounded ? {} : { contract: where }),
+    ...(scope === "all" ? {} : { facilityId: facility.id }),
+  }
+
+  // 2026-07-28 (wrong-scope bug class): `activeContracts` and
+  // `expiringSoon` used to be counted CLIENT-side in
+  // contracts-list-client from `getContracts`'s FIRST PAGE (pageSize 20,
+  // ordered `updatedAt desc`) while `totalContracts` came from a real DB
+  // count over the whole scope. A facility with 45 contracts therefore
+  // read "45 Total / 20 Active" on one hero row, and "expiring soon"
+  // silently depended on which contracts had been edited most recently.
+  // All four hero numbers now come from this one action, over this one
+  // `where`, in one round trip.
+  //
+  // `groupBy(['status'])` supplies BOTH the total and the active bucket —
+  // `totalContracts` is the sum of its buckets — so the two numbers sat
+  // side by side on the hero literally cannot be computed over different
+  // row sets. `expiringSoon` needs a date predicate the grouping can't
+  // express, so it's one extra scoped `count` (not one count per status).
+  const [statusGroups, expiringSoon, aggregates, rebateResult] =
+    await Promise.all([
+      prisma.contract.groupBy({
+        by: ["status"],
+        _count: true,
+        where,
+      }),
+      prisma.contract.count({
+        where: {
+          AND: [
+            where,
+            {
+              status: { not: "expired" },
+              expirationDate: { gt: today, lte: expiringCutoff },
+            },
+          ],
+        },
+      }),
+      prisma.contract.aggregate({
+        where,
+        _sum: { totalValue: true, annualValue: true },
+      }),
+      prisma.rebate.aggregate({
+        where: rebateWhere,
+        _sum: { rebateEarned: true },
+      }),
+    ])
+
+  let totalContracts = 0
+  let activeContracts = 0
+  for (const group of statusGroups ?? []) {
+    const bucket = typeof group._count === "number" ? group._count : 0
+    totalContracts += bucket
+    if (group.status === "active") activeContracts += bucket
+  }
 
   return serialize({
     totalContracts,
+    activeContracts,
+    expiringSoon,
+    expiringSoonWindowDays: EXPIRING_SOON_WINDOW_DAYS,
     totalValue: Number(aggregates._sum.totalValue ?? 0),
     totalRebates: Number(rebateResult._sum?.rebateEarned ?? 0),
   })

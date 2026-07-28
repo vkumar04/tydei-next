@@ -33,22 +33,39 @@ export async function adminGetVendors(input: {
   pageSize?: number
 }): Promise<{
   vendors: AdminVendorRow[]
+  /** Vendors matching the filter — NOT the length of `vendors`. */
   total: number
-  activeTotal: number
+  /** Of those, the ones with an Organization (i.e. that can hold users). */
   onboardedTotal: number
+  /** Divisions ("reps") belonging to those vendors — the `repCount` column, summed. */
+  repTotal: number
+  /** Contracts belonging to those vendors — the `contractCount` column, summed. */
+  contractTotal: number
 }> {
   await requireAdmin()
   const { search, status, page = 1, pageSize = 20 } = input
 
-  const where: Record<string, unknown> = {}
+  const where: Prisma.VendorWhereInput = {}
   if (search) where.name = { contains: search, mode: "insensitive" }
   if (status) where.status = status
 
-  // `activeTotal` is counted server-side for the same reason `total` is: the
-  // stat cards previously derived both from the returned PAGE, so with
-  // pageSize 20 they read "20 Total / 20 Active" against 201 real vendors
-  // (Charles 2026-07-28).
-  const [vendors, total, activeTotal, onboardedTotal] = await Promise.all([
+  /**
+   * EVERY total below is computed over `where` — the whole filtered vendor
+   * set — and none of them over the returned page.
+   *
+   * The stat row used to reduce over `vendors` (pageSize 20), so it read
+   * "20 Total Vendors" against 201 real rows (Charles 2026-07-28). The
+   * 2026-07-27 pass fixed only the first two cards, which was worse: "201
+   * Total Vendors" sat beside a Sales Reps and Total Contracts figure summed
+   * over 20 rows, and one true number makes the false ones look authoritative.
+   *
+   * `_count` on a NULLABLE column counts non-null values, so a single
+   * aggregate carries both vendor-level cards: `_all` is the row count and
+   * `organizationId` is "has an Organization". `status` deliberately gets no
+   * card — it is `@default("active")` that ingestion never sets, so it reports
+   * 201 of 201 (see the Status column in vendor-columns.tsx).
+   */
+  const [vendors, vendorAgg, repTotal, contractTotal] = await Promise.all([
     prisma.vendor.findMany({
       where,
       include: { _count: { select: { contracts: true, divisions: true } } },
@@ -56,11 +73,12 @@ export async function adminGetVendors(input: {
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),
-    prisma.vendor.count({ where }),
-    prisma.vendor.count({ where: { ...where, status: "active" } }),
-    // The meaningful "is this a real tenant" count — `status` is a
-    // default-"active" column that ingestion never sets, so it reports 201/201.
-    prisma.vendor.count({ where: { ...where, organizationId: { not: null } } }),
+    prisma.vendor.aggregate({
+      _count: { _all: true, organizationId: true },
+      where,
+    }),
+    prisma.vendorDivision.count({ where: { vendor: { is: where } } }),
+    prisma.contract.count({ where: { vendor: { is: where } } }),
   ])
 
   return serialize({
@@ -80,9 +98,10 @@ export async function adminGetVendors(input: {
       repCount: v._count.divisions,
       createdAt: v.createdAt.toISOString(),
     })),
-    total,
-    activeTotal,
-    onboardedTotal,
+    total: vendorAgg._count._all,
+    onboardedTotal: vendorAgg._count.organizationId,
+    repTotal,
+    contractTotal,
   })
 }
 

@@ -75,16 +75,25 @@ export function VendorTable() {
   }
 
   const vendors = data?.vendors ?? []
-  // The list is PAGINATED (pageSize 20), so `vendors.length` is the size of the
-  // current page, not the tenant count. It reported "20 Total Vendors" against
-  // 201 real rows (Charles 2026-07-28). `total` is the server's count().
-  const totalVendors = data?.total ?? vendors.length
-  // "Active" is `status`, which ingestion never sets — 201 of 201 in prod, so
-  // the card said nothing. "Onboarded" (has an Organization, therefore can have
-  // users) is the number that distinguishes a real tenant from an import
-  // artifact. Charles 2026-07-28.
-  const onboardedVendors = data?.onboardedTotal ?? 0
-  const totalContracts = vendors.reduce((sum, v) => sum + v.contractCount, 0)
+
+  /**
+   * EVERY card below reads a server-side total covering all vendors. None of
+   * them reduce over `vendors`, which is one PAGE (pageSize 20).
+   *
+   * The row first read "20 Total Vendors" against 201 real rows; the partial
+   * 2026-07-27 fix then put a true 201 beside a Sales Reps and Total Contracts
+   * summed over 20 — worse, because the one correct number makes its
+   * neighbours look authoritative (Charles 2026-07-28).
+   *
+   * "Active" has no card on purpose: `status` is `@default("active")` that
+   * ingestion never sets, so it reports 201 of 201. "Onboarded" — has an
+   * Organization, therefore can hold users — is what separates a real tenant
+   * from an import artifact.
+   *
+   * Renders "—" until the query resolves: a placeholder 0 is also a wrong
+   * number under a confident label.
+   */
+  const stat = (value: number | undefined) => value ?? "—"
 
   return (
     <>
@@ -97,7 +106,7 @@ export function VendorTable() {
                 <Building2 className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{totalVendors}</p>
+                <p className="text-2xl font-bold">{stat(data?.total)}</p>
                 <p className="text-xs text-muted-foreground">Total Vendors</p>
               </div>
             </div>
@@ -110,7 +119,7 @@ export function VendorTable() {
                 <CheckCircle className="h-5 w-5 text-green-700 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{onboardedVendors}</p>
+                <p className="text-2xl font-bold">{stat(data?.onboardedTotal)}</p>
                 <p className="text-xs text-muted-foreground">Onboarded</p>
               </div>
             </div>
@@ -123,7 +132,13 @@ export function VendorTable() {
                 <Users className="h-5 w-5 text-blue-700 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{vendors.reduce((sum, v) => sum + (v.contactName ? 1 : 0), 0)}</p>
+                {/*
+                  Was `vendors.filter(v => v.contactName).length` over the page:
+                  page-scoped, and counting a different quantity than the "Reps"
+                  column beside it (which is divisions). `repTotal` is that same
+                  column summed across every vendor, so card and column agree.
+                */}
+                <p className="text-2xl font-bold">{stat(data?.repTotal)}</p>
                 <p className="text-xs text-muted-foreground">Sales Reps</p>
               </div>
             </div>
@@ -136,7 +151,7 @@ export function VendorTable() {
                 <FileText className="h-5 w-5 text-purple-700" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{totalContracts}</p>
+                <p className="text-2xl font-bold">{stat(data?.contractTotal)}</p>
                 <p className="text-xs text-muted-foreground">Total Contracts</p>
               </div>
             </div>
@@ -157,6 +172,18 @@ export function VendorTable() {
           </Button>
         }
       />
+      {/*
+        The rows are one server page while the cards above are tenant-wide, so
+        SAY which is which. A silent cap is the bug; a labelled one is a fact
+        the operator can act on.
+      */}
+      {data && data.total > vendors.length && (
+        <p className="text-xs text-muted-foreground">
+          Showing the first {vendors.length} vendors alphabetically of {data.total}.
+          Search, sorting and column filters apply to these {vendors.length} rows
+          only — the totals above cover all {data.total}.
+        </p>
+      )}
       <FormDialog
         open={formOpen || !!editing}
         onOpenChange={(open) => { if (!open) { setFormOpen(false); setEditing(null) } }}
