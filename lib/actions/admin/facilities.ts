@@ -206,3 +206,24 @@ export async function adminDeleteFacility(id: string) {
     metadata: { name: target?.name },
   })
 }
+
+/**
+ * Every facility, unpaginated, for the user-creation Access picker — the
+ * counterpart to `adminGetVendorOptions`. Facilities happen to fit inside the
+ * default page size today, which is exactly why the identical pagination bug
+ * went unnoticed on this side; do not rely on that staying true.
+ */
+export async function adminGetFacilityOptions(): Promise<
+  { id: string; name: string; canHaveUsers: boolean }[]
+> {
+  await requireAdmin()
+  const facilities = await prisma.facility.findMany({
+    select: { id: true, name: true, organizationId: true },
+    orderBy: { name: "asc" },
+  })
+  return facilities.map((f) => ({
+    id: f.id,
+    name: f.name,
+    canHaveUsers: f.organizationId !== null,
+  }))
+}

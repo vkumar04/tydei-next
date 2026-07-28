@@ -441,6 +441,10 @@ export const queryKeys = {
       ["admin", "facilities", filters] as const,
     vendors: (filters?: Record<string, unknown>) =>
       ["admin", "vendors", filters] as const,
+    // Unpaginated id/name lists for the user-creation Access picker. Share the
+    // "facilities"/"vendors" prefixes so creating a tenant refreshes them.
+    facilityOptions: () => ["admin", "facilities", "options"] as const,
+    vendorOptions: () => ["admin", "vendors", "options"] as const,
     usersBase: ["admin", "users"] as const,
     users: (filters?: Record<string, unknown>) =>
       ["admin", "users", filters] as const,

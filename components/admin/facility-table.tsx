@@ -67,6 +67,10 @@ export function FacilityTable() {
   )
 
   const facilities = data?.facilities ?? []
+  // The list is PAGINATED (pageSize 20), so `facilities.length` is the size of the
+  // current page, not the tenant count. It reported "20 Total Vendors" against
+  // 201 real rows (Charles 2026-07-28). `total` is the server's count().
+  const totalFacilities = data?.total ?? facilities.length
   const activeFacilities = facilities.filter((f) => f.status === "active")
   const totalUsers = facilities.reduce((sum, f) => sum + f.userCount, 0)
   const totalContracts = facilities.reduce((sum, f) => sum + f.contractCount, 0)
@@ -82,7 +86,7 @@ export function FacilityTable() {
                 <Building2 className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{facilities.length}</p>
+                <p className="text-2xl font-bold">{totalFacilities}</p>
                 <p className="text-xs text-muted-foreground">Total Facilities</p>
               </div>
             </div>

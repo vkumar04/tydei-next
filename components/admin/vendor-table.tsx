@@ -75,7 +75,12 @@ export function VendorTable() {
   }
 
   const vendors = data?.vendors ?? []
+  // The list is PAGINATED (pageSize 20), so `vendors.length` is the size of the
+  // current page, not the tenant count. It reported "20 Total Vendors" against
+  // 201 real rows (Charles 2026-07-28). `total` is the server's count().
+  const totalVendors = data?.total ?? vendors.length
   const activeVendors = vendors.filter((v) => v.status === "active")
+  const totalActiveVendors = data?.activeTotal ?? activeVendors.length
   const totalContracts = vendors.reduce((sum, v) => sum + v.contractCount, 0)
 
   return (
@@ -89,7 +94,7 @@ export function VendorTable() {
                 <Building2 className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{vendors.length}</p>
+                <p className="text-2xl font-bold">{totalVendors}</p>
                 <p className="text-xs text-muted-foreground">Total Vendors</p>
               </div>
             </div>
@@ -102,7 +107,7 @@ export function VendorTable() {
                 <CheckCircle className="h-5 w-5 text-green-700 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{activeVendors.length}</p>
+                <p className="text-2xl font-bold">{totalActiveVendors}</p>
                 <p className="text-xs text-muted-foreground">Active</p>
               </div>
             </div>
