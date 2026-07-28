@@ -233,3 +233,59 @@ describe("no case data — entering a case count must not zero the model", () =>
     expect(resolve(0, 500, PROXY)).not.toBe(0)
   })
 })
+
+describe("derived values must not contaminate their own source state", () => {
+  /**
+   * The FinancialAssumptionsCard's `set` does
+   * `onChange({ ...assumptions, [key]: value })`, so whatever object it is
+   * handed is written back into source state. It was handed
+   * `effectiveAssumptions` — `{ ...assumptions, netRevenue: effectiveNetRevenue }`
+   * — so editing ANY field persisted the derived revenue into the seed.
+   *
+   * That is what made the zero-case collapse STICKY: once effectiveNetRevenue
+   * was $0, one edit wrote 0 into `assumptions.netRevenue`, so the proxy
+   * fallback branch returned 0 too and the page could not recover through that
+   * field. Both halves are fixed (gate on the rate; pass the source object);
+   * this pins the interaction between them.
+   */
+  const PROXY = 25_500_000 / 0.3
+
+  /** Mirrors the card: spread the object it was given, override one key. */
+  const editField = (
+    given: { netRevenue: number; annualCaseVolume: number },
+    key: "annualCaseVolume",
+    value: number,
+  ) => ({ ...given, [key]: value })
+
+  const effectiveRevenue = (perCase: number, cases: number, seeded: number) =>
+    perCase > 0 ? perCase * cases : seeded
+
+  it("survives repeated edits without zeroing the seed", () => {
+    let assumptions = { netRevenue: PROXY, annualCaseVolume: 0 }
+    const perCase = 0 // facility with no case data
+
+    // Edit 1: type a case count. The card is handed `assumptions` (source).
+    assumptions = editField(assumptions, "annualCaseVolume", 500)
+    expect(effectiveRevenue(perCase, assumptions.annualCaseVolume, assumptions.netRevenue)).toBe(PROXY)
+
+    // Edit 2: clear it again. Pre-fix this is where 0 got written in and stuck.
+    assumptions = editField(assumptions, "annualCaseVolume", 0)
+    expect(assumptions.netRevenue).toBe(PROXY)
+    expect(effectiveRevenue(perCase, assumptions.annualCaseVolume, assumptions.netRevenue)).toBe(PROXY)
+  })
+
+  it("shows how the old wiring made the collapse permanent", () => {
+    // Card handed the DERIVED object, and the old count-based gate.
+    let assumptions = { netRevenue: PROXY, annualCaseVolume: 0 }
+    const perCase = 0
+    const oldEffective = (cases: number, seeded: number) => (cases > 0 ? perCase * cases : seeded)
+
+    const derived = { ...assumptions, netRevenue: oldEffective(assumptions.annualCaseVolume, assumptions.netRevenue) }
+    assumptions = editField(derived, "annualCaseVolume", 500) // -> effective 0
+    const contaminated = { ...assumptions, netRevenue: oldEffective(500, assumptions.netRevenue) }
+    assumptions = editField(contaminated, "annualCaseVolume", 0) // writes the 0 back
+
+    expect(assumptions.netRevenue).toBe(0) // stuck, even back at zero cases
+    expect(oldEffective(0, assumptions.netRevenue)).toBe(0)
+  })
+})
