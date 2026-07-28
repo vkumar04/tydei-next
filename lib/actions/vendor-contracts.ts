@@ -6,24 +6,85 @@ import type { ContractStatus, Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
-import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
+import {
+  contractsOwnedByVendor,
+  scopeContractWhereToFacility,
+} from "@/lib/actions/contracts-vendor-auth"
 
 // ─── Vendor Contracts List ──────────────────────────────────────
 
+const DEFAULT_PAGE_SIZE = 20
+/** Hard ceiling on rows a single call will return. */
+const MAX_PAGE_SIZE = 500
+const EXPIRING_SOON_WINDOW_DAYS = 30
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+/** Every ContractStatus present, so a missing groupBy row reads as 0. */
+const ZERO_STATUS_COUNTS: Record<ContractStatus, number> = {
+  active: 0,
+  expired: 0,
+  expiring: 0,
+  draft: 0,
+  pending: 0,
+}
+
+/**
+ * Vendor contracts list + the vendor's WHOLE-PORTFOLIO rollup.
+ *
+ * The two halves of the return value are deliberately different scopes,
+ * and callers must not confuse them:
+ *
+ *   - `contracts` / `total` / `hasMore` describe THIS PAGE and the
+ *     `status` + `search` + `facilityId` filters applied to it.
+ *   - `portfolio` describes every contract owned by (or grouped with)
+ *     this vendor, ignoring the page window AND the
+ *     status/search/facility filters — it is what the hero banner
+ *     renders, so the hero stays put as the user narrows the table
+ *     below it.
+ *
+ * Charles 2026-07-27 (vendor hero understates Total Value): the hero
+ * used to be reduced client-side over the FIRST PAGE of 20 rows ordered
+ * `updatedAt desc`. A vendor with 60 contracts averaging $500k saw a
+ * "Total Value / Lifetime commitment" ~$20M short, with nothing on
+ * screen indicating a cap, and a facility filter missing every facility
+ * whose contracts hadn't been touched recently. Same failure shape as
+ * the contract-detail `periods` slice below: never reduce a truncated
+ * page and present it as the whole truth. Counts, money, facilities and
+ * status splits are now one batched server round trip over the full
+ * ownership predicate.
+ */
 export async function getVendorContracts(input: {
   vendorId?: string
   status?: ContractStatus | "all"
   search?: string
+  /** Narrows the PAGE to one facility (`"all"`/undefined = every facility). */
+  facilityId?: string
   page?: number
   pageSize?: number
 }) {
   const { vendor } = await requireVendor()
-  const { status, search, page = 1, pageSize = 20 } = input
+  const { status, search, facilityId, page = 1 } = input
+  const pageSize = Math.min(
+    Math.max(1, Math.trunc(input.pageSize ?? DEFAULT_PAGE_SIZE)),
+    MAX_PAGE_SIZE,
+  )
+  const skip = (Math.max(1, page) - 1) * pageSize
 
   // Scope to contracts owned by OR grouped with this vendor (never bare
   // vendorId — that drops grouped additionalVendorIds; group-vendor-drift).
+  // This predicate alone IS the portfolio: every hero number below is
+  // computed over it, so they all describe the same population.
+  const portfolioWhere = contractsOwnedByVendor(vendor.id)
+
+  // The facility pick narrows the PAGE only, and it has to be applied
+  // server-side: the dropdown is built from the whole-portfolio facility
+  // list below, so a client-side filter over a capped page would offer a
+  // facility and then render an empty table for it (the same
+  // unreachable-option defect the dropdown fix was meant to close).
+  // `scopeContractWhereToFacility` owns the `"all"` sentinel and only ever
+  // NARROWS an already vendor-scoped predicate.
   const conditions: Prisma.ContractWhereInput[] = [
-    contractsOwnedByVendor(vendor.id),
+    scopeContractWhereToFacility(portfolioWhere, facilityId),
   ]
 
   if (status && status !== "all") conditions.push({ status })
@@ -39,7 +100,19 @@ export async function getVendorContracts(input: {
 
   const where: Prisma.ContractWhereInput = { AND: conditions }
 
-  const [contracts, total] = await Promise.all([
+  const now = new Date()
+  const expiringCutoff = new Date(
+    now.getTime() + EXPIRING_SOON_WINDOW_DAYS * MS_PER_DAY,
+  )
+
+  const [
+    contracts,
+    total,
+    portfolioAgg,
+    statusGroups,
+    portfolioFacilities,
+    expiringSoonCount,
+  ] = await Promise.all([
     prisma.contract.findMany({
       where,
       include: {
@@ -47,11 +120,66 @@ export async function getVendorContracts(input: {
         productCategory: { select: { id: true, name: true } },
       },
       orderBy: { updatedAt: "desc" },
-      skip: (page - 1) * pageSize,
+      skip,
       take: pageSize,
     }),
     prisma.contract.count({ where }),
+    // Count AND money in one aggregate so the hero's "Total Contracts"
+    // and "Total Value" can never be computed at different scopes.
+    prisma.contract.aggregate({
+      where: portfolioWhere,
+      _count: { id: true },
+      _sum: { totalValue: true },
+    }),
+    // One groupBy instead of five `count()` calls for the status splits.
+    prisma.contract.groupBy({
+      by: ["status"],
+      _count: true,
+      where: portfolioWhere,
+    }),
+    // Distinct facilities across the WHOLE portfolio — this is both the
+    // "Facilities Served" number and the facility-filter option list, so
+    // the dropdown can never be missing a facility the hero counted.
+    prisma.facility.findMany({
+      where: { contracts: { some: portfolioWhere } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    // Same predicate the facility hero's badge is counted by
+    // (`getContractStats`, lib/actions/contracts.ts): everything not
+    // already expired whose expirationDate lands inside the window.
+    // Filtering on `status: "active"` instead dropped every contract
+    // already flagged `expiring` — literally the population the badge
+    // names — so the pill under-reported against its own label. The rest
+    // of the codebase treats in-effect as `["active", "expiring"]`; the
+    // badge must not disagree.
+    prisma.contract.count({
+      where: {
+        AND: [
+          portfolioWhere,
+          {
+            status: { not: "expired" },
+            expirationDate: { gt: now, lte: expiringCutoff },
+          },
+        ],
+      },
+    }),
   ])
+
+  const statusCounts: Record<ContractStatus, number> = { ...ZERO_STATUS_COUNTS }
+  for (const group of statusGroups) statusCounts[group.status] = group._count
+
+  const portfolio = {
+    contractCount: portfolioAgg._count.id,
+    // `_sum` is null when the vendor owns no contracts — coalesce.
+    totalValue: Number(portfolioAgg._sum.totalValue ?? 0),
+    activeCount: statusCounts.active,
+    statusCounts,
+    facilities: portfolioFacilities,
+    facilitiesServed: portfolioFacilities.length,
+    expiringSoonCount,
+    expiringSoonWindowDays: EXPIRING_SOON_WINDOW_DAYS,
+  }
 
   // Bug #14 (2026-05-24): log when vendor's query returns 0 — helps
   // diagnose the "approved contract didn't appear" class of bug.
@@ -61,10 +189,19 @@ export async function getVendorContracts(input: {
       status,
       search,
       total,
+      portfolioContractCount: portfolio.contractCount,
     })
   }
 
-  return serialize({ contracts, total })
+  return serialize({
+    contracts,
+    total,
+    page,
+    pageSize,
+    /** True when the page is a truncation of `total` — the UI must say so. */
+    hasMore: skip + contracts.length < total,
+    portfolio,
+  })
 }
 
 // ─── Vendor Contract Detail ─────────────────────────────────────

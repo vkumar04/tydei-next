@@ -18,6 +18,15 @@ import { formatCurrency } from "@/lib/formatting"
  *      meaningful in the context of the active book.
  *
  * No bottom narrative grid — this is a list page, not an analysis page.
+ *
+ * SCOPE INVARIANT (2026-07-28). Every number here — the headline count, the
+ * expiring pill, and all four stats — must arrive from ONE call to
+ * `getContractStats`, computed server-side over the whole facility scope.
+ * `activeCount` and `expiringSoon` used to be counted in the client from
+ * the table's current page (20 rows), so a 45-contract facility rendered
+ * "45 Total" next to an "Active" that could never exceed 20 and an
+ * "expiring soon" that depended on recent edit activity. Never wire a prop
+ * on this component to the loaded rows — a page is not the portfolio.
  */
 export interface ContractsHeroProps {
   totalContracts: number
@@ -25,6 +34,11 @@ export interface ContractsHeroProps {
   totalValue: number
   rebatesYTD: number
   expiringSoon: number
+  /**
+   * Days behind `expiringSoon`, echoed by the server that counted it so the
+   * pill's wording can't drift from the filter that produced the number.
+   */
+  expiringSoonWindowDays?: number
   scopeLabel: string
   isLoading?: boolean
 }
@@ -35,6 +49,7 @@ export function ContractsHero({
   totalValue,
   rebatesYTD,
   expiringSoon,
+  expiringSoonWindowDays = 30,
   scopeLabel,
   isLoading,
 }: ContractsHeroProps) {
@@ -60,13 +75,13 @@ export function ContractsHero({
           </h2>
         </div>
         <div className="flex items-center gap-2">
-          {expiringSoon > 0 && (
+          {!isLoading && expiringSoon > 0 && (
             <Badge
               variant="secondary"
               className="gap-1.5 bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
             >
               <AlertTriangle className="h-3.5 w-3.5" />
-              {expiringSoon} expiring in 30 days
+              {expiringSoon} expiring in {expiringSoonWindowDays} days
             </Badge>
           )}
           {/* Tie-In Bundles top-level CTA removed per Charles's feedback —
@@ -88,7 +103,7 @@ export function ContractsHero({
         <HeroStat
           label="Active"
           value={isLoading ? null : String(activeCount)}
-          sublabel="Currently in force"
+          sublabel="Across current scope"
           tone="positive"
           skeleton={<Skeleton className="h-9 w-28" />}
         />

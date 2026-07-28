@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
@@ -244,6 +245,126 @@ export async function exportReportCSV(input: {
 
 // ─── Price Discrepancies ─────────────────────────────────────────
 
+/**
+ * Row cap on the price-discrepancy SAMPLE. Not exported — a `"use server"`
+ * file may only export async functions — so `getPriceDiscrepancySummary`
+ * hands it to the client as `rowCap` and the table labels the truncation
+ * ("Showing 1,500 of 4,182").
+ */
+const PRICE_DISCREPANCY_ROW_CAP = 1500
+
+/** The qualifying set, in ONE place, so the sample and the totals agree. */
+const priceDiscrepancyWhere = (facilityId: string) =>
+  ({
+    facilityId,
+    matchStatus: { in: ["price_variance", "off_contract_item"] },
+  }) satisfies Prisma.COGRecordWhereInput
+
+/**
+ * Facility-wide price-discrepancy totals — the companion aggregate for
+ * `getPriceDiscrepancies`, over the SAME `priceDiscrepancyWhere` set.
+ *
+ * `getPriceDiscrepancies` returns at most `PRICE_DISCREPANCY_ROW_CAP`
+ * rows. The Price Discrepancy report's four summary cards used to reduce
+ * over that capped array, so "Total Discrepancies", "Total Overcharges $",
+ * "Total Undercharges $" and "Est. Savings $" all silently stopped at the
+ * 1,500th highest-variance row (the local seed already puts Lighthouse
+ * Surgical Center at 1,135 qualifying rows). Every card now reads from
+ * here — full facility scope — and the row list is labelled as a sample.
+ *
+ * Dollars come from the persisted `savingsAmount` column, which
+ * lib/cog/enrichment.ts owns: `(contractPrice - unitCost) × quantity`,
+ * i.e. POSITIVE when the facility paid less than contract. The two
+ * buckets are split by sign at the DB and NEVER netted — a $5k overcharge
+ * and a $5k undercharge are two separate facts, not $0.
+ *
+ * Verified against the seeded Lighthouse Surgical Center (2026-07-28):
+ * this aggregate and the reducer it replaces agree exactly when the
+ * reducer is run over the full set — 973 overcharge rows / $472,173 —
+ * so only the SCOPE changed, not the arithmetic. Deliberate difference:
+ * enrichment nulls `savingsAmount` when its kit-vs-component sanity
+ * check fires, and those rows now contribute no dollars instead of the
+ * client re-deriving the fabricated figure enrichment suppressed.
+ *
+ * Three round trips (in parallel), not N: one count for the total, one
+ * sign-filtered aggregate per bucket. A single `groupBy` can't do it —
+ * there is no stored sign column to group on, and grouping by
+ * `matchStatus` would net the two directions together.
+ */
+export async function getPriceDiscrepancySummary(_facilityId?: string) {
+  const { facility } = await requireFacility()
+  const where = priceDiscrepancyWhere(facility.id)
+
+  const [totalDiscrepancies, overcharge, undercharge] = await Promise.all([
+    prisma.cOGRecord.count({ where }),
+    prisma.cOGRecord.aggregate({
+      where: { ...where, savingsAmount: { lt: 0 } },
+      _sum: { savingsAmount: true },
+      _count: { _all: true },
+    }),
+    prisma.cOGRecord.aggregate({
+      where: { ...where, savingsAmount: { gt: 0 } },
+      _sum: { savingsAmount: true },
+      _count: { _all: true },
+    }),
+  ])
+
+  // `_sum` is null when no row matches — coalesce before negating, and
+  // normalize the resulting -0 (negating 0) so the card can't read "-$0".
+  const overchargeAmount = -Number(overcharge._sum.savingsAmount ?? 0) || 0
+  const underchargeAmount = Number(undercharge._sum.savingsAmount ?? 0) || 0
+
+  return serialize({
+    totalDiscrepancies,
+    // Both magnitudes are POSITIVE dollars; direction lives in the name.
+    overcharges: {
+      count: overcharge._count._all,
+      amount: overchargeAmount,
+    },
+    undercharges: {
+      count: undercharge._count._all,
+      amount: underchargeAmount,
+    },
+    // Eliminating the overcharges is the recoverable money. Same scope,
+    // same query family as the counts sitting beside it on the card.
+    estimatedSavings: overchargeAmount,
+    // Rows carrying no contract price (off-contract), or whose
+    // savingsAmount enrichment suppressed as untrustworthy: counted in
+    // the total, in neither dollar bucket. Surfaced so the three
+    // facility-wide buckets reconcile to the total on the card rather
+    // than silently failing to add up. Clamped at 0 — the count and the
+    // two aggregates are three separate round trips, so a concurrent
+    // import could otherwise make this read negative.
+    withoutDollarImpact: Math.max(
+      0,
+      totalDiscrepancies - overcharge._count._all - undercharge._count._all,
+    ),
+    rowCap: PRICE_DISCREPANCY_ROW_CAP,
+  })
+}
+
+/**
+ * The report's row list. This is a display SAMPLE — the top
+ * `PRICE_DISCREPANCY_ROW_CAP` rows by variance, not the facility's whole
+ * discrepancy set. Any headline number must come from
+ * `getPriceDiscrepancySummary()`, never from `rows.length` or a reduce
+ * over this array; any surface that shows or exports these rows must say
+ * how many of how many it is showing.
+ *
+ * The sample is BIASED, not merely short: the ordering below is
+ * `variancePercent` DESC (nulls last) and variancePercent > 0 means the
+ * facility OVERPAID, so the rows that survive the cap are the largest
+ * overcharge percentages. Undercharges (negative variance) and
+ * off-contract rows (null variance) are the first dropped. A severity
+ * histogram, a per-vendor total, or a "% of lines that are major"
+ * computed over this array is therefore wrong in a way that scales with
+ * facility size — such surfaces must aggregate server-side.
+ *
+ * KNOWN GAP (2026-07-28): `components/facility/reports/
+ * price-variance-dashboard.tsx` still reduces over this array for its
+ * severity cards, severity chart and per-vendor totals, with no
+ * truncation notice. It needs its own companion aggregate.
+ */
 export async function getPriceDiscrepancies(_facilityId?: string) {
   const { facility } = await requireFacility()
 
@@ -259,16 +380,13 @@ export async function getPriceDiscrepancies(_facilityId?: string) {
   //                          shows in the line-item detail as "No Contract")
   // Ordered by variance magnitude (off-contract rows, null %, sort last).
   const rows = await prisma.cOGRecord.findMany({
-    where: {
-      facilityId: facility.id,
-      matchStatus: { in: ["price_variance", "off_contract_item"] },
-    },
+    where: priceDiscrepancyWhere(facility.id),
     include: { vendor: { select: { id: true, name: true } } },
     orderBy: [
       { variancePercent: { sort: "desc", nulls: "last" } },
       { extendedPrice: { sort: "desc", nulls: "last" } },
     ],
-    take: 1500,
+    take: PRICE_DISCREPANCY_ROW_CAP,
   })
 
   return serialize(

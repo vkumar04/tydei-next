@@ -35,7 +35,13 @@ interface VendorContractListProps {
   vendorId: string
 }
 
-const EXPIRING_SOON_WINDOW_DAYS = 30
+/**
+ * Rows requested per call for the table below. The DataTable paginates
+ * client-side, so it needs the matching rows in hand — but the request
+ * is still capped (the action clamps harder), and when the cap bites,
+ * the card header says so rather than silently showing a slice.
+ */
+const CONTRACT_LIST_PAGE_SIZE = 200
 
 export function VendorContractList({ vendorId }: VendorContractListProps) {
   const router = useRouter()
@@ -50,10 +56,6 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
     name: string
   } | null>(null)
   const deleteMutation = useDeletePendingContract()
-
-  // Always fetch the full set for hero stats + facility options
-  const { data: allData } = useVendorContracts(vendorId, { status: undefined })
-  const allContracts = allData?.contracts ?? []
 
   // Fetch pending contracts from the PendingContract table
   const { data: pendingData, isLoading: pendingLoading } =
@@ -106,13 +108,23 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
     [pendingContracts],
   )
 
+  // ONE query serves both halves of this page: `data.contracts` is the
+  // (filtered, capped) table page, `data.portfolio` is the vendor's whole
+  // portfolio rolled up server-side for the hero + facility filter.
   const { data, isLoading: contractsLoading } = useVendorContracts(vendorId, {
     status:
       statusTab === "all" || statusTab === "submitted" || statusTab === "rejected"
         ? undefined
         : (statusTab as ContractStatus),
+    // Server-side, because the picker's options come from the whole
+    // portfolio while these rows are capped: filtering them in the client
+    // would leave a facility selectable but empty. `total` / `hasMore`
+    // below then describe the selected facility too, not all facilities.
+    facilityId: facilityFilter,
+    pageSize: CONTRACT_LIST_PAGE_SIZE,
   })
 
+  const portfolio = data?.portfolio
   const rawContractRows = data?.contracts ?? []
 
   // bugs.rtfd 2026-06-11 B4: real Contract rows carry no persisted
@@ -157,10 +169,17 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
     }
   }, [statusTab, rawContracts, mappedPending])
 
-  // Apply facility + search filters on the client. The merged set blends
-  // serialized Contract rows with hand-mapped PendingContract rows; both
-  // satisfy the display-only fields the columns read, so we narrow to the
-  // shared row shape at this single boundary (replaces the old `as any`).
+  // Apply facility + search filters on the client. Contract rows were
+  // already narrowed to `facilityFilter` server-side (this pass is a
+  // no-op for them); it is the PendingContract rows — fetched whole, not
+  // paginated — that still need filtering here. Search stays client-side
+  // for both, which is why the card header names the row cap: a term that
+  // only matches an unloaded contract cannot be found.
+  //
+  // The merged set blends serialized Contract rows with hand-mapped
+  // PendingContract rows; both satisfy the display-only fields the columns
+  // read, so we narrow to the shared row shape at this single boundary
+  // (replaces the old `as any`).
   const contracts = useMemo((): ContractWithFacility[] => {
     const q = searchQuery.trim().toLowerCase()
     const rows = mergedContracts.filter((c) => {
@@ -204,72 +223,86 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
   )
 
   // --- Hero stats ---------------------------------------------------------
-  // Derived from the full (unfiltered) data set + pending so the hero is
-  // stable as the user narrows the table below.
-  const activeCount = allContracts.filter((c) => c.status === "active").length
+  // Every number below describes ONE population: the vendor's executed
+  // Contract rows (counted / summed / grouped server-side over the whole
+  // portfolio, never over `rawContractRows` — that's a page) plus the
+  // in-flight submissions. Review F5 (2026-06-10): rejected and withdrawn
+  // submissions stay browsable in their tabs but are not portfolio.
+  //
+  // Charles 2026-07-27: these used to be reduced over the 20-row first
+  // page, so "Total Value" under-reported by roughly $20M for a
+  // 60-contract vendor and the facility filter was missing every facility
+  // whose contracts hadn't been touched lately.
+  const inFlightPending = useMemo(
+    () =>
+      mappedPending.filter(
+        (pc) =>
+          pc.pendingStatus === "draft" ||
+          pc.pendingStatus === "submitted" ||
+          pc.pendingStatus === "revision_requested",
+      ),
+    [mappedPending],
+  )
+
   const pendingReviewCount = mappedPending.filter(
     (pc) =>
       pc.pendingStatus === "submitted" ||
       pc.pendingStatus === "revision_requested",
   ).length
-  const totalValue = allContracts.reduce(
-    (sum, c) => sum + Number(c.totalValue ?? 0),
-    0,
-  )
+
+  const totalContracts = (portfolio?.contractCount ?? 0) + inFlightPending.length
+  // Money and count come from the same population, so the two hero tiles
+  // can't disagree: portfolio sum (server `_sum`) + the same in-flight rows
+  // that the count above includes.
+  const totalValue =
+    (portfolio?.totalValue ?? 0) +
+    inFlightPending.reduce((sum, pc) => sum + Number(pc.totalValue ?? 0), 0)
+  const activeCount = portfolio?.activeCount ?? 0
+  const expiringSoon = portfolio?.expiringSoonCount ?? 0
+
   const facilitiesServed = useMemo(() => {
-    const ids = new Set<string>()
-    for (const c of allContracts) {
-      if (c.facility?.id) ids.add(c.facility.id)
-    }
-    for (const c of mappedPending) {
-      if (c.facility?.id) ids.add(c.facility.id)
+    const ids = new Set<string>(
+      (portfolio?.facilities ?? []).map((f) => f.id),
+    )
+    for (const pc of inFlightPending) {
+      if (pc.facility?.id) ids.add(pc.facility.id)
     }
     return ids.size
-  }, [allContracts, mappedPending])
-  const expiringSoon = useMemo(() => {
-    const now = Date.now()
-    const cutoff = now + EXPIRING_SOON_WINDOW_DAYS * 24 * 60 * 60 * 1000
-    return allContracts.filter((c) => {
-      if (c.status !== "active") return false
-      const exp = c.expirationDate ? new Date(c.expirationDate).getTime() : 0
-      return exp >= now && exp <= cutoff
-    }).length
-  }, [allContracts])
+  }, [portfolio, inFlightPending])
 
-  // Facility options across the full set so filtering works regardless of tab
+  // Facility options over the vendor's WHOLE portfolio (server-side
+  // distinct list) plus every submission's facility — including rejected
+  // ones, whose rows are reachable on the Rejected tab and must stay
+  // filterable. Built from a page of rows, this dropdown silently omitted
+  // older facilities.
   const facilityOptions = useMemo(() => {
     const map = new Map<string, string>()
-    for (const c of allContracts) {
-      if (c.facility?.id) map.set(c.facility.id, c.facility.name)
-    }
+    for (const f of portfolio?.facilities ?? []) map.set(f.id, f.name)
     for (const c of mappedPending) {
       if (c.facility?.id) map.set(c.facility.id, c.facility.name)
     }
     return Array.from(map, ([id, name]) => ({ id, name })).sort((a, b) =>
       a.name.localeCompare(b.name),
     )
-  }, [allContracts, mappedPending])
+  }, [portfolio, mappedPending])
 
   return (
     <div className="space-y-6">
       <VendorContractsHero
-        // Review F5 (2026-06-10): rejected/withdrawn submissions are
-        // browsable in their tabs but don't count as portfolio contracts.
-        totalContracts={
-          allContracts.length +
-          mappedPending.filter(
-            (pc) =>
-              pc.pendingStatus === "draft" ||
-              pc.pendingStatus === "submitted" ||
-              pc.pendingStatus === "revision_requested",
-          ).length
-        }
+        totalContracts={totalContracts}
         activeCount={activeCount}
         facilitiesServed={facilitiesServed}
         totalValue={totalValue}
         pendingReview={pendingReviewCount}
         expiringSoon={expiringSoon}
-        isLoading={isLoading && allContracts.length === 0}
+        // Every hero number blends the server rollup with the in-flight
+        // submissions, so it is only true once BOTH queries have landed.
+        // `isLoading && !portfolio` rendered a hero missing the whole
+        // submissions population whenever the rollup resolved first —
+        // a total short by its second half, presented as final.
+        // `keepPreviousData` keeps this false across tab/facility
+        // switches, so the hero still doesn't blank while refetching.
+        isLoading={isLoading}
       />
 
       <VendorContractsControlBar
@@ -286,7 +319,21 @@ export function VendorContractList({ vendorId }: VendorContractListProps) {
         <CardHeader>
           <CardTitle>Contracts</CardTitle>
           <CardDescription>
-            {contracts.length} contract{contracts.length !== 1 ? "s" : ""} found
+            {/* "Rows", not "contracts": this count is the merged, searched
+                set — Contract rows plus submissions — while `data.total`
+                beside it counts Contract rows only. Different populations,
+                so they get different nouns instead of reading as one
+                number contradicting the other. */}
+            {contracts.length} {contracts.length === 1 ? "row" : "rows"} shown
+            {/* A cap that stays must be visible. `hasMore` means the server
+                trimmed the result set, so name the trim instead of passing
+                a slice off as the whole list. "this view" = the status tab
+                AND the facility pick, both of which narrow `total` too. The
+                hero above is unaffected — it is a server-side rollup of the
+                entire portfolio. */}
+            {data?.hasMore
+              ? ` · only the ${rawContractRows.length} most recently updated of ${data.total} contracts in this view are loaded, so older ones are missing from these rows and from the search above`
+              : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>

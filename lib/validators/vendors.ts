@@ -28,10 +28,26 @@ export type UpdateVendorInput = z.infer<typeof updateVendorSchema>
 
 // ─── Vendor Filters ─────────────────────────────────────────────
 
+/**
+ * Largest page `getVendorList` will serve in one request.
+ *
+ * This is a transport cap, NOT a "how many vendors exist" answer. Facility
+ * Settings → Vendors used to ask for `pageSize: 100` and render the result as
+ * the whole list: production holds 200 vendors, so ranks 101 (KOVEN) through
+ * 200 (Zimmer US, Inc.) — including "Stryker" at rank 176, which holds a live
+ * contract — were simply invisible, with no pager and no row count to hint at
+ * it. Raising the cap is not the fix; a truncation the UI cannot see is the
+ * bug. Every caller must page through with `page` and show `total`.
+ */
+export const VENDOR_MAX_PAGE_SIZE = 100
+
+/** Default rows per page for the vendor list surfaces. */
+export const VENDOR_PAGE_SIZE = 25
+
 export const vendorFiltersSchema = z.object({
   search: z.string().optional(),
   status: z.string().optional(),
-  ...createPaginationSchema(100),
+  ...createPaginationSchema(VENDOR_MAX_PAGE_SIZE),
 })
 
 export type VendorFilters = z.infer<typeof vendorFiltersSchema>

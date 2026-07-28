@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import Link from "next/link"
 import {
@@ -9,8 +9,11 @@ import {
   Inbox,
   Plus,
 } from "lucide-react"
+import { toast } from "sonner"
 import type { ContractStatus, ContractType } from "@/lib/generated/prisma/client"
 import {
+  fetchContractsForExport,
+  summarizeContractsExport,
   useContracts,
   useContractStats,
   useDeleteContract,
@@ -49,6 +52,25 @@ import type { FacilityScope } from "@/lib/actions/contracts-auth"
  * then the table. New layout collapses the KPI surface into ContractsHero,
  * merges the scope toggle + filters + CTA into ContractsControlBar, and
  * keeps the three top-level tabs as the content switcher.
+ *
+ * SCOPE RULES (2026-07-28 fix — "a value computed from the wrong scope,
+ * presented as the whole truth"):
+ *
+ *   - The hero's numbers describe the FACILITY SCOPE and come only from
+ *     `useContractStats`. Nothing on it may be derived from the loaded
+ *     rows: `activeCount`/`expiringSoon` used to be counted from the first
+ *     page of `getContracts` (20 rows), so "45 Total / 20 Active" was
+ *     structurally impossible to exceed and "expiring soon" moved with
+ *     whatever had been edited recently.
+ *   - Search is a SERVER filter (`filters.search`) so a contract past the
+ *     loaded page is reachable by name — the old client-side pass could
+ *     only ever match rows that had already been downloaded, while the
+ *     empty state cheerfully offered "try adjusting your search".
+ *   - The table still loads a bounded page (`LIST_PAGE_SIZE`); when the
+ *     scope holds more, the truncation is stated under the table rather
+ *     than implied.
+ *   - CSV export walks the whole filtered set via `fetchContractsForExport`
+ *     and says so when the hard row cap bites.
  */
 interface ContractsListClientProps {
   facilityId: string
@@ -61,6 +83,16 @@ const SCOPE_LABEL: Record<FacilityScope, string> = {
   shared: "Shared with this facility",
 }
 
+/**
+ * Rows fetched per list render. The server clamps `pageSize` at 100
+ * (`contractFiltersSchema`), so this is the largest honest page; anything
+ * beyond it is disclosed by the truncation note under the table.
+ */
+const LIST_PAGE_SIZE = 100
+
+/** Debounce before a keystroke becomes a server query. */
+const SEARCH_DEBOUNCE_MS = 250
+
 export function ContractsListClient({
   facilityId,
   userId,
@@ -70,7 +102,12 @@ export function ContractsListClient({
   const searchParams = useSearchParams()
 
   const [activeTab, setActiveTab] = useState("contracts")
+  // `searchQuery` is what the input shows; `searchTerm` is what the SERVER
+  // is filtering on (debounced). Two states rather than one because the
+  // query key must not re-key on every keystroke.
   const [searchQuery, setSearchQuery] = useState("")
+  const [searchTerm, setSearchTerm] = useState("")
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [statusFilter, setStatusFilter] = useState<ContractStatus | "all">(
     "all",
   )
@@ -100,6 +137,30 @@ export function ContractsListClient({
   } | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
+  const [isExporting, setIsExporting] = useState(false)
+
+  // Push the search box at the server on a debounce (same shape as
+  // components/shared/shells/command-search.tsx: the timer is armed from the
+  // change handler, never from an effect mirroring state).
+  const handleSearchQueryChange = useCallback((next: string) => {
+    setSearchQuery(next)
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = setTimeout(() => {
+      setSearchTerm(next.trim())
+    }, SEARCH_DEBOUNCE_MS)
+  }, [])
+
+  const clearSearch = useCallback(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    setSearchQuery("")
+    setSearchTerm("")
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    }
+  }, [])
 
   // `rowSelection` (owned by the table + the Compare tab) is the single
   // source of truth for which contracts are selected to compare. Deriving
@@ -124,14 +185,25 @@ export function ContractsListClient({
     })
   }, [])
 
-  const filters = {
-    ...(statusFilter !== "all" && { status: statusFilter }),
-    ...(typeFilter !== "all" && { type: typeFilter }),
-    facilityScope,
-  }
+  // Everything the SERVER filters on. `search` belongs here — not in a
+  // client-side pass over the loaded page — or contracts past the page
+  // boundary are unfindable by name.
+  const filters = useMemo(
+    () => ({
+      ...(statusFilter !== "all" && { status: statusFilter }),
+      ...(typeFilter !== "all" && { type: typeFilter }),
+      ...(searchTerm !== "" && { search: searchTerm }),
+      facilityScope,
+      pageSize: LIST_PAGE_SIZE,
+    }),
+    [statusFilter, typeFilter, searchTerm, facilityScope],
+  )
 
   const { data, isLoading } = useContracts(facilityId, filters)
-  const { data: stats } = useContractStats(facilityId, facilityScope)
+  const { data: stats, isLoading: isStatsLoading } = useContractStats(
+    facilityId,
+    facilityScope,
+  )
   const deleteMutation = useDeleteContract()
 
   // B3 (2026-06-11): attention badge on the Pending Approval tab. Same query
@@ -189,45 +261,34 @@ export function ContractsListClient({
     return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
   }, [allContracts])
 
-  // Client-side search + facility filter.
-  const contracts = useMemo(() => {
-    return allContracts.filter((contract) => {
-      const q = searchQuery.trim().toLowerCase()
-      const matchesSearch =
-        q === "" ||
-        contract.name.toLowerCase().includes(q) ||
-        contract.vendor.name.toLowerCase().includes(q) ||
-        (contract.contractNumber ?? "").toLowerCase().includes(q)
+  // Search + status + type are applied by the server (see `filters`). The
+  // facility dropdown stays a client-side narrowing of the loaded page.
+  const contracts = useMemo(
+    () =>
+      facilityFilter === "all"
+        ? allContracts
+        : allContracts.filter((c) => c.facility?.id === facilityFilter),
+    [allContracts, facilityFilter],
+  )
 
-      const matchesFacility =
-        facilityFilter === "all" || contract.facility?.id === facilityFilter
+  // Three different counts, three different scopes — never print two of
+  // them side by side without saying which is which:
+  //   matchingTotal — every row the SERVER matched for `filters`
+  //   loadedCount   — the page the server actually sent back
+  //   shownCount    — what the table renders (loaded page ∩ facility dropdown)
+  const matchingTotal = data?.total ?? 0
+  const loadedCount = allContracts.length
+  const shownCount = contracts.length
+  const isFacilityNarrowed = facilityFilter !== "all"
+  const isTruncated = matchingTotal > loadedCount
 
-      return matchesSearch && matchesFacility
-    })
-  }, [allContracts, searchQuery, facilityFilter])
-
-  const isEmpty = !isLoading && contracts.length === 0
-  const hasAnyContracts = !isLoading && allContracts.length > 0
+  const isEmpty = !isLoading && shownCount === 0
+  const hasAnyContracts = !isLoading && loadedCount > 0
+  /** Filters other than the search box — they shrink what the search saw. */
+  const hasNarrowingFilters =
+    statusFilter !== "all" || typeFilter !== "all" || isFacilityNarrowed
   const hasActiveFilters =
-    searchQuery.trim() !== "" ||
-    statusFilter !== "all" ||
-    typeFilter !== "all" ||
-    facilityFilter !== "all" ||
-    facilityScope !== "this"
-
-  // Derived stats (spec §4.2).
-  const derivedStats = useMemo(() => {
-    const now = Date.now()
-    const thirtyDays = 30 * 24 * 60 * 60 * 1000
-    const rows = allContracts
-    const active = rows.filter((c) => c.status === "active").length
-    const expiringSoon = rows.filter((c) => {
-      if (!c.expirationDate) return false
-      const exp = new Date(c.expirationDate).getTime()
-      return exp > now && exp - now <= thirtyDays && c.status !== "expired"
-    }).length
-    return { active, expiringSoon }
-  }, [allContracts])
+    searchQuery.trim() !== "" || hasNarrowingFilters || facilityScope !== "this"
 
   const handleDeleteContract = async () => {
     if (contractToDelete) {
@@ -237,29 +298,70 @@ export function ContractsListClient({
     }
   }
 
-  const handleDownloadCsv = () => {
-    const rows = contracts.map((c) => ({
-      name: c.name,
-      vendorName: c.vendor.name,
-      contractType: c.contractType,
-      status: c.status,
-      effectiveDate: new Date(c.effectiveDate).toISOString().slice(0, 10),
-      expirationDate: new Date(c.expirationDate).toISOString().slice(0, 10),
-      totalValue: Number(c.totalValue),
-      spend: Number(c.currentSpend ?? 0),
-      rebateEarned: Number(c.rebateEarned ?? 0),
-    }))
-    const csv = buildContractsCSV(rows)
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `contracts-${new Date().toISOString().slice(0, 10)}.csv`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
+  // The export used to serialize `contracts` — the loaded page — under a
+  // filename that claimed to be "contracts". It now pulls the whole
+  // filtered set from the server, and when the hard row cap bites it says
+  // so in both the toast and the filename.
+  const handleDownloadCsv = useCallback(async () => {
+    setIsExporting(true)
+    try {
+      const { rows: fetched, total, capped } = await fetchContractsForExport(
+        facilityId,
+        filters,
+      )
+      const narrowed = facilityFilter !== "all"
+      const scoped = narrowed
+        ? fetched.filter((c) => c.facility?.id === facilityFilter)
+        : fetched
+      const rows = scoped.map((c) => ({
+        name: c.name,
+        vendorName: c.vendor.name,
+        contractType: c.contractType,
+        status: c.status,
+        effectiveDate: new Date(c.effectiveDate).toISOString().slice(0, 10),
+        expirationDate: new Date(c.expirationDate).toISOString().slice(0, 10),
+        totalValue: Number(c.totalValue),
+        spend: Number(c.currentSpend ?? 0),
+        rebateEarned: Number(c.rebateEarned ?? 0),
+      }))
+      // `rows.length` is post-narrowing, `total` is the server's count for
+      // the filters IT saw, `fetched.length` is what came back before the
+      // narrowing. The summary keeps each one attached to its own scope
+      // instead of printing "12 of 143" as though they were comparable.
+      const summary = summarizeContractsExport({
+        exportedCount: rows.length,
+        fetchedCount: fetched.length,
+        total,
+        capped,
+        narrowed,
+        stamp: new Date().toISOString().slice(0, 10),
+      })
+
+      if (rows.length === 0) {
+        toast.info(summary.message)
+        return
+      }
+
+      const csv = buildContractsCSV(rows)
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = summary.filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      if (summary.tone === "warning") toast.warning(summary.message)
+      else toast.success(summary.message)
+    } catch (err) {
+      console.error("[contracts-list] CSV export failed", err, { facilityId })
+      toast.error("Couldn't build the contracts CSV. Please try again.")
+    } finally {
+      setIsExporting(false)
+    }
+  }, [facilityId, facilityFilter, filters])
 
   return (
     <div className="flex flex-col gap-6">
@@ -270,14 +372,19 @@ export function ContractsListClient({
         </p>
       </div>
 
+      {/* Every prop below comes from `stats` — one server-side scope, one
+          round trip. Do not fall back to the loaded rows for any of them:
+          a page-derived fallback is what made "45 Total / 20 Active"
+          possible in the first place. */}
       <ContractsHero
-        totalContracts={stats?.totalContracts ?? allContracts.length}
-        activeCount={derivedStats.active}
+        totalContracts={stats?.totalContracts ?? 0}
+        activeCount={stats?.activeContracts ?? 0}
         totalValue={Number(stats?.totalValue ?? 0)}
         rebatesYTD={Number(stats?.totalRebates ?? 0)}
-        expiringSoon={derivedStats.expiringSoon}
+        expiringSoon={stats?.expiringSoon ?? 0}
+        expiringSoonWindowDays={stats?.expiringSoonWindowDays}
         scopeLabel={SCOPE_LABEL[facilityScope]}
-        isLoading={isLoading && !stats}
+        isLoading={isStatsLoading || !stats}
       />
 
       <Tabs
@@ -313,7 +420,7 @@ export function ContractsListClient({
             facilityScope={facilityScope}
             onFacilityScopeChange={setFacilityScope}
             searchQuery={searchQuery}
-            onSearchQueryChange={setSearchQuery}
+            onSearchQueryChange={handleSearchQueryChange}
             statusFilter={statusFilter}
             onStatusFilterChange={setStatusFilter}
             typeFilter={typeFilter}
@@ -322,7 +429,7 @@ export function ContractsListClient({
             facilityFilter={facilityFilter}
             onFacilityFilterChange={setFacilityFilter}
             onDownloadCsv={handleDownloadCsv}
-            canDownload={contracts.length > 0}
+            canDownload={matchingTotal > 0 && !isExporting}
           />
 
           {isLoading && !hasAnyContracts ? (
@@ -341,15 +448,42 @@ export function ContractsListClient({
                       <p className="font-medium">
                         No contracts match your filters
                       </p>
+                      {/* Search runs on the server across the whole scope, so
+                          this really does mean "nothing matched" — not
+                          "nothing matched on the page we happened to load". */}
                       <p className="text-sm text-muted-foreground">
-                        Try adjusting your search, scope, status, or type
-                        filters.
+                        {searchTerm !== "" ? (
+                          hasNarrowingFilters ? (
+                            // A status/type/facility filter is also on, so the
+                            // search did NOT cover all `totalContracts` rows —
+                            // don't claim a number the query never scanned.
+                            <>
+                              Nothing in{" "}
+                              {SCOPE_LABEL[facilityScope].toLowerCase()} matched
+                              &ldquo;{searchTerm}&rdquo; under the current
+                              status, type, and facility filters. Try a
+                              different term, or clear the other filters.
+                            </>
+                          ) : (
+                            <>
+                              Searched all {stats?.totalContracts ?? 0}{" "}
+                              contracts in{" "}
+                              {SCOPE_LABEL[facilityScope].toLowerCase()} for
+                              &ldquo;{searchTerm}&rdquo; — nothing matched. Try
+                              a different term or scope.
+                            </>
+                          )
+                        ) : (
+                          <>
+                            Try adjusting your scope, status, or type filters.
+                          </>
+                        )}
                       </p>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          setSearchQuery("")
+                          clearSearch()
                           setStatusFilter("all")
                           setTypeFilter("all")
                           setFacilityFilter("all")
@@ -410,6 +544,31 @@ export function ContractsListClient({
                 onRowSelectionChange={setRowSelection}
                 getRowId={(row) => row.id}
               />
+              {/* A silent cap is the bug; a labelled one is a feature.
+                  The facility dropdown narrows the LOADED PAGE only, so when
+                  it is active the rendered row count and the loaded row count
+                  are different numbers and the note has to name both. */}
+              {isTruncated && (
+                <p className="px-1 text-xs text-muted-foreground">
+                  {isFacilityNarrowed ? (
+                    <>
+                      Showing {shownCount} of the {loadedCount} most recently
+                      updated contracts loaded ({matchingTotal} match the
+                      current filters). The facility dropdown filters this
+                      loaded page only — search or filter to reach the rest.
+                    </>
+                  ) : (
+                    <>
+                      Showing the {loadedCount} most recently updated of{" "}
+                      {matchingTotal} matching contracts. The facility dropdown
+                      lists only the facilities on this page — search or filter
+                      to reach the rest.
+                    </>
+                  )}{" "}
+                  The portfolio totals above are computed over the whole scope,
+                  and the CSV export covers every match, not just this page.
+                </p>
+              )}
             </>
           )}
         </TabsContent>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import { useQuery } from "@tanstack/react-query"
 import type { ColumnDef } from "@tanstack/react-table"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { Badge } from "@/components/ui/badge"
@@ -14,7 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { formatCurrency, formatPercent } from "@/lib/formatting"
+import { Skeleton } from "@/components/ui/skeleton"
+import { formatCurrency, formatNumber, formatPercent } from "@/lib/formatting"
+import { queryKeys } from "@/lib/query-keys"
+import { getPriceDiscrepancySummary } from "@/lib/actions/reports"
 import {
   v0CogPriceVarianceBand,
   type V0CogVarianceBand,
@@ -150,47 +154,119 @@ const DISCREPANCY_TYPE_OPTIONS: { value: DiscrepancyType; label: string }[] = [
 
 // ─── Summary Cards ──────────────────────────────────────────────
 
-interface SummaryCardsProps {
-  total: number
-  overcharges: { count: number; amount: number }
-  undercharges: { count: number; amount: number }
-  estimatedSavings: number
+/**
+ * Facility-wide totals, straight from `getPriceDiscrepancySummary`.
+ *
+ * These four cards are NEVER reduced from the `discrepancies` prop: that
+ * array is a capped sample (`rowCap`, today 1,500 rows) and the cards
+ * quietly stopped counting at the cap — money and counts describing a
+ * slice of the facility while labelled "Total". The server aggregates
+ * over the whole qualifying set instead; do not reintroduce a client-side
+ * reducer beside them.
+ */
+type DiscrepancySummary = Awaited<
+  ReturnType<typeof getPriceDiscrepancySummary>
+>
+
+/**
+ * Caption for the row list when it shows fewer rows than the facility
+ * has. A silent cap is the bug; a labelled one is a feature. Returns
+ * null when the table is showing everything (or the total isn't known
+ * yet) so the UI stays quiet in the common case.
+ *
+ * The sample is not just short, it is BIASED: `getPriceDiscrepancies`
+ * orders by `variancePercent` DESCENDING (nulls last), so the retained
+ * rows are the largest OVERCHARGE percentages — undercharges (negative
+ * variance) and off-contract rows (null variance) are the first things
+ * dropped. Saying only "showing 1,500 of 4,182" would invite the reader
+ * to treat the visible rows as a representative slice, so the notice
+ * names the ordering out loud.
+ */
+export function buildDiscrepancySampleNotice(input: {
+  loaded: number
+  total: number | null | undefined
+  cap: number | null | undefined
+}): string | null {
+  const total = input.total ?? null
+  if (total == null || total <= input.loaded) return null
+  const capNote =
+    input.cap != null
+      ? ` This table and the CSV export are capped at ${formatNumber(input.cap)} rows.`
+      : " This table and the CSV export are capped."
+  return (
+    `Showing ${formatNumber(input.loaded)} of ${formatNumber(total)} discrepancies, ` +
+    `ordered by variance % descending — the largest overcharges first, with ` +
+    `undercharges and off-contract rows dropped first, so these rows are a ` +
+    `biased sample rather than a representative one. ` +
+    `The totals above cover all ${formatNumber(total)}.` +
+    capNote
+  )
+}
+
+/**
+ * Subtitle for the "Total Discrepancies" card. The three facility-wide
+ * buckets must reconcile in the reader's head:
+ *   overcharges.count + undercharges.count + withoutDollarImpact = total
+ * so when the leftover bucket is non-empty the card says how big it is
+ * instead of leaving the two dollar cards looking like they should add
+ * up to the total and quietly not doing so.
+ */
+export function buildDiscrepancyTotalSubtitle(
+  withoutDollarImpact: number | null | undefined,
+): string {
+  const leftover = withoutDollarImpact ?? 0
+  return leftover > 0
+    ? `facility-wide · ${formatNumber(leftover)} with no dollar impact`
+    : "facility-wide"
 }
 
 function SummaryCards({
-  total,
-  overcharges,
-  undercharges,
-  estimatedSavings,
-}: SummaryCardsProps) {
+  summary,
+  isLoading,
+}: {
+  summary: DiscrepancySummary | undefined
+  isLoading: boolean
+}) {
+  // Every subtitle names the scope explicitly. All four values AND the
+  // counts beside them come from the one facility-wide aggregate, so the
+  // scope word belongs on each card rather than only on the first —
+  // otherwise a reader can reasonably assume cards 2-4 follow the table's
+  // filters (they do not).
   const cards = [
     {
       title: "Total Discrepancies",
-      value: total.toString(),
+      value: summary ? formatNumber(summary.totalDiscrepancies) : null,
+      subtitle: summary
+        ? buildDiscrepancyTotalSubtitle(summary.withoutDollarImpact)
+        : undefined,
       icon: AlertTriangle,
       iconColor: "text-amber-500",
       iconBg: "bg-amber-50 dark:bg-amber-950",
     },
     {
       title: "Total Overcharges",
-      value: formatCurrency(overcharges.amount, true),
-      subtitle: `${overcharges.count} items`,
+      value: summary ? formatCurrency(summary.overcharges.amount, true) : null,
+      subtitle: summary
+        ? `${formatNumber(summary.overcharges.count)} items · facility-wide`
+        : undefined,
       icon: TrendingUp,
       iconColor: "text-red-500",
       iconBg: "bg-red-50 dark:bg-red-950",
     },
     {
       title: "Total Undercharges",
-      value: formatCurrency(Math.abs(undercharges.amount), true),
-      subtitle: `${undercharges.count} items`,
+      value: summary ? formatCurrency(summary.undercharges.amount, true) : null,
+      subtitle: summary
+        ? `${formatNumber(summary.undercharges.count)} items · facility-wide`
+        : undefined,
       icon: TrendingDown,
       iconColor: "text-green-500",
       iconBg: "bg-green-50 dark:bg-green-950",
     },
     {
       title: "Est. Savings",
-      value: formatCurrency(estimatedSavings, true),
-      subtitle: "if corrected",
+      value: summary ? formatCurrency(summary.estimatedSavings, true) : null,
+      subtitle: "facility-wide, if the overcharges are corrected",
       icon: DollarSign,
       iconColor: "text-blue-500",
       iconBg: "bg-blue-50 dark:bg-blue-950",
@@ -207,10 +283,23 @@ function SummaryCards({
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">{card.title}</p>
-                  <p className="text-2xl font-bold tracking-tight">
-                    {card.value}
-                  </p>
-                  {card.subtitle && (
+                  {card.value == null ? (
+                    isLoading ? (
+                      <Skeleton className="h-8 w-24" />
+                    ) : (
+                      <p
+                        className="text-2xl font-bold tracking-tight text-muted-foreground"
+                        title="Facility-wide total unavailable"
+                      >
+                        —
+                      </p>
+                    )
+                  ) : (
+                    <p className="text-2xl font-bold tracking-tight">
+                      {card.value}
+                    </p>
+                  )}
+                  {card.value != null && card.subtitle && (
                     <p className="text-xs text-muted-foreground">
                       {card.subtitle}
                     </p>
@@ -396,13 +485,28 @@ function buildColumns(): ColumnDef<
 
 interface PriceDiscrepancyTableProps {
   discrepancies: PriceDiscrepancy[]
+  /** Scope the summary read; matches the caller's row-query key. */
+  facilityId?: string
 }
 
 export function PriceDiscrepancyTable({
   discrepancies,
+  facilityId = "current",
 }: PriceDiscrepancyTableProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState<DiscrepancyType>("all")
+
+  // ── Facility-wide totals (NOT reduced from the capped rows) ──
+  // Keyed off the row query's key so every invalidation that refreshes
+  // the rows (prefix match) refreshes these totals too — the two must
+  // never describe different snapshots.
+  const { data: summary, isLoading: summaryLoading } = useQuery({
+    queryKey: [
+      ...queryKeys.reports.priceDiscrepancies(facilityId),
+      "summary",
+    ] as const,
+    queryFn: () => getPriceDiscrepancySummary(facilityId),
+  })
 
   // ── Compute enriched data ──────────────────────────────────
   const enriched = useMemo(
@@ -416,30 +520,11 @@ export function PriceDiscrepancyTable({
     [discrepancies]
   )
 
-  // ── Summary stats ──────────────────────────────────────────
-  const summary = useMemo(() => {
-    let overchargeCount = 0
-    let overchargeAmount = 0
-    let underchargeCount = 0
-    let underchargeAmount = 0
-
-    for (const d of enriched) {
-      if (d._type === "overcharge" && d._varianceDollar != null) {
-        overchargeCount++
-        overchargeAmount += d._varianceDollar * d.quantity
-      } else if (d._type === "undercharge" && d._varianceDollar != null) {
-        underchargeCount++
-        underchargeAmount += d._varianceDollar * d.quantity
-      }
-    }
-
-    return {
-      total: enriched.filter((d) => d._type !== "all").length,
-      overcharges: { count: overchargeCount, amount: overchargeAmount },
-      undercharges: { count: underchargeCount, amount: underchargeAmount },
-      estimatedSavings: overchargeAmount, // savings = eliminating overcharges
-    }
-  }, [enriched])
+  const sampleNotice = buildDiscrepancySampleNotice({
+    loaded: enriched.length,
+    total: summary?.totalDiscrepancies,
+    cap: summary?.rowCap,
+  })
 
   // ── Filtered data ──────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -470,12 +555,15 @@ export function PriceDiscrepancyTable({
   return (
     <div className="space-y-6">
       {/* ── Summary Cards ────────────────────────────────────── */}
-      <SummaryCards
-        total={summary.total}
-        overcharges={summary.overcharges}
-        undercharges={summary.undercharges}
-        estimatedSavings={summary.estimatedSavings}
-      />
+      <SummaryCards summary={summary} isLoading={summaryLoading} />
+
+      {/* ── Truncation notice (only when the rows are a sample) ─ */}
+      {sampleNotice && (
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          <FileWarning className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{sampleNotice}</span>
+        </div>
+      )}
 
       {/* ── Filter Bar ───────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3">
@@ -507,7 +595,11 @@ export function PriceDiscrepancyTable({
         </Select>
 
         <div className="ml-auto text-sm text-muted-foreground">
-          {filtered.length} of {enriched.length} discrepancies
+          {/* Both numbers describe the LOADED sample. The facility-wide
+              total is the cards' job and the notice above it — never
+              mix the two scopes in one sentence. */}
+          {formatNumber(filtered.length)} of {formatNumber(enriched.length)}{" "}
+          loaded rows
         </div>
       </div>
 
