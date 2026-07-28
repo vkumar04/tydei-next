@@ -40,8 +40,8 @@ import {
   adminSetUserActive,
   type AdminUserRow,
 } from "@/lib/actions/admin/users"
-import { adminGetFacilities } from "@/lib/actions/admin/facilities"
-import { adminGetVendors } from "@/lib/actions/admin/vendors"
+import { adminGetFacilityOptions } from "@/lib/actions/admin/facilities"
+import { adminGetVendorOptions } from "@/lib/actions/admin/vendors"
 import type { UserRole } from "@/lib/generated/prisma/client"
 import { queryKeys } from "@/lib/query-keys"
 
@@ -57,6 +57,10 @@ export function UserTable() {
   // ─── Add dialog state ───────────────────────────────────────────
   const [addOpen, setAddOpen] = useState(false)
   const [addStep, setAddStep] = useState(1)
+  // Access-picker filters. Default to hiding tenants that cannot hold users —
+  // in production that is ~199 of 201 vendors.
+  const [accessSearch, setAccessSearch] = useState("")
+  const [assignableOnly, setAssignableOnly] = useState(true)
   const [addFormData, setAddFormData] = useState<Record<string, string>>({})
   const [selectedFacilities, setSelectedFacilities] = useState<string[]>([])
   const [selectedVendors, setSelectedVendors] = useState<string[]>([])
@@ -74,14 +78,19 @@ export function UserTable() {
     queryFn: () => adminGetUsers(filters),
   })
 
-  const { data: facilityData } = useQuery({
-    queryKey: queryKeys.admin.facilities({}),
-    queryFn: () => adminGetFacilities({}),
+  // UNPAGINATED, deliberately. These used adminGetFacilities({}) /
+  // adminGetVendors({}), which default to pageSize 20 — so the Access picker
+  // silently showed only the first 20 tenants alphabetically. With 201 vendors
+  // in production and the only assignable one at rank 169, creating a vendor
+  // user was impossible (Charles 2026-07-28). A picker must never paginate.
+  const { data: facilityOptionsData } = useQuery({
+    queryKey: queryKeys.admin.facilityOptions(),
+    queryFn: () => adminGetFacilityOptions(),
   })
 
-  const { data: vendorData } = useQuery({
-    queryKey: queryKeys.admin.vendors({}),
-    queryFn: () => adminGetVendors({}),
+  const { data: vendorOptionsData } = useQuery({
+    queryKey: queryKeys.admin.vendorOptions(),
+    queryFn: () => adminGetVendorOptions(),
   })
 
   // ─── Mutations ──────────────────────────────────────────────────
@@ -125,8 +134,15 @@ export function UserTable() {
   const isVendorRole = addRole === "vendor"
   /** Platform admins aren't tenant-scoped, so there is nothing to assign. */
   const needsAccessStep = addRole !== "admin"
-  const facilityOptions = facilityData?.facilities ?? []
-  const vendorOptions = vendorData?.vendors ?? []
+  const facilityOptions = facilityOptionsData ?? []
+  const vendorOptions = vendorOptionsData ?? []
+  const accessOptions = isVendorRole ? vendorOptions : facilityOptions
+  // Derived during render, not mirrored into state (CLAUDE.md).
+  const visibleAccessOptions = accessOptions.filter((o) => {
+    if (assignableOnly && !o.canHaveUsers) return false
+    const q = accessSearch.trim().toLowerCase()
+    return !q || o.name.toLowerCase().includes(q)
+  })
   const selectedAccessIds = isVendorRole ? selectedVendors : selectedFacilities
 
   const step1Complete =
@@ -361,9 +377,41 @@ export function UserTable() {
                   {isVendorRole ? "Vendors" : "Facilities"}{" "}
                   <span className="text-destructive">*</span>
                 </Label>
+                {/* The full catalog is ~200 vendors, nearly all of them without
+                    an Organization and therefore unselectable. Searching is the
+                    only practical way to reach a specific one; the "assignable
+                    only" default hides the noise without hiding the truth,
+                    since the count below always reports both numbers. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    value={accessSearch}
+                    onChange={(e) => setAccessSearch(e.target.value)}
+                    placeholder={`Search ${isVendorRole ? "vendors" : "facilities"}…`}
+                    className="h-8 max-w-xs"
+                    aria-label={`Search ${isVendorRole ? "vendors" : "facilities"}`}
+                  />
+                  <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
+                    <Checkbox
+                      checked={assignableOnly}
+                      onCheckedChange={(v) => setAssignableOnly(v === true)}
+                    />
+                    Only those that can have users
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Showing {visibleAccessOptions.length} of {accessOptions.length}
+                  {" · "}
+                  {accessOptions.filter((o) => o.canHaveUsers).length} can have
+                  users
+                </p>
                 <ScrollArea className="h-64 rounded-md border p-3">
                   <div className="space-y-2">
-                    {(isVendorRole ? vendorOptions : facilityOptions).map((o) => {
+                    {visibleAccessOptions.length === 0 && (
+                      <p className="p-2 text-sm text-muted-foreground">
+                        No {isVendorRole ? "vendors" : "facilities"} match.
+                      </p>
+                    )}
+                    {visibleAccessOptions.map((o) => {
                       // Without an Organization there is nothing for a Member
                       // row to point at, so the account could never sign in.
                       // Disable with the reason visible rather than hiding the

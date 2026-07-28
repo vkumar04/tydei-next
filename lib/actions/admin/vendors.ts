@@ -31,7 +31,7 @@ export async function adminGetVendors(input: {
   status?: string
   page?: number
   pageSize?: number
-}): Promise<{ vendors: AdminVendorRow[]; total: number }> {
+}): Promise<{ vendors: AdminVendorRow[]; total: number; activeTotal: number }> {
   await requireAdmin()
   const { search, status, page = 1, pageSize = 20 } = input
 
@@ -39,7 +39,11 @@ export async function adminGetVendors(input: {
   if (search) where.name = { contains: search, mode: "insensitive" }
   if (status) where.status = status
 
-  const [vendors, total] = await Promise.all([
+  // `activeTotal` is counted server-side for the same reason `total` is: the
+  // stat cards previously derived both from the returned PAGE, so with
+  // pageSize 20 they read "20 Total / 20 Active" against 201 real vendors
+  // (Charles 2026-07-28).
+  const [vendors, total, activeTotal] = await Promise.all([
     prisma.vendor.findMany({
       where,
       include: { _count: { select: { contracts: true, divisions: true } } },
@@ -48,6 +52,7 @@ export async function adminGetVendors(input: {
       take: pageSize,
     }),
     prisma.vendor.count({ where }),
+    prisma.vendor.count({ where: { ...where, status: "active" } }),
   ])
 
   return serialize({
@@ -68,6 +73,7 @@ export async function adminGetVendors(input: {
       createdAt: v.createdAt.toISOString(),
     })),
     total,
+    activeTotal,
   })
 }
 
@@ -190,4 +196,43 @@ export async function adminDeleteVendor(id: string) {
     entityId: id,
     metadata: { name: target?.name },
   })
+}
+
+export interface TenantOption {
+  id: string
+  name: string
+  /** False when the tenant has no Organization, so it cannot have users. */
+  canHaveUsers: boolean
+}
+
+/**
+ * Every vendor, unpaginated, for the user-creation Access picker.
+ *
+ * Charles 2026-07-28: "when you pick vendor it does not let the vendors be
+ * accurate and it does not let you scroll the vendor name list" — creating a
+ * vendor user was impossible while facility users worked fine.
+ *
+ * The picker called `adminGetVendors({})`, which defaults to `pageSize: 20`, so
+ * it only ever received the first 20 vendors ALPHABETICALLY. Production has 201
+ * vendors of which exactly two have an Organization and can therefore hold
+ * users: "asfd" (rank 19) and "Stryker" (rank 169). The picker showed 20 rows —
+ * 19 of them disabled "no organization yet" — and Stryker, the only real target,
+ * was never in the list. Scrolling dead-ended at 20 because 20 was all there was.
+ * Facilities were unaffected purely because there are only three of them, which
+ * is why the bug looked like "vendor is broken, facility works".
+ *
+ * A picker must not paginate. This returns id/name/canHaveUsers only, so the
+ * full catalog stays a small payload.
+ */
+export async function adminGetVendorOptions(): Promise<TenantOption[]> {
+  await requireAdmin()
+  const vendors = await prisma.vendor.findMany({
+    select: { id: true, name: true, organizationId: true },
+    orderBy: { name: "asc" },
+  })
+  return vendors.map((v) => ({
+    id: v.id,
+    name: v.name,
+    canHaveUsers: v.organizationId !== null,
+  }))
 }
