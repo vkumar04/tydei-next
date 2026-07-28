@@ -43,7 +43,7 @@ export interface ConnectionsTabProps {
   onSetInviteFacilityDialogOpen: (open: boolean) => void
   newInviteFacilityName: string
   /** Typeahead matches for the invite dialog (see the note beside the input). */
-  inviteMatches: { id: string; name: string }[]
+  inviteMatches: { id: string; name: string; related: boolean }[]
   selectedFacilityId: string | null
   onSetSelectedFacilityId?: (id: string | null) => void
   onSetNewInviteFacilityName: (name: string) => void
@@ -144,7 +144,14 @@ export function ConnectionsTab({
                               onSetSelectedFacilityId?.(m.id)
                             }}
                           >
-                            {m.name}
+                            <span className="flex items-center justify-between gap-2">
+                              {m.name}
+                              {m.related && (
+                                <span className="shrink-0 text-xs text-muted-foreground">
+                                  you have data with this facility
+                                </span>
+                              )}
+                            </span>
                           </button>
                         </li>
                       ))}

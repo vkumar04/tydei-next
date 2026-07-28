@@ -52,6 +52,15 @@ export const adminCreateUserSchema = z.object({
   // get facilityIds, vendor users vendorIds, platform admins neither.
   facilityIds: z.array(z.string()).default([]),
   vendorIds: z.array(z.string()).default([]),
+  // Settings/Users access tier for the Member rows this create writes.
+  // Defaults to LEAST privilege: `Member.accessTier` is `@default(super)` in the
+  // schema (a backfill default for members predating the tier), so omitting it
+  // here silently provisioned every admin-created user as a super — full mutate
+  // rights plus members.manage. Charles 2026-07-28 sweep.
+  // `.optional()` rather than `.default()`: z.infer gives the OUTPUT type, so a
+  // default would make this field REQUIRED for every existing caller. The action
+  // applies the least-privilege fallback itself (`input.accessTier ?? "user"`).
+  accessTier: z.enum(["super", "advanced", "user"]).optional(),
   // NOTE: `password` was REMOVED 2026-07-26. An admin setting someone else's
   // password means communicating it out of band and knowing it afterwards.
   // The account is created with no credential and the invite email carries a

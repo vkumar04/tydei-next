@@ -27,7 +27,16 @@ export const surgeonComparisonColumns: ColumnDef<SurgeonComparisonRow>[] = [
   {
     accessorKey: "name",
     header: "Surgeon",
-    meta: { filterVariant: "select", filterLabel: "Surgeon" },
+    // "text", NOT "select". DataTable assigns the filterFn from this variant
+    // (data-table.tsx:85-99): "select" maps to `arrIncludesSome`, which does
+    // `filterValue.some(...)`. The table also passes `searchKey="name"`, and the
+    // search box sets a plain STRING as this column's filter value — so
+    // `arrIncludesSome` called `.some` on a string and threw
+    // `TypeError: filterValue.some is not a function` inside getFilteredRowModel,
+    // which runs during render. One character typed into "Search surgeon…" took
+    // the whole Reports page down to the error boundary. Verified against the
+    // installed @tanstack/table-core. Charles 2026-07-28 sweep.
+    meta: { filterVariant: "text", filterLabel: "Surgeon" },
     cell: ({ row }) => (
       <span className="font-medium">{row.original.name}</span>
     ),
