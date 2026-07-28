@@ -425,6 +425,12 @@ export async function removeConnection(connectionId: string): Promise<void> {
 export interface ConnectionInviteTarget {
   id: string
   name: string
+  /**
+   * True when the caller already has a real tie to this counterparty (contract,
+   * COG history, pending submission, or accepted connection). Surfaced so the
+   * legitimate target is one keystroke away — NOT a permission check.
+   */
+  related: boolean
 }
 
 /**
@@ -460,21 +466,61 @@ export async function searchConnectionTargets(
   const q = query.trim()
   if (q.length < 2) return []
 
+  // Search stays open across the whole counterparty catalog, and that is a
+  // deliberate reversal of my own earlier suggestion to restrict it to
+  // already-related facilities. Two reasons that would have been wrong:
+  //
+  //   1. It breaks the primary use case. You invite a facility precisely
+  //      BECAUSE you have no relationship yet — a vendor onboarding a newly
+  //      signed customer has no contract, no COG history and no connection, so
+  //      a related-only filter would make the common case impossible.
+  //   2. It is not a boundary anyway. `vendorRelatedFacilityWhere` documents
+  //      itself as "partly self-satisfiable ... treat it as ergonomics, never
+  //      as a boundary" — a vendor can name any facility on a PendingContract
+  //      and thereby add it to its own related set.
+  //
+  // So relatedness is used for RANKING, not filtering: real counterparties sort
+  // first and are badged, which makes the legitimate path frictionless without
+  // pretending to be a permission gate. Enumeration is bounded by the 2-char
+  // minimum and the cap of 10, and no total is returned.
   const select = { id: true, name: true } as const
   const where = { name: { contains: q, mode: "insensitive" as const } }
-  const rows =
-    identity.kind === "vendor"
-      ? await prisma.facility.findMany({
-          where,
-          select,
-          orderBy: { name: "asc" },
-          take: 10,
-        })
-      : await prisma.vendor.findMany({
-          where,
-          select,
-          orderBy: { name: "asc" },
-          take: 10,
-        })
-  return rows
+
+  if (identity.kind === "vendor") {
+    const { vendorRelatedFacilityWhere } = await import(
+      "@/lib/vendors/related-facilities"
+    )
+    const [matches, related] = await Promise.all([
+      prisma.facility.findMany({ where, select, orderBy: { name: "asc" }, take: 10 }),
+      prisma.facility.findMany({
+        where: { AND: [where, vendorRelatedFacilityWhere(identity.vendorId)] },
+        select: { id: true },
+      }),
+    ])
+    const relatedIds = new Set(related.map((r) => r.id))
+    return matches
+      .map((m) => ({ ...m, related: relatedIds.has(m.id) }))
+      .sort((a, b) => Number(b.related) - Number(a.related) || a.name.localeCompare(b.name))
+  }
+
+  // Facility searching vendors: the Vendor catalog is already global (resolve.ts
+  // enumerates it on every import), so there is nothing extra to withhold here.
+  const vendors = await prisma.vendor.findMany({
+    where,
+    select,
+    orderBy: { name: "asc" },
+    take: 10,
+  })
+  const relatedVendorIds = new Set(
+    (
+      await prisma.contract.findMany({
+        where: { facilityId: identity.facilityId },
+        select: { vendorId: true },
+        distinct: ["vendorId"],
+      })
+    ).map((c) => c.vendorId),
+  )
+  return vendors
+    .map((v) => ({ ...v, related: relatedVendorIds.has(v.id) }))
+    .sort((a, b) => Number(b.related) - Number(a.related) || a.name.localeCompare(b.name))
 }

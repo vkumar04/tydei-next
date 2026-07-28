@@ -352,6 +352,19 @@ export async function adminCreateUser(input: AdminCreateUserInput) {
           organizationId,
           userId: u.id,
           role: "member",
+          // Set the tier EXPLICITLY. `Member.accessTier` is `@default(super)`,
+          // and the schema comment says why: "Defaults to `super` so existing
+          // members keep full access until explicitly demoted" — that default
+          // exists to backfill members who predate the tier, NOT to grant a
+          // tier to someone being created now. Because this createMany omitted
+          // the field, every user an admin provisioned silently landed at the
+          // HIGHEST tier: `getCurrentAccessContext` reads accessTier, so they
+          // passed requireCanMutate(), requireCan("settings.manage") and
+          // requireCan("members.manage") — full mutate rights plus the ability
+          // to re-tier other members. The create form collects no tier at all,
+          // so there was not even a choice being ignored. Least privilege by
+          // default; the caller opts up. Charles 2026-07-28 sweep.
+          accessTier: input.accessTier ?? "user",
         })),
         skipDuplicates: true,
       })

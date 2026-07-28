@@ -162,7 +162,17 @@ describe("the Access step actually grants access", () => {
         "cannot load a portal at all",
     ).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: [{ organizationId: "org-1", userId: "user-1", role: "member" }],
+        // accessTier is written EXPLICITLY as least-privilege. Member.accessTier
+        // is @default(super) in the schema, so omitting it silently provisioned
+        // every admin-created user as a super (Charles 2026-07-28 sweep).
+        data: [
+          {
+            organizationId: "org-1",
+            userId: "user-1",
+            role: "member",
+            accessTier: "user",
+          },
+        ],
       }),
     )
   })
@@ -189,7 +199,14 @@ describe("the Access step actually grants access", () => {
     })
     expect(memberCreateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: [{ organizationId: "org-9", userId: "user-1", role: "member" }],
+        data: [
+          {
+            organizationId: "org-9",
+            userId: "user-1",
+            role: "member",
+            accessTier: "user",
+          },
+        ],
       }),
     )
     // Facility assignments are a facility-side concept only.
