@@ -140,6 +140,14 @@ export async function sendConnectionInvite(input: {
   fromName?: string
   toEmail: string
   toName: string
+  /**
+   * Resolved id of the counterparty, from the dialog's typeahead
+   * (`searchConnectionTargets`). Preferred over `toName`: a name is ambiguous
+   * — "Lighthouse" matches two facilities — and picking the wrong one creates a
+   * connection with the wrong tenant. Falls back to exact name matching when
+   * absent so existing callers keep working.
+   */
+  toId?: string
   message?: string
 }): Promise<ConnectionData> {
   const session = await requireAuth()
@@ -170,21 +178,35 @@ export async function sendConnectionInvite(input: {
     // `contact@<name>.com` email that almost never existed, so every invite
     // threw "Vendor not found" (Charles: "who does this invite go to?").
     const trimmedName = input.toName?.trim() ?? ""
-    const vendor = await prisma.vendor.findFirst({
-      where: {
-        OR: [
-          ...(trimmedName
-            ? [{ name: { equals: trimmedName, mode: "insensitive" as const } }]
-            : []),
-          ...(input.toEmail ? [{ contactEmail: input.toEmail }] : []),
-        ],
-      },
-    })
+    // Prefer the id the typeahead resolved — a name alone is ambiguous.
+    // auth-scope-scanner-skip: the invite TARGET is intentionally unscoped — an
+    // invite exists precisely to reach a counterparty you have no relationship
+    // with yet, so there is no ownership predicate to apply. Safety comes from
+    // three places instead: (1) the invite's ORIGIN is derived from the session
+    // via resolveCallerOrgIdentity and can never be supplied from the wire
+    // (Charles audit Iter4-B2); (2) the row is created `pending`, which grants
+    // nothing; (3) acceptConnection is recipient-only, so the sender cannot
+    // accept its own invite and manufacture an accepted connection. Changing
+    // any of those three makes this line unsafe.
+    const vendor = input.toId
+      // auth-scope-scanner-skip: invite target is unscoped BY DESIGN — see the
+      // three-part justification directly above.
+      ? await prisma.vendor.findUnique({ where: { id: input.toId } })
+      : await prisma.vendor.findFirst({
+          where: {
+            OR: [
+              ...(trimmedName
+                ? [{ name: { equals: trimmedName, mode: "insensitive" as const } }]
+                : []),
+              ...(input.toEmail ? [{ contactEmail: input.toEmail }] : []),
+            ],
+          },
+        })
     vendorId = vendor?.id ?? ""
     vendorName = vendor?.name ?? trimmedName
     if (!vendorId) {
       throw new Error(
-        `No vendor named "${trimmedName || input.toEmail}" is on the platform yet. Ask them to register, then resend the invite.`,
+        `No vendor matches "${trimmedName || input.toEmail}" exactly. Pick one from the suggestions as you type — the name has to match in full, so a partial name like "Lighthouse" will not resolve on its own. If they are genuinely not on the platform yet, ask them to register and resend.`,
       )
     }
   } else {
@@ -194,7 +216,21 @@ export async function sendConnectionInvite(input: {
     // collects a facility name, not an email (previously this only matched a
     // fabricated `admin@<name>.com` member email that almost never existed).
     const trimmedName = input.toName?.trim() ?? ""
-    const facility = await prisma.facility.findFirst({
+    // Prefer the id the typeahead resolved — see the note on `toId`.
+    // auth-scope-scanner-skip: the invite TARGET is intentionally unscoped — an
+    // invite exists precisely to reach a counterparty you have no relationship
+    // with yet, so there is no ownership predicate to apply. Safety comes from
+    // three places instead: (1) the invite's ORIGIN is derived from the session
+    // via resolveCallerOrgIdentity and can never be supplied from the wire
+    // (Charles audit Iter4-B2); (2) the row is created `pending`, which grants
+    // nothing; (3) acceptConnection is recipient-only, so the sender cannot
+    // accept its own invite and manufacture an accepted connection. Changing
+    // any of those three makes this line unsafe.
+    const facility = input.toId
+      // auth-scope-scanner-skip: invite target is unscoped BY DESIGN — see the
+      // three-part justification directly above.
+      ? await prisma.facility.findUnique({ where: { id: input.toId } })
+      : await prisma.facility.findFirst({
       where: {
         OR: [
           ...(trimmedName
@@ -216,7 +252,7 @@ export async function sendConnectionInvite(input: {
     facilityName = facility?.name ?? trimmedName
     if (!facilityId) {
       throw new Error(
-        `No facility named "${trimmedName || input.toEmail}" is on the platform yet. Ask them to register, then resend the invite.`,
+        `No facility matches "${trimmedName || input.toEmail}" exactly. Pick one from the suggestions as you type — the name has to match in full, so a partial name like "Lighthouse" will not resolve on its own. If they are genuinely not on the platform yet, ask them to register and resend.`,
       )
     }
   }
@@ -384,4 +420,61 @@ export async function removeConnection(connectionId: string): Promise<void> {
   await requireCanMutate()
   await assertCallerOnConnection(session.user.id, connectionId)
   await prisma.connection.delete({ where: { id: connectionId } })
+}
+
+export interface ConnectionInviteTarget {
+  id: string
+  name: string
+}
+
+/**
+ * Typeahead for the "Invite to Connect" dialog.
+ *
+ * Charles 2026-07-28: "invites not working... I like that on the facility side to
+ * send an invite they just need to use an alias name instead of an email."
+ *
+ * The name-based flow is the right UX; the matching behind it was not.
+ * `sendConnectionInvite` resolved the counterparty with exact case-insensitive
+ * NAME EQUALITY, so "Lighthouse" threw `No facility named "Lighthouse" is on the
+ * platform yet` even though "Lighthouse Surgical Center" exists. Every
+ * abbreviation, extra word or stray character failed.
+ *
+ * A looser string match is NOT the fix. "Lighthouse" matches BOTH "Lighthouse
+ * Surgical Center" and "Lighthouse Community Hospital" — a `contains` fallback
+ * would have silently connected the vendor to whichever row Postgres returned
+ * first, i.e. a cross-tenant connection chosen by accident. The caller has to
+ * pick a specific row, so this returns candidates and the dialog sends an id.
+ *
+ * Returns the OPPOSITE side from the caller: a vendor searches facilities, a
+ * facility searches vendors. Disclosure is deliberately bounded — a query of at
+ * least two characters, substring-matched, capped at 10 — so this narrows to
+ * what the user is already looking for rather than dumping either catalog.
+ */
+export async function searchConnectionTargets(
+  query: string,
+): Promise<ConnectionInviteTarget[]> {
+  const session = await requireAuth()
+  const identity = await resolveCallerOrgIdentity(session.user.id)
+  if (!identity) return []
+
+  const q = query.trim()
+  if (q.length < 2) return []
+
+  const select = { id: true, name: true } as const
+  const where = { name: { contains: q, mode: "insensitive" as const } }
+  const rows =
+    identity.kind === "vendor"
+      ? await prisma.facility.findMany({
+          where,
+          select,
+          orderBy: { name: "asc" },
+          take: 10,
+        })
+      : await prisma.vendor.findMany({
+          where,
+          select,
+          orderBy: { name: "asc" },
+          take: 10,
+        })
+  return rows
 }

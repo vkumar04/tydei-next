@@ -34,7 +34,7 @@ export function useConnections(
 
 export function useSendConnectionInvite(entityId: string) {
   return useToastMutation(
-    (input: { toEmail: string; toName: string; message?: string }) =>
+    (input: { toEmail: string; toName: string; toId?: string; message?: string }) =>
       sendConnectionInvite(input),
     { invalidate: [queryKeys.settings.connections(entityId)] },
   )
