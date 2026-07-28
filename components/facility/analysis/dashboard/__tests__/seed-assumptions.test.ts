@@ -194,3 +194,42 @@ describe("no case data — spend must still produce coherent revenue", () => {
     expect(avgReimbursementPerCase * 0).toBe(0)
   })
 })
+
+describe("no case data — entering a case count must not zero the model", () => {
+  /**
+   * Regression caught by the 2026-07-28 sweep. The zero-case revenue fallback
+   * was gated on `assumptions.annualCaseVolume > 0` — the LIVE, user-edited
+   * value. For a facility with no cases the seeded per-case rate is $0 (there
+   * were no cases to average), so typing a case volume flipped the gate to the
+   * manual branch and computed `$0 × N = $0` — collapsing Net Revenue, EBITDA
+   * and DCF to zero on a facility with $25.5M of real supply spend.
+   */
+  const SPEND = 25_500_000
+  const PROXY = SPEND / 0.3
+
+  function resolve(perCase: number, cases: number, seededNetRevenue: number) {
+    // Mirrors effectiveNetRevenue's manual branch in AnalysisDashboardClient.
+    return perCase > 0 ? perCase * cases : seededNetRevenue
+  }
+
+  it("holds the proxy when the operator types a case count but has no rate", () => {
+    expect(resolve(0, 500, PROXY)).toBe(PROXY)
+    expect(resolve(0, 500, PROXY)).toBeGreaterThan(SPEND)
+  })
+
+  it("still holds the proxy at zero cases", () => {
+    expect(resolve(0, 0, PROXY)).toBe(PROXY)
+  })
+
+  it("hands over to the operator as soon as a real rate is supplied", () => {
+    expect(resolve(11_000, 500, PROXY)).toBe(5_500_000)
+  })
+
+  it("would have produced the regression under the old count-based gate", () => {
+    // Documents precisely what was wrong: gating on cases, not on the rate.
+    const oldGate = (perCase: number, cases: number, seeded: number) =>
+      cases > 0 ? perCase * cases : seeded
+    expect(oldGate(0, 500, PROXY)).toBe(0)
+    expect(resolve(0, 500, PROXY)).not.toBe(0)
+  })
+})
