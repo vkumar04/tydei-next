@@ -200,7 +200,19 @@ export function AnalysisDashboardClient({
   // with no COG data the page must not invent a facility (Charles 2026-07-27).
   const [sampleMode, setSampleMode] = useState(false)
   // No live COG, no uploaded file, and no opt-in → there is nothing to model.
-  const showEmptyState = !override && !data.hasData && !sampleMode
+  // Keys off effectiveData (the override when one is installed), NOT `data`.
+  // The two gates disagreed: this one read the LIVE-COG `data.hasData` while
+  // model.ts:190 reads `effectiveData.hasData` for the breakdown source. An
+  // uploaded file whose rows all parse non-positive aggregates to
+  // `hasData: false` (uploaded-spend-to-analysis-data.ts:105 `totalSpend > 0`)
+  // but is still installed as the override — so the empty state was suppressed
+  // by `!override` while the breakdown fell through to the fabricated
+  // CATEGORY_SEED / VENDOR_SEED ortho mix (Medtronic 35.56%, Zimmer Biomet
+  // 22.99%, …), rendered under the subtitle "Modeled from uploaded file X."
+  // with Export enabled. Fabricated vendors under an explicit provenance claim
+  // is the exact defect the empty-COG work removed. One source of truth now.
+  // 2026-07-28 sweep.
+  const showEmptyState = !effectiveData.hasData && !sampleMode
 
   const [assumptions, setAssumptions] = useState<FacilityModelAssumptions>(() =>
     seedAssumptions(data),
@@ -410,8 +422,20 @@ export function AnalysisDashboardClient({
 
           <CurrentStateCards current={model.prospective.current} />
 
+      {/* `assumptions`, NOT `effectiveAssumptions`. The card's `set` does
+          `onChange({ ...assumptions, [key]: value })`, so whatever object it is
+          handed gets written straight back into source state — passing the
+          DERIVED one meant editing any field silently persisted the computed
+          `effectiveNetRevenue` into `assumptions.netRevenue`, mirroring a
+          derived value into its own source (the "derive, don't mirror" rule).
+          It was load-bearing: while the zero-case gate produced $0, one edit
+          wrote that 0 into the seed, so the proxy fallback then returned 0 too
+          and the collapse became STICKY — unrecoverable through that field,
+          since neither reset control renders on a live-COG facility. The card
+          never reads `assumptions.netRevenue`; it displays the effective figure
+          via the `revenue` prop below. 2026-07-28 sweep. */}
       <FinancialAssumptionsCard
-        assumptions={effectiveAssumptions}
+        assumptions={assumptions}
         onChange={setAssumptions}
         revenue={{
           mode: revenueMode,
