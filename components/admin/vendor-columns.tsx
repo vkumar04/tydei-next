@@ -27,14 +27,59 @@ export function getAdminVendorColumns(
       ),
     },
     {
-      accessorKey: "tier",
-      header: "Category",
-      meta: { filterVariant: "select", filterLabel: "Category" },
-      cell: ({ row }) => (
-        <Badge variant="outline" className="capitalize">
-          {row.original.tier}
-        </Badge>
-      ),
+      id: "tier",
+      /**
+       * Charles 2026-07-28: the same defect as the Status column below, one
+       * column over — a schema default rendered as though somebody chose it.
+       *
+       * Verified before changing anything, not assumed. `Vendor.tier` is
+       * `VendorTier @default(standard)` (prisma/schema.prisma:612) and NO
+       * application write path produces anything else:
+       *   lib/actions/vendors.ts createVendor  writes `tier: data.tier`, and all
+       *                                        three call sites hard-code
+       *                                        "standard" (cog-import-dialog,
+       *                                        new-contract-client,
+       *                                        _basic-information-card — plus
+       *                                        settings/tabs/vendors-tab, which
+       *                                        appends `tier: "standard"`).
+       *   lib/actions/vendors.ts updateVendor  writes tier only when supplied;
+       *                                        no caller supplies it.
+       *   admin{Create,Update}Vendor           spread the form input, and the
+       *                                        admin form has no tier control.
+       *   lib/vendors/resolve.ts               auto-mints vendors from imports
+       *                                        and never touches tier.
+       * Production agrees: 199 of 200 vendors are "standard". The lone
+       * "premium" is Stryker, written by hand on 2026-04-07, before any of the
+       * paths above existed.
+       *
+       * So the badge was labelling every row with an unsettable default, under
+       * the header "Category" — which `VendorTier` (standard | premium) has
+       * never been. Worse was the faceted select filter beside it: its options
+       * come from the rows the CLIENT holds, i.e. one server page, and page 1
+       * of production is 20 standard vendors — a filter offering exactly one
+       * choice that matches every row, which is the shape just removed from
+       * Status. `filterVariant: "none"` for that reason.
+       *
+       * What survives is the part that carries information: an explicit
+       * promotion off the default. Everything else reads "—" rather than
+       * dressing `@default(standard)` up as a decision.
+       */
+      accessorFn: (v) => (v.tier === "standard" ? "" : v.tier),
+      header: "Tier",
+      meta: { filterVariant: "none" },
+      cell: ({ row }) =>
+        row.original.tier === "standard" ? (
+          <span
+            className="text-muted-foreground"
+            title="Standard is the schema default. No screen in the app sets a vendor tier, so this is “never promoted”, not “reviewed and left standard”."
+          >
+            &mdash;
+          </span>
+        ) : (
+          <Badge variant="default" className="capitalize">
+            {row.original.tier}
+          </Badge>
+        ),
     },
     {
       id: "status",

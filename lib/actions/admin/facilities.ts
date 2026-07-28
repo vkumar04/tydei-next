@@ -27,6 +27,13 @@ export interface AdminFacilityRow {
 
 // ─── List Facilities ────────────────────────────────────────────
 
+/** Mirrors ADMIN_TENANT_PAGE_SIZE in lib/actions/admin/vendors.ts — a
+ *  `"use server"` file cannot export a non-async binding, so the two consoles
+ *  each own their copy. The client never sends a pageSize; it reads this back
+ *  off the response. */
+const ADMIN_TENANT_PAGE_SIZE = 20
+const ADMIN_TENANT_MAX_PAGE_SIZE = 200
+
 export async function adminGetFacilities(input: {
   search?: string
   status?: string
@@ -34,31 +41,70 @@ export async function adminGetFacilities(input: {
   pageSize?: number
 }): Promise<{
   facilities: AdminFacilityRow[]
-  /** Facilities matching the filter — NOT the length of `facilities`. */
+  /**
+   * Facilities matching the search — NOT the length of `facilities`. The
+   * denominator of the page range, and the only number here that moves when
+   * the operator types.
+   */
   total: number
-  /** Of those, the ones whose `status` is "active". */
+  /**
+   * The console's whole scope: every facility, ignoring the search. THIS is the
+   * "Total Facilities" card, and the scope every stat below shares.
+   */
+  catalogTotal: number
+  /** Of the catalog, the ones whose `status` is "active". Whole-scope. */
   activeTotal: number
-  /** Members of those facilities' Organizations — the `userCount` column, summed. */
+  /** Members of the catalog's Organizations — the `userCount` column, summed. */
   userTotal: number
-  /** Contracts belonging to those facilities — the `contractCount` column, summed. */
+  /** Contracts belonging to the catalog — the `contractCount` column, summed. */
   contractTotal: number
+  /** The page actually served, clamped into range — not the one asked for. */
+  page: number
+  pageSize: number
+  pageCount: number
+  /** The search actually applied, so the caption can describe THESE rows. */
+  search: string
 }> {
   await requireAdmin()
-  const { search, status, page = 1, pageSize = 20 } = input
+  const search = input.search?.trim() ?? ""
+  const status = input.status
+  const pageSize = Math.min(
+    Math.max(Math.trunc(input.pageSize ?? ADMIN_TENANT_PAGE_SIZE), 1),
+    ADMIN_TENANT_MAX_PAGE_SIZE,
+  )
 
-  const where: Prisma.FacilityWhereInput = {}
-  if (search) where.name = { contains: search, mode: "insensitive" }
-  if (status) where.status = status
+  // Base filter (everything but the search) vs. the searched filter — see
+  // adminGetVendors. `catalogTotal` is the console's whole scope, `total` the
+  // subset the search matched; conflating them makes the caption's "(of N
+  // total)" quietly agree with whatever is typed in the box.
+  const baseWhere: Prisma.FacilityWhereInput = {}
+  if (status) baseWhere.status = status
+
+  const where: Prisma.FacilityWhereInput = search
+    ? { ...baseWhere, name: { contains: search, mode: "insensitive" } }
+    : baseWhere
 
   /**
-   * EVERY total below is computed over `where` — the whole filtered facility
-   * set — and none of them over the returned page. See adminGetVendors for the
-   * incident: a stat row that mixes one server-side total with page-derived
-   * neighbours reads as authoritative while three of its four numbers are the
-   * size of `take: 20`.
+   * EVERY stat below is computed over `baseWhere` — the console's whole scope —
+   * and none of them over the returned page OR over the search box. See
+   * adminGetVendors for both rounds of the incident: first a stat row summed
+   * over `take: 20`, then the same row computed inside the search, so typing a
+   * vendor name rewrote four cards labelled "Total …" to describe the one row
+   * that matched. The page range is where a search-scoped count belongs.
    *
-   * One `groupBy` carries two cards: the totals sum to the row count and the
+   * One `groupBy` carries two cards: the totals sum to the catalog and the
    * "active" bucket is the Active card, so no separate `count()` is needed.
+   *
+   * The Active card is NOT the vendor console's dropped "Active" card in
+   * disguise, and was re-checked on 2026-07-28 before being kept.
+   * `Facility.status` is `@default("active")` like `Vendor.status`, but unlike
+   * it the column has a real writer: lib/billing/stripe-webhook.ts flips a
+   * facility to "inactive" on `customer.subscription.deleted` and on any
+   * non-active subscription update. So a facility reading "Inactive" means
+   * something specific (its subscription lapsed), which is why the card and the
+   * Status column both survive. What it does NOT mean is "someone reviewed
+   * this": a facility with no Stripe subscription at all is born active and
+   * stays there, and both production facilities are active for that reason.
    *
    * Users and contracts live on other models, so they are counted THROUGH the
    * same facility filter. `isNot: null` is load-bearing on both: Organization
@@ -66,27 +112,39 @@ export async function adminGetFacilities(input: {
    * (or a contract orphaned by a facility delete, `facilityId -> NULL`) must
    * not land in a facility-scoped number.
    */
-  const [facilities, statusGroups, userTotal, contractTotal] = await Promise.all([
-    prisma.facility.findMany({
-      where,
-      include: {
-        healthSystem: { select: { name: true } },
-        _count: { select: { contracts: true } },
-        organization: { include: { _count: { select: { members: true } } } },
-      },
-      orderBy: { name: "asc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.facility.groupBy({ by: ["status"], _count: true, where }),
-    prisma.member.count({
-      where: { organization: { facility: { is: where, isNot: null } } },
-    }),
-    prisma.contract.count({ where: { facility: { is: where, isNot: null } } }),
-  ])
+  const [statusGroups, searchMatchTotal, userTotal, contractTotal] =
+    await Promise.all([
+      prisma.facility.groupBy({ by: ["status"], _count: true, where: baseWhere }),
+      // Only a second round trip when a search narrows the rows.
+      search ? prisma.facility.count({ where }) : undefined,
+      prisma.member.count({
+        where: { organization: { facility: { is: baseWhere, isNot: null } } },
+      }),
+      prisma.contract.count({
+        where: { facility: { is: baseWhere, isNot: null } },
+      }),
+    ])
 
-  const total = statusGroups.reduce((sum, g) => sum + g._count, 0)
+  const catalogTotal = statusGroups.reduce((sum, g) => sum + g._count, 0)
   const activeTotal = statusGroups.find((g) => g.status === "active")?._count ?? 0
+  const total = searchMatchTotal ?? catalogTotal
+
+  // Rows AFTER the count so the page can be clamped into range first — see
+  // adminGetVendors.
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const page = Math.min(Math.max(Math.trunc(input.page ?? 1), 1), pageCount)
+
+  const facilities = await prisma.facility.findMany({
+    where,
+    include: {
+      healthSystem: { select: { name: true } },
+      _count: { select: { contracts: true } },
+      organization: { include: { _count: { select: { members: true } } } },
+    },
+    orderBy: { name: "asc" },
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+  })
 
   return serialize({
     facilities: facilities.map((f) => ({
@@ -105,9 +163,14 @@ export async function adminGetFacilities(input: {
       createdAt: f.createdAt.toISOString(),
     })),
     total,
+    catalogTotal,
     activeTotal,
     userTotal,
     contractTotal,
+    page,
+    pageSize,
+    pageCount,
+    search,
   })
 }
 

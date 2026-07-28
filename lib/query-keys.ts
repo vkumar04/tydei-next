@@ -440,24 +440,78 @@ export const queryKeys = {
     stats: () => ["admin", "stats"] as const,
     activity: () => ["admin", "activity"] as const,
     pendingActions: () => ["admin", "pendingActions"] as const,
+    // Family prefixes for the two tenant consoles. Every admin tenant mutation
+    // invalidates one of these, and they prefix-match BOTH the paginated list
+    // keys and the Access-picker option keys below.
+    facilitiesBase: ["admin", "facilities"] as const,
+    vendorsBase: ["admin", "vendors"] as const,
+    /**
+     * The paginated console lists. Called with NO filter these ARE the base
+     * arrays above — that collapse is load-bearing, see `vendorOptions`.
+     */
     facilities: (filters?: Record<string, unknown>) =>
-      ["admin", "facilities", filters] as const,
+      filters === undefined
+        ? (["admin", "facilities"] as const)
+        : (["admin", "facilities", filters] as const),
     vendors: (filters?: Record<string, unknown>) =>
-      ["admin", "vendors", filters] as const,
-    // Unpaginated id/name lists for the user-creation Access picker. Share the
-    // "facilities"/"vendors" prefixes so creating a tenant refreshes them.
+      filters === undefined
+        ? (["admin", "vendors"] as const)
+        : (["admin", "vendors", filters] as const),
+    /**
+     * Unpaginated id/name lists for the user-creation Access picker.
+     *
+     * These share the "facilities"/"vendors" prefix with the list keys above so
+     * that creating a tenant refreshes them. That claim was written down on
+     * 2026-07-26 and was FALSE until 2026-07-28: `admin.vendors()` used to build
+     * a 3-element `["admin","vendors",undefined]`, and TanStack's
+     * `partialMatchKey` (query-core utils.js) walks the FILTER key's full
+     * length — index 2 compared `"options"` against `undefined`, returned false,
+     * and `invalidateQueries({ queryKey: queryKeys.admin.vendors() })` never
+     * touched the picker. Creating a vendor left the Access picker showing a
+     * catalog without it until a full reload.
+     *
+     * The no-filter form now collapses to the 2-element base, so a bare
+     * `admin.vendors()` / `admin.facilities()` prefix-matches the option keys
+     * as well as every `{page,…}`-keyed page. Re-adding a third element to the
+     * no-filter branch silently re-breaks this.
+     */
     facilityOptions: () => ["admin", "facilities", "options"] as const,
     vendorOptions: () => ["admin", "vendors", "options"] as const,
     usersBase: ["admin", "users"] as const,
+    /**
+     * The remaining admin list families. Every one of them collapses to its
+     * 2-element base when called with no filter, for the reason spelled out
+     * above — an appended `undefined` is compared against the sibling key's
+     * real third element and does NOT prefix-match.
+     *
+     * `payorContracts` is where that bit last: the table holds two reads,
+     * `payorContracts()` and `payorContracts({ status: "active" })`, and the
+     * bare invalidation could not reach the second, so the call site had to
+     * spell out both by hand. With the collapse the bare form is a genuine
+     * family prefix and covers every `{…}`-keyed read, present and future.
+     * (Call sites that still invalidate both keys stay correct — the second is
+     * simply redundant now.)
+     *
+     * `admin-tenant-console-scope.test.tsx` walks these factories and fails if
+     * a new one appends `undefined` again.
+     */
     users: (filters?: Record<string, unknown>) =>
-      ["admin", "users", filters] as const,
+      filters === undefined
+        ? (["admin", "users"] as const)
+        : (["admin", "users", filters] as const),
     subscriptions: (filters?: Record<string, unknown>) =>
-      ["admin", "subscriptions", filters] as const,
+      filters === undefined
+        ? (["admin", "subscriptions"] as const)
+        : (["admin", "subscriptions", filters] as const),
     invoices: (filters?: Record<string, unknown>) =>
-      ["admin", "invoices", filters] as const,
+      filters === undefined
+        ? (["admin", "invoices"] as const)
+        : (["admin", "invoices", filters] as const),
     mrr: (months: number) => ["admin", "mrr", months] as const,
     payorContracts: (filters?: Record<string, unknown>) =>
-      ["admin", "payorContracts", filters] as const,
+      filters === undefined
+        ? (["admin", "payorContracts"] as const)
+        : (["admin", "payorContracts", filters] as const),
   },
   vendorAnalytics: {
     marketShare: (vendorId: string, filters?: Record<string, unknown>) =>

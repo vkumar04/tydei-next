@@ -26,6 +26,15 @@ export interface AdminVendorRow {
 
 // ─── List Vendors ───────────────────────────────────────────────
 
+/**
+ * Rows per page for the admin consoles. The server owns this number: the
+ * client sends only a page, and reads `pageSize`/`pageCount` back off the
+ * response, so there is exactly one definition of "a page".
+ */
+const ADMIN_TENANT_PAGE_SIZE = 20
+/** Upper bound on a client-supplied pageSize, so nobody asks for the table. */
+const ADMIN_TENANT_MAX_PAGE_SIZE = 200
+
 export async function adminGetVendors(input: {
   search?: string
   status?: string
@@ -33,53 +42,125 @@ export async function adminGetVendors(input: {
   pageSize?: number
 }): Promise<{
   vendors: AdminVendorRow[]
-  /** Vendors matching the filter — NOT the length of `vendors`. */
+  /**
+   * Vendors matching the search — NOT the length of `vendors`. This is the
+   * denominator of the page range ("of N vendors"), and the only number here
+   * that moves when the operator types.
+   */
   total: number
-  /** Of those, the ones with an Organization (i.e. that can hold users). */
+  /**
+   * The console's whole scope: every vendor, ignoring the search. THIS is what
+   * the "Total Vendors" card shows, and the scope every stat below shares.
+   */
+  catalogTotal: number
+  /**
+   * Active vendors with an Organization — exactly the rows the Status column
+   * badges "Onboarded" (vendor-columns.tsx). Whole-scope, like `catalogTotal`.
+   */
   onboardedTotal: number
-  /** Divisions ("reps") belonging to those vendors — the `repCount` column, summed. */
+  /**
+   * Divisions ("reps") belonging to the vendors in scope — the `repCount`
+   * column summed over the CATALOG, not over the search or the page.
+   */
   repTotal: number
-  /** Contracts belonging to those vendors — the `contractCount` column, summed. */
+  /** Contracts belonging to the vendors in scope — the `contractCount` column, summed. */
   contractTotal: number
+  /** The page actually served, clamped into range — not the one asked for. */
+  page: number
+  pageSize: number
+  pageCount: number
+  /** The search actually applied, so the caption can describe THESE rows. */
+  search: string
 }> {
   await requireAdmin()
-  const { search, status, page = 1, pageSize = 20 } = input
+  const search = input.search?.trim() ?? ""
+  const status = input.status
+  const pageSize = Math.min(
+    Math.max(Math.trunc(input.pageSize ?? ADMIN_TENANT_PAGE_SIZE), 1),
+    ADMIN_TENANT_MAX_PAGE_SIZE,
+  )
 
-  const where: Prisma.VendorWhereInput = {}
-  if (search) where.name = { contains: search, mode: "insensitive" }
-  if (status) where.status = status
+  // The filter the search runs INSIDE, kept separate from the search itself so
+  // the two counts below are each attributable to one scope (same split as
+  // `getVendorList` in lib/actions/vendors.ts). Fold them together and
+  // `catalogTotal` silently becomes "vendors matching the search", which is a
+  // narrower set than the sentence beside it claims.
+  const baseWhere: Prisma.VendorWhereInput = {}
+  if (status) baseWhere.status = status
+
+  // Search runs in Postgres over every vendor in scope — never over the page
+  // the client happens to be holding, which is the entire point of paging.
+  const where: Prisma.VendorWhereInput = search
+    ? { ...baseWhere, name: { contains: search, mode: "insensitive" } }
+    : baseWhere
 
   /**
-   * EVERY total below is computed over `where` — the whole filtered vendor
-   * set — and none of them over the returned page.
+   * EVERY stat below is computed over `baseWhere` — the console's whole scope —
+   * and none of them over the returned page OR over the search box.
    *
-   * The stat row used to reduce over `vendors` (pageSize 20), so it read
-   * "20 Total Vendors" against 201 real rows (Charles 2026-07-28). The
-   * 2026-07-27 pass fixed only the first two cards, which was worse: "201
-   * Total Vendors" sat beside a Sales Reps and Total Contracts figure summed
-   * over 20 rows, and one true number makes the false ones look authoritative.
+   * Two rounds of this bug, both the same shape one level down:
+   *   2026-07-27  the stat row reduced over `vendors` (pageSize 20), so it read
+   *               "20 Total Vendors" against 200 real rows. Only the first card
+   *               was fixed, which was worse: one true 200 lent authority to a
+   *               Sales Reps and Total Contracts figure still summed over 20.
+   *   2026-07-28  the totals moved to the server but were computed over `where`,
+   *               i.e. INSIDE the search. Typing "stryker" turned the card row
+   *               into "1 Total Vendors / 1 Onboarded / 0 Sales Reps" — three
+   *               numbers describing one matched row under four unqualified
+   *               "Total …" labels. The page range says what the search matched
+   *               ("of 1 vendor matching “stryker”"); the cards must not also
+   *               quietly become the search, or nothing on the screen still
+   *               answers "how many vendors are there".
    *
-   * `_count` on a NULLABLE column counts non-null values, so a single
-   * aggregate carries both vendor-level cards: `_all` is the row count and
-   * `organizationId` is "has an Organization". `status` deliberately gets no
-   * card — it is `@default("active")` that ingestion never sets, so it reports
-   * 201 of 201 (see the Status column in vendor-columns.tsx).
+   * `search` therefore buys ONE extra round trip — the count that drives paging
+   * — instead of narrowing all four stats. Same number of queries as before,
+   * pointed at the scope each number claims.
+   *
+   * One `groupBy` carries both vendor cards: `_count._all` per status sums to
+   * the catalog, and `_count.organizationId` (a NULLABLE column, so `_count`
+   * counts non-null values) is "has an Organization". Splitting by `status`
+   * costs nothing and lets "Onboarded" mean exactly what the Status column
+   * badges "Onboarded" — active AND organization-backed — rather than a second,
+   * looser definition of the same word one row up the page.
+   *
+   * `status` deliberately gets no card of its own: it is `@default("active")`
+   * that ingestion never sets, so it reports 200 of 200 (see vendor-columns.tsx).
    */
-  const [vendors, vendorAgg, repTotal, contractTotal] = await Promise.all([
-    prisma.vendor.findMany({
-      where,
-      include: { _count: { select: { contracts: true, divisions: true } } },
-      orderBy: { name: "asc" },
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    }),
-    prisma.vendor.aggregate({
-      _count: { _all: true, organizationId: true },
-      where,
-    }),
-    prisma.vendorDivision.count({ where: { vendor: { is: where } } }),
-    prisma.contract.count({ where: { vendor: { is: where } } }),
-  ])
+  const [statusGroups, searchMatchTotal, repTotal, contractTotal] =
+    await Promise.all([
+      prisma.vendor.groupBy({
+        by: ["status"],
+        _count: { _all: true, organizationId: true },
+        where: baseWhere,
+      }),
+      // Only a second round trip when a search narrows the rows; without one
+      // the two scopes are the same number by definition.
+      search ? prisma.vendor.count({ where }) : undefined,
+      prisma.vendorDivision.count({ where: { vendor: { is: baseWhere } } }),
+      prisma.contract.count({ where: { vendor: { is: baseWhere } } }),
+    ])
+
+  const catalogTotal = statusGroups.reduce((sum, g) => sum + g._count._all, 0)
+  const onboardedTotal =
+    statusGroups.find((g) => g.status === "active")?._count.organizationId ?? 0
+  const total = searchMatchTotal ?? catalogTotal
+
+  /**
+   * The rows come AFTER the count, not alongside it, because the page has to be
+   * clamped into range before it can be read. Deleting the last vendor on the
+   * last page, or narrowing the search, otherwise strands the operator on an
+   * empty page that the pager still says exists.
+   */
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const page = Math.min(Math.max(Math.trunc(input.page ?? 1), 1), pageCount)
+
+  const vendors = await prisma.vendor.findMany({
+    where,
+    include: { _count: { select: { contracts: true, divisions: true } } },
+    orderBy: { name: "asc" },
+    skip: (page - 1) * pageSize,
+    take: pageSize,
+  })
 
   return serialize({
     vendors: vendors.map((v) => ({
@@ -98,10 +179,15 @@ export async function adminGetVendors(input: {
       repCount: v._count.divisions,
       createdAt: v.createdAt.toISOString(),
     })),
-    total: vendorAgg._count._all,
-    onboardedTotal: vendorAgg._count.organizationId,
+    total,
+    catalogTotal,
+    onboardedTotal,
     repTotal,
     contractTotal,
+    page,
+    pageSize,
+    pageCount,
+    search,
   })
 }
 

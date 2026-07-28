@@ -1,4 +1,9 @@
-import { test, expect, type Page } from "@playwright/test"
+import {
+  test,
+  expect,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test"
 import { Client } from "pg"
 import { readFileSync } from "node:fs"
 import path from "node:path"
@@ -100,15 +105,21 @@ async function lookupIds(): Promise<Record<string, string | null>> {
  * `cacheComponents: true` would break a route that was relying on
  * default static behavior.
  *
- * Dynamic [id] routes are resolved from a beforeAll Prisma query so
- * the route list reflects real seed data. When seeded data isn't
- * available for a dynamic route (e.g., bundles in an empty seed),
- * the test is skipped with a clear message rather than failing.
+ * Dynamic [id] routes are resolved in `beforeAll` from `lookupIds()`
+ * above — plain `pg`, NOT Prisma; see the header note for why the
+ * Prisma import had to go. When seeded data isn't available for a
+ * dynamic route the test is skipped with a clear message rather than
+ * failing. On the current dev seed that is three: both bundle routes
+ * (no tie_in_bundle under Lighthouse Surgical Center) and the vendor
+ * pending-contract edit (Stryker has no PendingContract rows).
  *
- * Uses the in-test login helper pattern because the storageState
- * fixtures in tests/visual/.auth/ have a known cookie-jar bug —
- * request.post stores cookies in the API context, not the page
- * context, so saved state.json files have empty cookies.
+ * Uses an in-test login helper rather than a storageState fixture
+ * because this file needs all three roles and tests/visual/auth.setup.ts
+ * only saves the facility one. (The comment that used to sit here said
+ * the .auth/ states were unusable because of a request.post cookie-jar
+ * bug — that was fixed on 2026-07-27 when auth.setup.ts switched to a
+ * browser login; the other specs in this directory use its state.json.)
+ * See `loginAs` below for why it logs in once per role, not once per test.
  */
 
 // ─── Login + smoke helpers ─────────────────────────────────────
@@ -121,7 +132,32 @@ const CREDS = {
 
 type Role = keyof typeof CREDS
 
-async function loginAs(page: Page, role: Role): Promise<void> {
+type Cookies = Awaited<ReturnType<BrowserContext["cookies"]>>
+
+/**
+ * One real browser login per role per worker; every later test in the file
+ * replays that role's cookies into its own fresh context.
+ *
+ * 2026-07-28: this file used to log in once per test — ~54 sign-ins in a
+ * six-minute serial run. better-auth caps /sign-in/email at 10 per 60s per
+ * IP (lib/auth-server.ts `rateLimit.customRules`, added in the 2026-06-18
+ * pre-prod audit), so runs of this project were dotted with 429s that
+ * surfaced as `waitForURL` timeouts — seven of them in the last full run,
+ * on routes that render perfectly well. The limiter is correct; the spec
+ * was DOSing it.
+ */
+const sessions = new Map<Role, Cookies>()
+
+async function loginAs(
+  page: Page,
+  context: BrowserContext,
+  role: Role,
+): Promise<void> {
+  const cached = sessions.get(role)
+  if (cached) {
+    await context.addCookies(cached)
+    return
+  }
   const [email, password, expectedUrl] = CREDS[role]
   await page.goto("/login")
   // 2026-07-27: was getByPlaceholder(/email/i), which never matched — the
@@ -131,6 +167,7 @@ async function loginAs(page: Page, role: Role): Promise<void> {
   await page.getByLabel(/^password$/i).fill(password)
   await page.getByRole("button", { name: /sign in|log in/i }).click()
   await page.waitForURL(expectedUrl, { timeout: 15_000 })
+  sessions.set(role, await context.cookies())
 }
 
 async function smoke(page: Page, route: string): Promise<void> {
@@ -232,52 +269,52 @@ const FACILITY_STATIC = [
 
 test.describe("facility static routes", () => {
   for (const route of FACILITY_STATIC) {
-    test(`facility ${route} renders without 500`, async ({ page }) => {
-      await loginAs(page, "facility")
+    test(`facility ${route} renders without 500`, async ({ page, context }) => {
+      await loginAs(page, context, "facility")
       await smoke(page, route)
     })
   }
 })
 
 test.describe("facility dynamic routes", () => {
-  test("contract detail [id]", async ({ page }) => {
+  test("contract detail [id]", async ({ page, context }) => {
     if (!ids.facility.contractId) test.skip(true, "no facility contract in seed")
-    await loginAs(page, "facility")
+    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/contracts/${ids.facility.contractId}`)
   })
-  test("contract edit [id]/edit", async ({ page }) => {
+  test("contract edit [id]/edit", async ({ page, context }) => {
     if (!ids.facility.contractId) test.skip(true, "no facility contract in seed")
-    await loginAs(page, "facility")
+    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/contracts/${ids.facility.contractId}/edit`)
   })
-  test("contract terms [id]/terms", async ({ page }) => {
+  test("contract terms [id]/terms", async ({ page, context }) => {
     if (!ids.facility.contractId) test.skip(true, "no facility contract in seed")
-    await loginAs(page, "facility")
+    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/contracts/${ids.facility.contractId}/terms`)
   })
-  test("bundle detail [id]", async ({ page }) => {
+  test("bundle detail [id]", async ({ page, context }) => {
     if (!ids.facility.bundleId) test.skip(true, "no bundle in seed")
-    await loginAs(page, "facility")
+    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/contracts/bundles/${ids.facility.bundleId}`)
   })
-  test("bundle edit [id]/edit", async ({ page }) => {
+  test("bundle edit [id]/edit", async ({ page, context }) => {
     if (!ids.facility.bundleId) test.skip(true, "no bundle in seed")
-    await loginAs(page, "facility")
+    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/contracts/bundles/${ids.facility.bundleId}/edit`)
   })
-  test("alert detail [id]", async ({ page }) => {
+  test("alert detail [id]", async ({ page, context }) => {
     if (!ids.facility.alertId) test.skip(true, "no alert in seed")
-    await loginAs(page, "facility")
+    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/alerts/${ids.facility.alertId}`)
   })
-  test("invoice validation [id]", async ({ page }) => {
+  test("invoice validation [id]", async ({ page, context }) => {
     if (!ids.facility.invoiceId) test.skip(true, "no invoice in seed")
-    await loginAs(page, "facility")
+    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/invoice-validation/${ids.facility.invoiceId}`)
   })
-  test("purchase order detail [id]", async ({ page }) => {
+  test("purchase order detail [id]", async ({ page, context }) => {
     if (!ids.facility.purchaseOrderId) test.skip(true, "no PO in seed")
-    await loginAs(page, "facility")
+    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/purchase-orders/${ids.facility.purchaseOrderId}`)
   })
 })
@@ -303,27 +340,27 @@ const VENDOR_STATIC = [
 
 test.describe("vendor static routes", () => {
   for (const route of VENDOR_STATIC) {
-    test(`vendor ${route} renders without 500`, async ({ page }) => {
-      await loginAs(page, "vendor")
+    test(`vendor ${route} renders without 500`, async ({ page, context }) => {
+      await loginAs(page, context, "vendor")
       await smoke(page, route)
     })
   }
 })
 
 test.describe("vendor dynamic routes", () => {
-  test("vendor contract detail [id]", async ({ page }) => {
+  test("vendor contract detail [id]", async ({ page, context }) => {
     if (!ids.vendor.contractId) test.skip(true, "no vendor contract in seed")
-    await loginAs(page, "vendor")
+    await loginAs(page, context, "vendor")
     await smoke(page, `/vendor/contracts/${ids.vendor.contractId}`)
   })
-  test("vendor contract edit [id]/edit", async ({ page }) => {
+  test("vendor contract edit [id]/edit", async ({ page, context }) => {
     if (!ids.vendor.contractId) test.skip(true, "no vendor contract in seed")
-    await loginAs(page, "vendor")
+    await loginAs(page, context, "vendor")
     await smoke(page, `/vendor/contracts/${ids.vendor.contractId}/edit`)
   })
-  test("vendor pending-contract edit [id]/edit", async ({ page }) => {
+  test("vendor pending-contract edit [id]/edit", async ({ page, context }) => {
     if (!ids.vendor.pendingContractId) test.skip(true, "no pending contract in seed")
-    await loginAs(page, "vendor")
+    await loginAs(page, context, "vendor")
     await smoke(page, `/vendor/contracts/pending/${ids.vendor.pendingContractId}/edit`)
   })
 })
@@ -342,8 +379,8 @@ const ADMIN_ROUTES = [
 
 test.describe("admin routes", () => {
   for (const route of ADMIN_ROUTES) {
-    test(`admin ${route} renders without 500`, async ({ page }) => {
-      await loginAs(page, "admin")
+    test(`admin ${route} renders without 500`, async ({ page, context }) => {
+      await loginAs(page, context, "admin")
       await smoke(page, route)
     })
   }

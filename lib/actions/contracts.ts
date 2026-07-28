@@ -35,6 +35,7 @@ import {
   facilityScopeClause,
   type FacilityScope,
 } from "@/lib/actions/contracts-auth"
+import { getCallerFacilityIds } from "@/lib/actions/facility-assignment"
 import { sumCollectedRebates } from "@/lib/contracts/rebate-collected-filter"
 import {
   sumEarnedRebatesLifetime,
@@ -58,7 +59,39 @@ export async function getContracts(input: ContractFilters) {
   const filters = contractFiltersSchema.parse(input)
 
   const scope: FacilityScope = filters.facilityScope ?? "this"
-  const facilityClause = facilityScopeClause(scope, facility.id)
+  // Scope "all" is bounded to the facilities THIS CALLER can reach, not to
+  // every facility in the database. `getCallerFacilityIds` is the canonical
+  // owner of that set (enterprise/Super → every facility in the caller's
+  // HealthSystem; scoped user → their FacilityAssignment set ∪ home
+  // facility) and is pinned by facility-assignment-auth.test.ts — an
+  // enterprise user keeps their whole health system, a scoped user keeps
+  // only their assignments. Resolved ONLY for "all": "this" and "shared"
+  // are already bounded by `facility.id`, so the default path pays no extra
+  // round trip.
+  const accessibleFacilityIds =
+    scope === "all" ? await getCallerFacilityIds() : undefined
+  const facilityClause = facilityScopeClause(
+    scope,
+    facility.id,
+    accessibleFacilityIds,
+  )
+
+  // 2026-07-28 (second half of the same wrong-scope bug): the ROW SET above
+  // widens under scope "all" to every facility the caller can reach, but the
+  // per-row SPEND column below was aggregated over `facility.id` alone. A
+  // contract owned by a sibling facility therefore rendered its home
+  // facility's dollars in "Current Spend (Last 12 Months)" — not a rounding
+  // error, a different facility's money. Measured on the dev seed for a
+  // Lighthouse Surgical Center caller under "all":
+  //   Integra Dural Repair (Lighthouse Community Hospital)  $0 vs $11,340
+  //   Medtronic Spine Hardware      (LCH)   $737,300 (LSC's own) vs $670,920
+  //   Stryker Surgical Navigation   (LCH) $2,148,700 (LSC's own) vs $504,200
+  // The COG reads now use the SAME facility universe that selected the rows:
+  // the caller's own facility for "this"/"shared", the accessible set for
+  // "all". It can never widen past `getCallerFacilityIds`, so this stays
+  // inside the tenant bound.
+  const cogFacilityScope: Prisma.COGRecordWhereInput["facilityId"] =
+    accessibleFacilityIds ? { in: accessibleFacilityIds } : facility.id
 
   const conditions: Prisma.ContractWhereInput[] = [facilityClause]
 
@@ -176,7 +209,7 @@ export async function getContracts(input: ContractFilters) {
           prisma.cOGRecord.groupBy({
             by: ["contractId"],
             where: {
-              facilityId: facility.id,
+              facilityId: cogFacilityScope,
               contractId: { in: contractIds },
               transactionDate: { gte: windowStart, lte: windowEnd },
             },
@@ -192,7 +225,7 @@ export async function getContracts(input: ContractFilters) {
             : prisma.cOGRecord.groupBy({
                 by: ["vendorId"],
                 where: {
-                  facilityId: facility.id,
+                  facilityId: cogFacilityScope,
                   vendorId: { in: vendorIds },
                   transactionDate: { gte: windowStart, lte: windowEnd },
                 },
@@ -255,7 +288,22 @@ export async function getContracts(input: ContractFilters) {
   // 2026-06-08: expand selected categories to the facility's drifted COG
   // category variants so the cascade's category-scoped spend doesn't drop
   // case/word-order-different rows (Charles "not all the spend is brought in").
-  const listCogUniverse = await facilityCogCategoryUniverse(facility.id)
+  // Same universe rule as `cogFacilityScope` above: the drifted-variant list
+  // has to cover every facility the aggregates are allowed to read from, or a
+  // sibling facility's "Extremities/Trauma" spelling silently drops out of the
+  // category-scoped fallback under scope "all". One bounded `Promise.all` over
+  // the accessible set (the caller's health system at most) — NOT one call per
+  // contract row.
+  const cogUniverseFacilityIds = accessibleFacilityIds ?? [facility.id]
+  const listCogUniverse = Array.from(
+    new Set(
+      (
+        await Promise.all(
+          cogUniverseFacilityIds.map((id) => facilityCogCategoryUniverse(id)),
+        )
+      ).flat(),
+    ),
+  )
   for (const c of contracts) {
     // #2: a grouped contract's category-scoped spend spans every
     // participating vendor.
@@ -286,7 +334,7 @@ export async function getContracts(input: ContractFilters) {
     const cogByVendorCategory = await prisma.cOGRecord.groupBy({
       by: ["vendorId", "category"],
       where: {
-        facilityId: facility.id,
+        facilityId: cogFacilityScope,
         vendorId: { in: scopedVendorIds },
         category: { in: scopedCategories },
         transactionDate: { gte: windowStart, lte: windowEnd },
@@ -840,12 +888,18 @@ export async function getContractStats(
 ) {
   const { facility } = await requireFacility()
   const scope: FacilityScope = input.facilityScope ?? "this"
-  const where = facilityScopeClause(scope, facility.id)
+  // Same accessible-facility set the list query is bounded by (see
+  // `getContracts`) — the hero has to describe the contract universe the
+  // table below it renders, so both resolve "all" through the one canonical
+  // helper rather than each deciding what "all" means.
+  const accessibleFacilityIds =
+    scope === "all" ? await getCallerFacilityIds() : undefined
+  const where = facilityScopeClause(scope, facility.id, accessibleFacilityIds)
 
   // Earned counts only periods that have actually closed — pre-recorded
-  // rows for upcoming periods are projections, not earned. When scope is
-  // "all" we drop the facility filter so the stats reflect the same
-  // contract universe that the list query returns.
+  // rows for upcoming periods are projections, not earned. Every number
+  // below is computed over `where`, so the stats describe exactly the
+  // contract universe the list query returns for the same scope.
   //
   // Charles R5.31: the KPI card on the list page is labeled "Total Rebates
   // Earned (YTD)" to match the list column and the detail header. Apply
@@ -864,30 +918,35 @@ export async function getContractStats(
   // scope "shared" the hero counted only multi-facility contracts while this
   // summed every rebate the facility had ever earned, single-facility
   // contracts included — money and counts, one row, two different sets.
-  // Routing the ledger through the same `where` fixes that. The `facilityId`
-  // clause stays on top of it so a shared contract's PEER-facility rebate
-  // rows can never leak into this facility's total.
+  // Routing the ledger through the same `where` fixes that.
   //
-  // The `facilityId` bound stays on the ledger UNCONDITIONALLY, including under
-  // scope "all". 2026-07-28: it was briefly dropped for "all" so the card would
-  // match the contract universe the list renders — that was wrong. This call
-  // site passes no accessible-facility set, so `facilityScopeClause` returns an
-  // unbounded `{}` for "all" (contracts-auth.ts:98-100, whose own comment calls
-  // that "the hole where a scoped facility user saw every facility's
-  // contracts"). Dropping the ledger bound therefore summed EVERY facility's
-  // rebate dollars into this facility's "Rebates Earned (YTD)" card — a
-  // cross-tenant money figure, which CLAUDE.md's #1 invariant forbids.
+  // The ledger keeps a `facilityId` bound at ALL times — it is never dropped,
+  // only ever pointed at a bounded set. That bound is what stops a shared
+  // contract's PEER-facility rebate rows landing in this facility's total.
   //
-  // A card that under-counts because contracts are broader than the ledger is a
-  // reporting mismatch; one that shows another tenant's dollars is a breach.
-  // Keep the bound and accept the mismatch until "all" is properly bounded to
-  // the caller's accessible set (tracked separately — `getContracts` at line 61
-  // has the same unbounded "all", so fixing it belongs in one change, not here).
-  const scopeIsUnbounded = Object.keys(where).length === 0
+  // Its width now follows the scope, because the scope is finally bounded:
+  //   "this" / "shared" → `facility.id`, the caller's own facility.
+  //   "all"             → `{ in: accessibleFacilityIds }`, the SAME set the
+  //                       contract counts above were computed over.
+  //
+  // Under "all" this is a widening from one facility to the caller's
+  // accessible set, and it is only safe because that set is bounded: it comes
+  // from `getCallerFacilityIds`, i.e. the caller's own HealthSystem
+  // (enterprise) or their own FacilityAssignment rows (scoped). It can never
+  // reach a facility the caller may not read, and `contract: where` narrows it
+  // again to contracts in the same set.
+  //
+  // The earlier unconditional `facility.id` bound existed because "all"
+  // resolved to an unbounded `{}` here: widening the ledger then would have
+  // summed EVERY tenant's rebate dollars into this card. That hole is closed
+  // (see `facilityScopeClause`), so money and counts can sit on one hero row
+  // describing one set of facilities — which is the whole point of the row.
   const rebateWhere: Prisma.RebateWhereInput = {
     payPeriodEnd: { gte: startOfYear, lte: today },
-    ...(scopeIsUnbounded ? {} : { contract: where }),
-    facilityId: facility.id,
+    contract: where,
+    facilityId: accessibleFacilityIds
+      ? { in: accessibleFacilityIds }
+      : facility.id,
   }
 
   // 2026-07-28 (wrong-scope bug class): `activeContracts` and

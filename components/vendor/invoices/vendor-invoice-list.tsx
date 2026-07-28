@@ -188,7 +188,13 @@ export function VendorInvoiceList({ vendorId }: VendorInvoiceListProps) {
       ),
     },
     {
-      accessorKey: "status",
+      // accessorFn + explicit id (required with accessorFn per TanStack v8
+      // column-def docs): the faceted "select" filter builds its options from
+      // the ACCESSOR's values, so keying on raw `status` offered the storage
+      // spelling ("partially_paid") while the cells rendered the human label.
+      // Deriving the accessor makes the filter list what the user actually sees.
+      id: "status",
+      accessorFn: (row) => (statusConfig[row.status] ?? statusConfig.pending).label,
       header: "Status",
       meta: { filterVariant: "select", filterLabel: "Status" },
       cell: ({ row }) => {

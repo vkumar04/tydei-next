@@ -115,34 +115,53 @@ async function _getVendorRenewalRiskBatchImpl(
             count: number
           }>,
         )
-      : prisma.invoiceLineItem
-          .findMany({
+      : (async () => {
+          // Aggregated over EVERY matching line, not a sample of 500.
+          //
+          // This was `findMany({ take: 500 })` with NO orderBy, reduced into a
+          // per-facility AVERAGE variance % — a rate over a capped denominator
+          // whose membership Postgres was free to choose differently on each
+          // call, so the same facility could score differently run to run.
+          //
+          // InvoiceLineItem reaches facilityId through the `invoice` relation and
+          // Prisma cannot group by a relation field, so group by invoiceId and
+          // fold up. `_count` makes the fold a WEIGHTED mean — averaging the
+          // per-invoice averages unweighted would over-count small invoices.
+          // `_avg` is null when a group has no non-null values (verified against
+          // prisma.io/docs 2026-07-28), hence the ?? 0.
+          const byInvoice = await prisma.invoiceLineItem.groupBy({
+            by: ["invoiceId"],
             where: {
               invoice: { facilityId: { in: facilityIds } },
               variancePercent: { not: null },
             },
-            select: {
-              variancePercent: true,
-              invoice: { select: { facilityId: true } },
-            },
-            take: 500,
+            _avg: { variancePercent: true },
+            _count: { _all: true },
           })
-          .then((rows) => {
-            const map = new Map<string, { sum: number; n: number }>()
-            for (const r of rows) {
-              const fid = r.invoice.facilityId
-              if (!fid) continue
-              const cur = map.get(fid) ?? { sum: 0, n: 0 }
-              cur.sum += Math.abs(Number(r.variancePercent ?? 0))
-              cur.n += 1
-              map.set(fid, cur)
-            }
-            return Array.from(map.entries()).map(([facilityId, v]) => ({
-              facilityId,
-              avg: v.n > 0 ? v.sum / v.n : 0,
-              count: v.n,
-            }))
-          }),
+          if (byInvoice.length === 0) return []
+
+          const invoices = await prisma.invoice.findMany({
+            where: { id: { in: byInvoice.map((g) => g.invoiceId) } },
+            select: { id: true, facilityId: true },
+          })
+          const facilityByInvoice = new Map(invoices.map((i) => [i.id, i.facilityId]))
+
+          const map = new Map<string, { sum: number; n: number }>()
+          for (const g of byInvoice) {
+            const fid = facilityByInvoice.get(g.invoiceId)
+            if (!fid) continue
+            const n = g._count._all
+            const cur = map.get(fid) ?? { sum: 0, n: 0 }
+            cur.sum += Math.abs(Number(g._avg.variancePercent ?? 0)) * n
+            cur.n += n
+            map.set(fid, cur)
+          }
+          return Array.from(map.entries()).map(([facilityId, v]) => ({
+            facilityId,
+            avg: v.n > 0 ? v.sum / v.n : 0,
+            count: v.n,
+          }))
+        })(),
   ])
 
   const openIssueByContract = new Map<string, number>()
