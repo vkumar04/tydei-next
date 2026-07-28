@@ -22,7 +22,17 @@ export const procedureAnalysisColumns: ColumnDef<ProcedureAnalysisRow>[] = [
   {
     accessorKey: "code",
     header: "CPT Code",
-    meta: { filterVariant: "select", filterLabel: "CPT Code" },
+    // "text", NOT "select". DataTable assigns the filterFn from this variant
+    // (data-table.tsx:85-99): "select" maps to `arrIncludesSome`, which calls
+    // `filterValue.some(...)`. This column is ALSO the table's `searchKey`, and
+    // the search box sets a plain STRING as its filter value — so the filter fn
+    // called `.some` on a string and threw
+    // `TypeError: filterValue.some is not a function` inside getFilteredRowModel,
+    // which runs during render. One character typed into the search box took the
+    // page to the error boundary. Verified against the installed
+    // @tanstack/table-core. Charles 2026-07-28 sweep (4th-5th instances; the
+    // surgeon-comparison table was the first).
+    meta: { filterVariant: "text", filterLabel: "CPT Code" },
     cell: ({ row }) => (
       <span className="font-medium font-mono">{row.original.code}</span>
     ),

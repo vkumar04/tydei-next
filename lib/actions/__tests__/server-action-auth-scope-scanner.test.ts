@@ -334,6 +334,10 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/contracts/proposals.ts:267",
   "lib/actions/contracts/proposals.ts:283",
   // contracts.ts: post-update facility-set re-read + manual ownership
+  // (2026-07-28: the deleteContractDocument pair migrated from line-exact
+  // baseline entries to inline `auth-scope-scanner-skip:` comments. The baseline
+  // is line-exact, so ANY edit earlier in the file silently invalidated them —
+  // it broke twice in one day. Inline markers travel with the code.)
   // verification before contractDocument.delete (lines drift as the
   // file grows — bumped 2026-04-26 after analytics cache invalidation
   // hooks were added; bumped again same day after the getContracts
@@ -360,8 +364,6 @@ const BASELINE_HITS = new Set<string>([
   // bumped +14 same day (review pass) after the YTD rebate aggregate was
   // narrowed through the same facility-scope clause the contract counts
   // use, adding its `rebateWhere` block above these operations.
-  "lib/actions/contracts.ts:1720",
-  "lib/actions/contracts.ts:1740",
   // imports/case-costing-import.ts: REMOVED from baseline 2026-06-09
   // (case-costing audit batch) — the remaining by-id ops (primaryCptCode
   // update, margin-rollup re-read + update) now carry inline

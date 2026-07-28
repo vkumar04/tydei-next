@@ -868,14 +868,26 @@ export async function getContractStats(
   // clause stays on top of it so a shared contract's PEER-facility rebate
   // rows can never leak into this facility's total.
   //
-  // scope "all" keeps the legacy unbounded shape (`facilityScopeClause`
-  // returns `{}` when no accessible-facility set is passed) so the card
-  // still matches the contract universe the list itself renders.
+  // The `facilityId` bound stays on the ledger UNCONDITIONALLY, including under
+  // scope "all". 2026-07-28: it was briefly dropped for "all" so the card would
+  // match the contract universe the list renders — that was wrong. This call
+  // site passes no accessible-facility set, so `facilityScopeClause` returns an
+  // unbounded `{}` for "all" (contracts-auth.ts:98-100, whose own comment calls
+  // that "the hole where a scoped facility user saw every facility's
+  // contracts"). Dropping the ledger bound therefore summed EVERY facility's
+  // rebate dollars into this facility's "Rebates Earned (YTD)" card — a
+  // cross-tenant money figure, which CLAUDE.md's #1 invariant forbids.
+  //
+  // A card that under-counts because contracts are broader than the ledger is a
+  // reporting mismatch; one that shows another tenant's dollars is a breach.
+  // Keep the bound and accept the mismatch until "all" is properly bounded to
+  // the caller's accessible set (tracked separately — `getContracts` at line 61
+  // has the same unbounded "all", so fixing it belongs in one change, not here).
   const scopeIsUnbounded = Object.keys(where).length === 0
   const rebateWhere: Prisma.RebateWhereInput = {
     payPeriodEnd: { gte: startOfYear, lte: today },
     ...(scopeIsUnbounded ? {} : { contract: where }),
-    ...(scope === "all" ? {} : { facilityId: facility.id }),
+    facilityId: facility.id,
   }
 
   // 2026-07-28 (wrong-scope bug class): `activeContracts` and
@@ -1716,7 +1728,9 @@ export async function deleteContractDocument(id: string) {
   const { facility } = session
   await requireCanMutate()
 
-  // Verify the document belongs to a contract owned by this facility
+  // Verify the document belongs to a contract owned by this facility.
+  // auth-scope-scanner-skip: read-only identity probe; the ownership decision is
+  // the explicit `owned` comparison below, which throws before the delete.
   const doc = await prisma.contractDocument.findUniqueOrThrow({
     where: { id },
     select: {
@@ -1737,6 +1751,8 @@ export async function deleteContractDocument(id: string) {
     throw new Error("Not authorized to delete this document")
   }
 
+  // auth-scope-scanner-skip: unreachable unless the `owned` check above passed,
+  // which proves the document's contract belongs to this facility.
   await prisma.contractDocument.delete({ where: { id } })
 
   await logAudit({

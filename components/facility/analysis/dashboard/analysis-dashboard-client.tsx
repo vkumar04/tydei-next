@@ -265,11 +265,20 @@ export function AnalysisDashboardClient({
   // such a facility. With no cases, fall back to that proxy — it is derived
   // from spend, not from cases, so it stays meaningful — and let the operator
   // enter a real case volume to take over.
+  //
+  // The fallback is gated on the PER-CASE RATE, not on the case count. Gating on
+  // the count was a regression (2026-07-28 sweep): for a facility with no cases
+  // the seeded rate is $0 — there were no cases to average — so the moment an
+  // operator typed a case volume into "Annual cases" the gate flipped to the
+  // manual branch and computed `$0 × N = $0`, collapsing Net Revenue, EBITDA and
+  // DCF to zero on a facility that has real supply spend. Revenue is rate ×
+  // cases; with no rate it is not computable from cases at all, so the
+  // spend-derived proxy must stand until the operator supplies a rate.
   const manualNetRevenue = avgReimbursementPerCase * assumptions.annualCaseVolume
   const effectiveNetRevenue =
     revenueMode === "actuals"
       ? effectiveData.measuredReimbursement
-      : assumptions.annualCaseVolume > 0
+      : avgReimbursementPerCase > 0
         ? manualNetRevenue
         : assumptions.netRevenue
 
