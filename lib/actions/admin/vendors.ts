@@ -31,7 +31,12 @@ export async function adminGetVendors(input: {
   status?: string
   page?: number
   pageSize?: number
-}): Promise<{ vendors: AdminVendorRow[]; total: number; activeTotal: number }> {
+}): Promise<{
+  vendors: AdminVendorRow[]
+  total: number
+  activeTotal: number
+  onboardedTotal: number
+}> {
   await requireAdmin()
   const { search, status, page = 1, pageSize = 20 } = input
 
@@ -43,7 +48,7 @@ export async function adminGetVendors(input: {
   // stat cards previously derived both from the returned PAGE, so with
   // pageSize 20 they read "20 Total / 20 Active" against 201 real vendors
   // (Charles 2026-07-28).
-  const [vendors, total, activeTotal] = await Promise.all([
+  const [vendors, total, activeTotal, onboardedTotal] = await Promise.all([
     prisma.vendor.findMany({
       where,
       include: { _count: { select: { contracts: true, divisions: true } } },
@@ -53,6 +58,9 @@ export async function adminGetVendors(input: {
     }),
     prisma.vendor.count({ where }),
     prisma.vendor.count({ where: { ...where, status: "active" } }),
+    // The meaningful "is this a real tenant" count — `status` is a
+    // default-"active" column that ingestion never sets, so it reports 201/201.
+    prisma.vendor.count({ where: { ...where, organizationId: { not: null } } }),
   ])
 
   return serialize({
@@ -74,6 +82,7 @@ export async function adminGetVendors(input: {
     })),
     total,
     activeTotal,
+    onboardedTotal,
   })
 }
 
