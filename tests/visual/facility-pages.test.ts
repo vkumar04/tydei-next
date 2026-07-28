@@ -256,10 +256,10 @@ test("renewals has heading + the four expiry buckets", async ({ page }) => {
  *
  * The assertion cross-checks the two surfaces instead of hard-coding 7, so
  * it stays honest across reseeds. When the fix lands this test starts
- * passing and Playwright will fail the run for an unexpected pass; drop
- * the `.fail` then.
+ * FIXED 2026-07-28: the hero now reads a portfolio-wide total, so the `.fail`
+ * marker is gone and this guards the fix.
  */
-test.fail(
+test(
   "renewals headline describes the whole portfolio, not the 365-day window",
   async ({ page }) => {
     await page.goto("/dashboard/contracts")

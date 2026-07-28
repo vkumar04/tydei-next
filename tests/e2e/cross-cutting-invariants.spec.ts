@@ -378,9 +378,8 @@ test.describe("facility analysis ?tab= deep link", () => {
    * Proposals surface lands on the Compare tab. Today it lands on Upload.
    */
   test("?tab=compare restores the Compare tab", async ({ page }) => {
-    // Expected to fail until the bug above is fixed. When it starts passing,
-    // Playwright reports it as an unexpected pass — delete this line then.
-    test.fail()
+    // FIXED 2026-07-28: page.tsx now awaits searchParams and feeds initialTab,
+    // so the sync effect is a no-op on arrival instead of replacing the param.
     test.setTimeout(60_000)
     await page.goto("/dashboard/analysis/prospective?tab=compare", {
       waitUntil: "domcontentloaded",

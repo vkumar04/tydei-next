@@ -259,7 +259,12 @@ test.describe("renewals", () => {
     // `.first()` on BOTH sides and on the union: `.or()` is still a locator, so
     // if either branch matches more than one node the whole expression throws a
     // strict-mode violation before the assertion runs.
-    const noContracts = content(page).getByText("No contracts on file").first()
+    // The empty state is WINDOW-scoped ("No contracts expiring in the next 365
+    // days") as of 2026-07-28 — it used to read "No contracts on file", which
+    // told a facility with 7 contracts it had none. Match the window wording.
+    const noContracts = content(page)
+      .getByText(/No contracts expiring/i)
+      .first()
     await expect(table.first().or(noContracts).first()).toBeVisible({
       timeout: LOAD,
     })

@@ -6,7 +6,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 import type { FacilityAnalysisData } from "@/lib/actions/facility-analysis-data"
 import { AnalysisDashboardClient } from "@/components/facility/analysis/dashboard/analysis-dashboard-client"
-import { ProspectiveClient } from "@/components/facility/analysis/prospective/prospective-client"
+import {
+  ProspectiveClient,
+  VALID_TABS,
+} from "@/components/facility/analysis/prospective/prospective-client"
 import type { VendorOption } from "@/components/facility/analysis/prospective/types"
 
 /**
@@ -16,19 +19,39 @@ import type { VendorOption } from "@/components/facility/analysis/prospective/ty
  *    manually) and score it — so contracts + pricing can be fed in for analysis,
  *    not just the data already in COG (Vick 2026-06-21).
  *
- * Outer tab is local state (the inner ProspectiveClient owns its own ?tab=).
+ * Outer tab is local state, SEEDED from the URL. The inner ProspectiveClient
+ * owns its own ?tab=; arriving with one implies the Evaluate Proposals view, so
+ * the outer tab opens there rather than stranding the deep link behind
+ * "Current State" (Charles 2026-07-28 sweep).
  */
 export function AnalysisPageClient({
   data,
   facilityId,
   vendors,
+  initialTab = null,
+  initialCompareId = null,
+  initialVendorId = null,
 }: {
   data: FacilityAnalysisData
   facilityId: string
   vendors: VendorOption[]
+  /** Inner prospective tab from ?tab= — see ProspectiveClient. */
+  initialTab?: string | null
+  /** ?compare= — a proposal id to open the comparison on. */
+  initialCompareId?: string | null
+  /** ?vendor= — preselects the vendor filter. */
+  initialVendorId?: string | null
 }) {
+  // Only a VALID inner tab implies the proposals view. A stale or bogus ?tab=
+  // (e.g. `analytics`, removed 2026-07-27) must fall back to Current State
+  // rather than opening a view the param no longer belongs to — pinned by
+  // tests/e2e/cross-cutting-invariants.spec.ts "falls back instead of crashing".
+  const hasRealTab =
+    !!initialTab && (VALID_TABS as readonly string[]).includes(initialTab)
   const [view, setView] = useState<"current-state" | "proposals">(
-    "current-state",
+    hasRealTab || initialCompareId || initialVendorId
+      ? "proposals"
+      : "current-state",
   )
 
   return (
@@ -57,9 +80,9 @@ export function AnalysisPageClient({
             <ProspectiveClient
               facilityId={facilityId}
               vendors={vendors}
-              initialCompareId={null}
-              initialVendorId={null}
-              initialTab={null}
+              initialCompareId={initialCompareId}
+              initialVendorId={initialVendorId}
+              initialTab={initialTab}
             />
           </div>
         </TabsContent>
