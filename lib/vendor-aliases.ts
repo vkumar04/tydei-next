@@ -8,6 +8,18 @@ export const VENDOR_ALIASES: Record<string, string[]> = {
     "Stryker Orthopaedics",
     "Stryker Medical",
     "Stryker Spine",
+    // Charles 2026-07-27/28: the spellings that actually appear in facility COG
+    // / PO / invoice files and previously resolved to NOTHING, so ingestion
+    // minted a duplicate Vendor row for each and split Stryker's spend into
+    // separate silos. "Howmedica Osteonics" is the legal manufacturing entity;
+    // "MAKO Surgical" is an acquired brand; "Flex Financial" is the equipment
+    // financing arm (it appears on the tie-in contracts).
+    "Stryker Sales Corp",
+    "Howmedica Osteonics",
+    "MAKO Surgical Corp",
+    "Stryker Flex Financial",
+    "Stryker Endoscopy",
+    "Stryker Instruments",
   ],
   "J&J": [
     "Johnson & Johnson",

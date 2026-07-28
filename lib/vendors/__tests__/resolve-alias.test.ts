@@ -119,11 +119,16 @@ describe("resolveVendorId — Pass 1a, vendor-declared aliases", () => {
   it("ignores an alias whose vendor no longer exists", async () => {
     // Same dangling-id guard as Pass 0 — a deleted vendor must not strand
     // resolution on an id that is no longer in the vendor list.
-    aliasFindMany.mockResolvedValue(aliasRows("v-deleted", ["Howmedica Osteonics"]))
+    //
+    // The name must be one the LATER passes cannot rescue, or this asserts
+    // nothing. It originally used "Howmedica Osteonics", which was then added to
+    // the curated VENDOR_ALIASES list — so Pass 2 legitimately resolved it to
+    // Stryker and this failed for the right reason. Use a name that is in
+    // neither the curated list nor fuzzy range of any vendor.
+    const ORPHAN = "Zenith Orthopedic Supply"
+    aliasFindMany.mockResolvedValue(aliasRows("v-deleted", [ORPHAN]))
     const { resolveVendorId } = await import("@/lib/vendors/resolve")
-    expect(
-      await resolveVendorId("Howmedica Osteonics", { createMissing: false }),
-    ).toBeNull()
+    expect(await resolveVendorId(ORPHAN, { createMissing: false })).toBeNull()
   })
 
   it("lets a confirmed per-facility mapping still win over an alias", async () => {
