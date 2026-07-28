@@ -79,8 +79,11 @@ export function VendorTable() {
   // current page, not the tenant count. It reported "20 Total Vendors" against
   // 201 real rows (Charles 2026-07-28). `total` is the server's count().
   const totalVendors = data?.total ?? vendors.length
-  const activeVendors = vendors.filter((v) => v.status === "active")
-  const totalActiveVendors = data?.activeTotal ?? activeVendors.length
+  // "Active" is `status`, which ingestion never sets — 201 of 201 in prod, so
+  // the card said nothing. "Onboarded" (has an Organization, therefore can have
+  // users) is the number that distinguishes a real tenant from an import
+  // artifact. Charles 2026-07-28.
+  const onboardedVendors = data?.onboardedTotal ?? 0
   const totalContracts = vendors.reduce((sum, v) => sum + v.contractCount, 0)
 
   return (
@@ -107,8 +110,8 @@ export function VendorTable() {
                 <CheckCircle className="h-5 w-5 text-green-700 dark:text-green-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{totalActiveVendors}</p>
-                <p className="text-xs text-muted-foreground">Active</p>
+                <p className="text-2xl font-bold">{onboardedVendors}</p>
+                <p className="text-xs text-muted-foreground">Onboarded</p>
               </div>
             </div>
           </CardContent>
