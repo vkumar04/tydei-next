@@ -838,6 +838,37 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
 
   // Add a construct seeded from an uploaded benchmark — fills the first blank
   // row if there is one, otherwise appends.
+  // Why a benchmark-picked construct still has empty cells. Derived during
+  // render (never mirrored into state) from the same inputs the auto-fill reads,
+  // so it cannot drift from what actually happened.
+  const constructBlankReasons = useMemo(() => {
+    const fromBenchmark = constructs.filter((c) => c.benchmarkId)
+    if (fromBenchmark.length === 0) return []
+    const reasons: string[] = []
+    if (fromBenchmark.some((c) => !c.floor)) {
+      // benchFloor = minPrice || percentile25 — both absent in a national-avg-
+      // only file, which is the shape the import dialog now warns about too.
+      reasons.push(
+        "Floor needs a Min or 25th-percentile column, which your benchmark file does not have",
+      )
+    }
+    if (fromBenchmark.some((c) => !c.current)) {
+      reasons.push(
+        priceLoadedCount > 0
+          ? "Current is filled from the price file by item number — these products did not match one"
+          : "Current comes from a price file, which is not loaded",
+      )
+    }
+    if (fromBenchmark.some((c) => !c.annualVolume)) {
+      reasons.push(
+        usageLoadedCount > 0
+          ? "Volume is filled from the usage file by item number — these products did not match one"
+          : "Volume comes from a usage file, which is not loaded",
+      )
+    }
+    return reasons
+  }, [constructs, priceLoadedCount, usageLoadedCount])
+
   function addBenchmarkConstruct(benchmarkId: string) {
     const b = benchmarkById.get(benchmarkId)
     if (!b) return
@@ -1130,6 +1161,21 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
                   the price file fills Current; you enter Floor / Target / Ask.
                   The score blends every construct.
                 </p>
+                {/* Charles 2026-07-28: "these should fill in from the loaded
+                    benchmark file". They can't, and the table gave no hint why —
+                    the same silent-gap complaint he raised about the Benchmarks
+                    tab, resurfacing at the point of USE. His benchmark file is
+                    two columns (Construct | National Avg Price), so Target seeds
+                    from nationalAvgPrice while Floor needs a Min or P25 column
+                    the file never had; Current and Volume come from the price
+                    and usage files, which are separate uploads. Name whichever
+                    of those is actually missing, rather than leaving blank cells
+                    to be read as a bug. */}
+                {constructBlankReasons.length > 0 && (
+                  <p className="mt-1 text-xs text-amber-600">
+                    Some columns stayed blank: {constructBlankReasons.join("; ")}.
+                  </p>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 {(benchmarks?.length ?? 0) > 0 && (
