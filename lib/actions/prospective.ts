@@ -28,6 +28,7 @@ import {
 } from "@/lib/prospective/deal-assumptions"
 import { z } from "zod"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
+import { roundToCents } from "@/lib/money/round"
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -379,9 +380,9 @@ export async function getFinancialProjections(input: {
     projections.push({
       month: i,
       label: d.toISOString().slice(0, 7),
-      cumulativeSpend: Math.round(cumSpend * 100) / 100,
-      cumulativeSavings: Math.round(cumSavings * 100) / 100,
-      projectedValue: Math.round(projected * 100) / 100,
+      cumulativeSpend: roundToCents(cumSpend),
+      cumulativeSavings: roundToCents(cumSavings),
+      projectedValue: roundToCents(projected),
     })
   }
 

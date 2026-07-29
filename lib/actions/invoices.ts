@@ -14,6 +14,7 @@ import type { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import { roundToCents } from "@/lib/money/round"
 
 // ─── Vendor-scoped: list invoices owned by the authed vendor ────
 
@@ -243,6 +244,16 @@ export async function importInvoice(input: ImportInvoiceInput) {
   const data = importInvoiceSchema.parse(input)
   let purchaseOrderId = data.purchaseOrderId
   if (purchaseOrderId) {
+    // Moved off the line-keyed BASELINE_HITS entry 2026-07-29: that entry
+    // pinned invoices.ts:246 and broke when an unrelated import shifted the
+    // file by one line. The inline marker below travels with the code.
+    // NOTE the scanner only reads the THREE lines directly above the call
+    // (server-action-auth-scope-scanner.test.ts: `lines.slice(i - 3, i)`), so
+    // the marker must stay adjacent — do not add prose between it and the call.
+    //
+    // auth-scope-scanner-skip: post-fetch ownership probe — read by id, then
+    // REJECTED below unless `po.facilityId` matches the caller's facility, so a
+    // foreign PO id cannot be attached.
     const po = await prisma.purchaseOrder.findUnique({
       where: { id: purchaseOrderId },
       select: { facilityId: true, vendorId: true },
@@ -284,9 +295,12 @@ export async function importInvoice(input: ImportInvoiceInput) {
   const discountAmount = data.discountAmount ?? 0
   // Round to cents — float sums like 0.1 + 0.2 must not leak into a
   // Decimal(14,2) column via Prisma's exact-decimal validation.
-  const totalCost =
-    Math.round((lineSum + taxAmount + shippingAmount - discountAmount) * 100) /
-    100
+  // Uses the canonical base-10 rounder: `Math.round(x * 100) / 100` rounds the
+  // FLOAT, not the decimal, and lands a cent low on ~24% of half-cent
+  // boundaries (1.005 -> 1.00). On an invoice total that is a real cent.
+  const totalCost = roundToCents(
+    lineSum + taxAmount + shippingAmount - discountAmount,
+  )
 
   const invoice = await prisma.invoice.create({
     data: {
@@ -307,8 +321,9 @@ export async function importInvoice(input: ImportInvoiceInput) {
           vendorItemNo: item.vendorItemNo,
           invoicePrice: item.invoicePrice,
           invoiceQuantity: item.invoiceQuantity,
-          totalLineCost:
-            Math.round(item.invoicePrice * item.invoiceQuantity * 100) / 100,
+          totalLineCost: roundToCents(
+            item.invoicePrice * item.invoiceQuantity,
+          ),
         })),
       },
     },

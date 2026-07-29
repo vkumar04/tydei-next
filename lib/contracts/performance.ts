@@ -1,7 +1,6 @@
 /**
  * Contract performance analytics — v0 spec §9.
- * Pure functions. Mirrors lib/v0-spec/contract-performance.ts so the
- * oracle can parity-check both sides of the comparison.
+ * Pure functions.
  */
 
 import {

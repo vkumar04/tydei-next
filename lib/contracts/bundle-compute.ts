@@ -1,7 +1,7 @@
 /**
  * Bundle compute layer — joins the `TieInBundle` DB model to the pure
  * math in `lib/contracts/tie-in-compliance.ts` (which is oracle-locked
- * against `lib/v0-spec/tie-in.ts`).
+ * against `lib/contracts/tie-in-bundle-math.ts`).
  *
  * Flow per bundle:
  *   1. Resolve each member's spend from COG rows in the bundle's

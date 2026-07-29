@@ -46,6 +46,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
+import { roundToCents } from "@/lib/money/round"
 
 interface NewContractClientProps {
   vendors: { id: string; name: string; displayName: string | null }[]
@@ -363,12 +364,12 @@ export function NewContractClient({
       try {
         const cogTotal = await computePricingVsCOG(vendorId, items)
         if (cogTotal > 0) {
-          form.setValue("totalValue", Math.round(cogTotal * 100) / 100)
+          form.setValue("totalValue", roundToCents(cogTotal))
           const eff = form.getValues("effectiveDate")
           const exp = form.getValues("expirationDate")
           if (eff && exp) {
             const years = computeContractYears(eff, exp)
-            form.setValue("annualValue", Math.round((cogTotal / years) * 100) / 100)
+            form.setValue("annualValue", roundToCents(cogTotal / years))
           }
         }
       } catch {
@@ -434,7 +435,7 @@ export function NewContractClient({
       // Auto-compute annual value via calendar-month math so whole-year
       // contracts produce clean integer divisions (not 0.999 or 2.902).
       const years = computeContractYears(data.effectiveDate, data.expirationDate)
-      form.setValue("annualValue", Math.round((data.totalValue / years) * 100) / 100)
+      form.setValue("annualValue", roundToCents(data.totalValue / years))
     }
     if (data.description) form.setValue("description", data.description)
 

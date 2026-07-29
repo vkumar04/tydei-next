@@ -179,9 +179,25 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
       atRisk,
       // Portfolio-wide. The expiring buckets above stay window-scoped, which is
       // correct — they describe the window. Only this one names the portfolio.
+      // NULL while the portfolio aggregate is still in flight — NOT
+      // `contracts.length`.
+      //
+      // The `?? contracts.length` fallback that used to sit here silently
+      // re-introduced the very bug the comment at the top of this component
+      // describes: during the portfolio query's loading window the hero
+      // announced "All 1 contracts are more than 90 days from expiration" to a
+      // vendor holding 5, because `contracts` is the 365-day EXPIRING window,
+      // not the portfolio. It resolved to the right number a moment later, so
+      // it looked like a flake — the full Playwright suite caught it on
+      // 2026-07-29 while the single test passed in isolation every time.
+      //
+      // A number that is wrong-but-confident for 200ms is still wrong; the
+      // fallback made a portfolio claim out of window data. The hero renders a
+      // neutral headline until the real count arrives.
       totalContracts:
-        (portfolioData?.portfolio?.contractCount ?? contracts.length) +
-        inFlightPendingCount,
+        portfolioData?.portfolio?.contractCount === undefined
+          ? null
+          : portfolioData.portfolio.contractCount + inFlightPendingCount,
       criticalUnstarted,
     }
   }, [contracts, portfolioData?.portfolio?.contractCount, inFlightPendingCount])

@@ -23,7 +23,8 @@ export interface VendorRenewalsHeroStats {
   expiring60: number
   expiring90: number
   atRisk: number
-  totalContracts: number
+  /** Null while the portfolio aggregate is loading — see the client's note. */
+  totalContracts: number | null
   criticalUnstarted: number
 }
 
@@ -48,7 +49,7 @@ export function VendorRenewalsHero({ stats }: VendorRenewalsHeroProps) {
       ? `${criticalUnstarted} need${criticalUnstarted === 1 ? "s" : ""} action`
       : expiring30 > 0
         ? `${expiring30} expiring in 30d`
-        : totalContracts > 0
+        : (totalContracts ?? 0) > 0
           ? "On track"
           : "No contracts"
   const statusTone =
@@ -56,16 +57,22 @@ export function VendorRenewalsHero({ stats }: VendorRenewalsHeroProps) {
       ? "bg-red-100 text-red-900 dark:bg-red-900/40 dark:text-red-100"
       : expiring30 > 0
         ? "bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
-        : totalContracts > 0
+        : (totalContracts ?? 0) > 0
           ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100"
           : "bg-muted text-muted-foreground"
 
+  // `totalContracts === null` means the portfolio count has not arrived yet.
+  // Say nothing about the portfolio rather than guess at it — the expiring
+  // counts below are window-scoped and already correct, so the hero still
+  // carries real information while this settles.
   const headline =
-    totalContracts === 0
-      ? "No contracts on file yet."
-      : totalExpiringSoon === 0
-        ? `All ${totalContracts} contracts are more than 90 days from expiration.`
-        : `${totalExpiringSoon} contract${totalExpiringSoon === 1 ? "" : "s"} expire in the next 90 days.`
+    totalContracts === null
+      ? "Reviewing your renewal pipeline…"
+      : totalContracts === 0
+        ? "No contracts on file yet."
+        : totalExpiringSoon === 0
+          ? `All ${totalContracts} contracts are more than 90 days from expiration.`
+          : `${totalExpiringSoon} contract${totalExpiringSoon === 1 ? "" : "s"} expire in the next 90 days.`
 
   return (
     <section className="rounded-xl border bg-card p-6 shadow-sm sm:p-8">

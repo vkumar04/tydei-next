@@ -14,7 +14,7 @@ import type { RebateOpportunity } from "@/lib/actions/rebate-optimizer"
  * with the dollar gap broken out so the user can see how much
  * additional rebate is on the table.
  *
- * Math is in-component — same as v0RebateUtilization but vectorized
+ * Math is in-component — a vectorized rebate-utilization calc
  * over all opportunities at once instead of one contract at a time
  * (the v0 helper is per-contract). Both routes converge: actual ÷
  * (currentSpend × topTierRate).

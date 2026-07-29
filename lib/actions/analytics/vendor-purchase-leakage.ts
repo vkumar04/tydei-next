@@ -19,7 +19,7 @@
  * already-classified rows — drops both round-trip count and Node
  * memory pressure. v0 banding constants (±5% significant, ±0.5%
  * at-contract) are inlined here to keep the SQL self-contained;
- * `lib/v0-spec/cog.ts` remains the test oracle that unit tests
+ * `lib/contracts/cog-variance-band.ts` remains the test oracle that unit tests
  * pin against.
  */
 
@@ -27,7 +27,7 @@ import { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { type V0CogVarianceBand } from "@/lib/v0-spec/cog"
+import { type CogVarianceBand } from "@/lib/contracts/cog-variance-band"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export type LeakageReason =
@@ -46,7 +46,7 @@ export interface LeakageRow {
   quantity: number
   extendedPrice: number
   reason: LeakageReason
-  band: V0CogVarianceBand | null
+  band: CogVarianceBand | null
   contractPrice: number | null
   variancePct: number | null
 }
@@ -68,7 +68,7 @@ interface RawLeakageRow {
   quantity: number
   extended_price: Prisma.Decimal | null
   reason: LeakageReason
-  band: V0CogVarianceBand | null
+  band: CogVarianceBand | null
   contract_price: Prisma.Decimal | null
   variance_pct: number | null
 }

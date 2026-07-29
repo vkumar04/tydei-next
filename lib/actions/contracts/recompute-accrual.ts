@@ -609,7 +609,10 @@ export async function _recomputeAccrualForContractWithFacility(
       collectionDate: { not: null },
       notes: { startsWith: AUTO_ACCRUAL_PREFIX },
     },
-    select: { payPeriodStart: true, payPeriodEnd: true },
+    // `notes` carries the rate the engine recorded ("… tier 2 @ 5% on $…").
+    // On a multi-term contract that is the only thing distinguishing one
+    // term's row for a period from another's — see the term-aware keying below.
+    select: { payPeriodStart: true, payPeriodEnd: true, notes: true },
   })
   // 2026-06-09 prod audit (Bug 3): key on DATE-ONLY, not full ISO strings.
   // The engine emits periodEnd = nextStart − 1ms (…T23:59:59.999Z), but
@@ -627,6 +630,70 @@ export async function _recomputeAccrualForContractWithFacility(
   )
   const periodKey = (start: Date, end: Date): string =>
     `${dateKey(start)}|${dateKey(end)}`
+
+  // ── Term-aware preservation (2026-07-29 math audit, CRITICAL) ──────
+  //
+  // `preservedKeys` above is keyed on the PERIOD alone. The cadence path
+  // below is fine with that — it emits one bucket per period with every
+  // term already combined. The period-eval path is not: it emits one bucket
+  // per TERM per period, so on a multi-term contract two buckets share a
+  // period key, and one collected row silently suppressed the other term's
+  // row for that whole window.
+  //
+  // Reproduced on the production snapshot before this fix. Arthrex
+  // (cms31hrqu12170iqvf539klwy) runs two annual spend_rebate terms over the
+  // same window. Its 2025 rows:
+  //     tier 2 @ 5%  $287,408.09  collected 2026-06-29
+  //     tier 1 @ 2%  $114,963.24  uncollected
+  // The 5% row survives the wipe and claims "2025-01-01|2025-12-31". The 2%
+  // row is deleted by the wipe and then skipped on re-insert because its
+  // period key collides — $588,220.30 -> $473,257.06, stable on a second
+  // run, unrecoverable without re-entering the collection. And
+  // `recomputeAccrualForContract` runs at the end of every term save, so no
+  // one has to press anything for it to happen.
+  //
+  // Rebate rows carry no `termId`, so the discriminator has to come from the
+  // data already present: the engine writes the applied rate into `notes`
+  // ("… tier 2 @ 5% on $…"). That is machine-written by the same code path
+  // that produced the bucket, so matching a bucket's `rebatePercent` against
+  // it identifies the originating term without a schema change — and,
+  // crucially, it works for rows ALREADY in the database. A `Rebate.termId`
+  // column is the durable fix; it would not repair existing rows on its own.
+  //
+  // Anything that does not parse falls back to the old period-wide skip, so
+  // an unrecognised note can only ever be MORE conservative (skip, never
+  // duplicate). That includes the cadence writer's "N terms combined" note,
+  // which deliberately carries no single rate.
+  const RATE_IN_NOTE = /@\s*(-?\d+(?:\.\d+)?)\s*%/
+  const rateFromNote = (notes: string | null): number | null => {
+    const m = notes ? RATE_IN_NOTE.exec(notes) : null
+    if (!m) return null
+    const n = Number(m[1])
+    return Number.isFinite(n) ? n : null
+  }
+  /** period|rate — blocks only the term whose rate matches. */
+  const preservedTermKeys = new Set<string>()
+  /** period — blocks every term for that period (legacy / unparseable). */
+  const preservedPeriodWide = new Set<string>()
+  for (const r of preservedCollected) {
+    const pk = `${dateKey(r.payPeriodStart)}|${dateKey(r.payPeriodEnd)}`
+    const rate = rateFromNote(r.notes)
+    if (rate === null) preservedPeriodWide.add(pk)
+    else preservedTermKeys.add(`${pk}|${rate}`)
+  }
+  /**
+   * True when a period-eval bucket duplicates a collected row that already
+   * exists. Compare rates numerically so "2" and "2.0" agree.
+   */
+  const isPreservedForTerm = (
+    start: Date,
+    end: Date,
+    rebatePercent: number,
+  ): boolean => {
+    const pk = periodKey(start, end)
+    if (preservedPeriodWide.has(pk)) return true
+    return preservedTermKeys.has(`${pk}|${Number(rebatePercent)}`)
+  }
 
   // Monthly-eval path (from W1.W-B): cadence-bucketed rows. Skip any
   // bucket whose period already has a preserved collected row.
@@ -744,7 +811,10 @@ export async function _recomputeAccrualForContractWithFacility(
     for (const b of periodBuckets) {
       if (b.rebateEarned <= 0 && b.totalSpend <= 0) continue
       // Charles W1.W-C1: skip if a collected row already exists for this window.
-      if (preservedKeys.has(periodKey(b.periodStart, b.periodEnd))) continue
+      // Term-aware since the 2026-07-29 audit — a collected row for ANOTHER
+      // term's bucket in the same period must not suppress this one.
+      if (isPreservedForTerm(b.periodStart, b.periodEnd, b.rebatePercent))
+        continue
       // bugs.rtfd 2026-06-13 ("not taking the 500K growth baseline into
       // account"): when a growth baseline was subtracted, the rate applied to
       // the qualifying (net) spend, not gross. Show that basis so the note

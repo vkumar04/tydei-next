@@ -4,7 +4,7 @@
  * Cross-Vendor Tie-In analytics (v0 doc §4 — facility GPO bundle).
  * Reads the facility's active CrossVendorTieIn rows + members, sums
  * the member vendors' YTD COG spend, and runs the bundle through
- * `v0CrossVendorTieIn` for compliance + bundle rebate + facility
+ * `crossVendorTieIn` for compliance + bundle rebate + facility
  * bonus.
  */
 
@@ -12,9 +12,9 @@ import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import {
-  v0CrossVendorTieIn,
-  type V0CrossVendorResult,
-} from "@/lib/v0-spec/tie-in"
+  crossVendorTieIn,
+  type CrossVendorResult,
+} from "@/lib/contracts/tie-in-bundle-math"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export interface CrossVendorTieInRow {
@@ -25,7 +25,7 @@ export interface CrossVendorTieInRow {
   expirationDate: string
   facilityBonusRate: number
   facilityBonusRequirement: "all_compliant" | "none"
-  result: V0CrossVendorResult
+  result: CrossVendorResult
   members: Array<{
     vendorId: string
     vendorName: string
@@ -85,7 +85,7 @@ async function _getCrossVendorTieInsImpl(): Promise<CrossVendorTieInRow[]> {
       currentSpend: spendByVendor.get(m.vendorId) ?? 0,
     }))
 
-    const result = v0CrossVendorTieIn(members, {
+    const result = crossVendorTieIn(members, {
       rate: Number(t.facilityBonusRate),
       requirement:
         t.facilityBonusRequirement === "all_compliant"
@@ -232,7 +232,7 @@ async function _getVendorCrossVendorTieInMembershipsImpl(): Promise<
       currentSpend: spendByPair.get(`${t.facilityId}:${m.vendorId}`) ?? 0,
     }))
 
-    const result = v0CrossVendorTieIn(memberInputs, {
+    const result = crossVendorTieIn(memberInputs, {
       rate: Number(t.facilityBonusRate),
       requirement:
         t.facilityBonusRequirement === "all_compliant"
@@ -241,7 +241,7 @@ async function _getVendorCrossVendorTieInMembershipsImpl(): Promise<
     })
 
     // Self row pulls real numbers; co-members are redacted to just
-    // (name, rebate%, compliant). v0CrossVendorTieIn returns one
+    // (name, rebate%, compliant). crossVendorTieIn returns one
     // result.vendorRebates entry per member in the same order — pair
     // them up so we don't expose `spend` / `rebate` $ for others.
     const selfInput = memberInputs.find((m) => m.vendorId === vendor.id)

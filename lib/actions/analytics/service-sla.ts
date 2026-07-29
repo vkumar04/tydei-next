@@ -2,7 +2,7 @@
 
 /**
  * Charles audit suggestion (v0-port): Service SLA Penalty wrapper.
- * Delegates to `v0ServiceSlaPenalty` for the math; wires it to the
+ * Delegates to `serviceSlaPenalty` for the math; wires it to the
  * contract's annualValue + the SLA defaults documented in v0 §1.
  *
  * v0's spec stores SLA terms on the contract; tydei doesn't yet
@@ -13,7 +13,7 @@
 
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
-import { v0ServiceSlaPenalty } from "@/lib/v0-spec/tie-in"
+import { serviceSlaPenalty } from "@/lib/contracts/sla-penalty"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
@@ -52,7 +52,7 @@ async function _evaluateServiceSlaImpl(input: ServiceSlaInput) {
     select: { annualValue: true, contractType: true },
   })
 
-  const result = v0ServiceSlaPenalty({
+  const result = serviceSlaPenalty({
     actualResponseHours: input.actualResponseHours,
     slaResponseHours: input.slaResponseHours,
     hourlyPenaltyRate: input.hourlyPenaltyRate ?? 250,

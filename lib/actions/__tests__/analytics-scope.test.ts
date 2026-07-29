@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 /**
  * Scope-gate tests for the contract-scoped analytics actions.
  *
- * The actions delegate their MATH to lib/v0-spec/* (which has its
+ * The actions delegate their MATH to lib/contracts/* reference modules (which have their
  * own oracle tests), so this suite focuses on the boundary that
  * broke yesterday: requireContractScope must reject unauthorized
  * contractIds, and the cached/wrapped facade must propagate the

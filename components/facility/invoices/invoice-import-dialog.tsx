@@ -56,6 +56,7 @@ import {
   type ExtractedInvoiceData,
 } from "@/lib/ai/invoice-extract-schema"
 import { toast } from "sonner"
+import { roundToCents } from "@/lib/money/round"
 
 interface Vendor {
   id: string
@@ -311,7 +312,7 @@ export function InvoiceImportDialog({
           quantity,
           unitOfMeasure: "EA",
           unitPrice,
-          extendedPrice: Math.round(quantity * unitPrice * 100) / 100,
+          extendedPrice: roundToCents(quantity * unitPrice),
         }
       })
     const subtotal = lineItems

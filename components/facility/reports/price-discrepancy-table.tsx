@@ -20,9 +20,9 @@ import { formatCurrency, formatNumber, formatPercent } from "@/lib/formatting"
 import { queryKeys } from "@/lib/query-keys"
 import { getPriceDiscrepancySummary } from "@/lib/actions/reports"
 import {
-  v0CogPriceVarianceBand,
-  type V0CogVarianceBand,
-} from "@/lib/v0-spec/cog"
+  cogPriceVarianceBand,
+  type CogVarianceBand,
+} from "@/lib/contracts/cog-variance-band"
 import { cn } from "@/lib/utils"
 import {
   Search,
@@ -110,9 +110,9 @@ function getVarianceDollar(d: PriceDiscrepancy): number | null {
 }
 
 // v0 doc §6 banding: ±0.5% = at_contract, <±5% = minor_*, ≥±5% = significant_*.
-function getVarianceBand(d: PriceDiscrepancy): V0CogVarianceBand | null {
+function getVarianceBand(d: PriceDiscrepancy): CogVarianceBand | null {
   if (d.contractPrice == null) return null
-  return v0CogPriceVarianceBand(d.invoicePrice, d.contractPrice).band
+  return cogPriceVarianceBand(d.invoicePrice, d.contractPrice).band
 }
 
 /**
@@ -123,7 +123,7 @@ function getVarianceBand(d: PriceDiscrepancy): V0CogVarianceBand | null {
  * offers `at_contract` / `minor_overcharge` — strings that appear
  * nowhere on screen.
  */
-export const V0_BAND_LABEL: Record<V0CogVarianceBand, string> = {
+export const V0_BAND_LABEL: Record<CogVarianceBand, string> = {
   significant_overcharge: "Significant overcharge",
   minor_overcharge: "Minor overcharge",
   at_contract: "At contract",
@@ -131,7 +131,7 @@ export const V0_BAND_LABEL: Record<V0CogVarianceBand, string> = {
   significant_discount: "Significant discount",
 }
 
-const V0_BAND_BADGE_CLASS: Record<V0CogVarianceBand, string | null> = {
+const V0_BAND_BADGE_CLASS: Record<CogVarianceBand, string | null> = {
   significant_overcharge:
     "bg-red-500/15 text-red-600 dark:text-red-400 border-0",
   minor_overcharge:
@@ -144,7 +144,7 @@ const V0_BAND_BADGE_CLASS: Record<V0CogVarianceBand, string | null> = {
     "bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 border-0",
 }
 
-export function bandBadge(band: V0CogVarianceBand | null) {
+export function bandBadge(band: CogVarianceBand | null) {
   if (band == null) return <span className="text-muted-foreground">—</span>
   const className = V0_BAND_BADGE_CLASS[band]
   return className == null ? (
@@ -188,7 +188,7 @@ export function discrepancyTypeFilterValue(row: {
 }
 
 export function varianceBandFilterValue(row: {
-  _band: V0CogVarianceBand | null
+  _band: CogVarianceBand | null
 }): string {
   // Off-contract rows have no band. `""` (rather than null) keeps the
   // value out of the faceted option list — SelectFilter drops empty
@@ -390,7 +390,7 @@ function buildColumns(): ColumnDef<
   PriceDiscrepancy & {
     _type: DiscrepancyType
     _varianceDollar: number | null
-    _band: V0CogVarianceBand | null
+    _band: CogVarianceBand | null
   }
 >[] {
   return [

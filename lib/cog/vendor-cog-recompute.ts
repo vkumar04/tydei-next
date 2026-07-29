@@ -27,6 +27,7 @@ import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
 import { vendorCogScopedByDivisions } from "@/lib/contracts/vendor-cog-scope"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import type { COGMatchStatus, Prisma } from "@/lib/generated/prisma/client"
+import { roundToCents } from "@/lib/money/round"
 
 export interface VendorCogMatchSummary {
   total: number
@@ -133,7 +134,7 @@ export function classifyVendorCogRow(
     isOnContract: true,
     contractId: res.contractId,
     contractPrice: cp,
-    savingsAmount: Math.round((cp - row.unitCost) * row.quantity * 100) / 100,
+    savingsAmount: roundToCents((cp - row.unitCost) * row.quantity),
     variancePercent: null,
   }
 }
