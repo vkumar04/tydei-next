@@ -39,6 +39,7 @@ import {
   useAcceptConnection,
   useRejectConnection,
   useRemoveConnection,
+  useSetConnectionAutoActivate,
 } from "@/hooks/use-connections"
 import {
   useCredits,
@@ -90,6 +91,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
   const acceptConn = useAcceptConnection(facilityId)
   const rejectConn = useRejectConnection(facilityId)
   const removeConn = useRemoveConnection(facilityId)
+  const setAutoActivate = useSetConnectionAutoActivate(facilityId)
   const creditsQuery = useCredits(facilityId, "facility")
   const usageQuery = useUsageHistory(creditsQuery.data?.id)
   const breakdownQuery = useUsageBreakdown(creditsQuery.data?.id)
@@ -304,6 +306,9 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
                 onError: (err) =>
                   toast.error(err instanceof Error ? err.message : "Failed to reject"),
               })
+            }
+            onSetAutoActivate={(connectionId, enabled) =>
+              setAutoActivate.mutate({ connectionId, enabled })
             }
             onRemoveConnection={(id) =>
               removeConn.mutate(id, {

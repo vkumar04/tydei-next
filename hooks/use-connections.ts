@@ -12,6 +12,7 @@ import {
 } from "@/lib/actions/connections"
 import {
   setConnectionMode,
+  setConnectionAutoActivate,
   getVendorOperatingMode,
   setVendorOperatingMode,
 } from "@/lib/actions/connection-mode"
@@ -85,5 +86,19 @@ export function useSetVendorOperatingMode(vendorId: string) {
   return useToastMutation(
     (mode: ConnectionMode) => setVendorOperatingMode(mode),
     { invalidate: [queryKeys.settings.vendorOperatingMode(vendorId)] },
+  )
+}
+
+/**
+ * Facility grants/revokes a vendor's right to publish contracts straight into
+ * this facility's tenant with no per-contract review. The mirror of
+ * `useSetConnectionMode` above, which is vendor-side — this one is facility-side
+ * because the facility is the party carrying the risk.
+ */
+export function useSetConnectionAutoActivate(entityId: string) {
+  return useToastMutation(
+    ({ connectionId, enabled }: { connectionId: string; enabled: boolean }) =>
+      setConnectionAutoActivate(connectionId, enabled),
+    { invalidate: [queryKeys.settings.connections(entityId)] },
   )
 }

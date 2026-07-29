@@ -3,6 +3,7 @@ import { formatDate } from "@/lib/formatting"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -47,6 +48,12 @@ export interface ConnectionsTabProps {
   onAcceptConnection: (id: string) => void
   onRejectConnection: (id: string) => void
   onRemoveConnection: (id: string) => void
+  /**
+   * Facility grants/revokes a vendor's right to publish contracts straight into
+   * this facility's tenant with no per-contract review. Facility-owned on
+   * purpose — see Connection.autoActivateContracts.
+   */
+  onSetAutoActivate: (id: string, enabled: boolean) => void
 }
 
 export function ConnectionsTab({
@@ -62,6 +69,7 @@ export function ConnectionsTab({
   onAcceptConnection,
   onRejectConnection,
   onRemoveConnection,
+  onSetAutoActivate,
 }: ConnectionsTabProps) {
   return (
     <Card>
@@ -226,6 +234,7 @@ export function ConnectionsTab({
                       <TableHead>Vendor</TableHead>
                       <TableHead>Connected Since</TableHead>
                       <TableHead>Initiated By</TableHead>
+                      <TableHead>Auto-activate contracts</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -249,6 +258,27 @@ export function ConnectionsTab({
                             <Badge variant="outline">
                               {connection.inviteType === "facility_to_vendor" ? "You" : connection.vendorName}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {/* Facility-owned. Off by default: accepting an
+                                invite means "let's do business", not
+                                "auto-approve every contract you send me". When
+                                off, the vendor's submissions land as pending
+                                and you review each one. */}
+                            <label className="flex cursor-pointer items-center gap-2 text-xs">
+                              <Checkbox
+                                checked={connection.autoActivateContracts}
+                                onCheckedChange={(v) =>
+                                  onSetAutoActivate(connection.id, v === true)
+                                }
+                                aria-label={`Let ${connection.vendorName} publish contracts without review`}
+                              />
+                              <span className="text-muted-foreground">
+                                {connection.autoActivateContracts
+                                  ? "Publishes without review"
+                                  : "You review each contract"}
+                              </span>
+                            </label>
                           </TableCell>
                           <TableCell className="text-right">
                             <Button
