@@ -20,7 +20,7 @@ const { deleteManyMock, createManyMock } = vi.hoisted(() => ({
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    rebate: { deleteMany: deleteManyMock, createMany: createManyMock },
+    rebate: { findMany: vi.fn().mockResolvedValue([]), /* preserved-collected read (2026-07-29) */  deleteMany: deleteManyMock, createMany: createManyMock },
   },
 }))
 

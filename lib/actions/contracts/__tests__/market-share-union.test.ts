@@ -29,7 +29,7 @@ const { deleteManyMock, createManyMock, cogFindManyMock, cogGroupByMock } =
 
 vi.mock("@/lib/db", () => ({
   prisma: {
-    rebate: { deleteMany: deleteManyMock, createMany: createManyMock },
+    rebate: { findMany: vi.fn().mockResolvedValue([]), /* preserved-collected read (2026-07-29) */  deleteMany: deleteManyMock, createMany: createManyMock },
     cOGRecord: { findMany: cogFindManyMock, groupBy: cogGroupByMock },
   },
 }))

@@ -69,7 +69,7 @@ vi.mock("@/lib/db", () => ({
         },
       ),
     },
-    rebate: {
+    rebate: { findMany: vi.fn().mockResolvedValue([]), /* preserved-collected read (2026-07-29) */ 
       deleteMany: vi.fn(async () => ({ count: 0 })),
       createMany: vi.fn(async (args: { data: typeof createManyCalls[number]["data"] }) => {
         createManyCalls.push({ data: args.data })

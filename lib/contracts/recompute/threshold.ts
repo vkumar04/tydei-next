@@ -33,6 +33,10 @@ import { facilityCogCategoryUniverse } from "@/lib/contracts/cog-category-univer
 // every writer's rows (term-type edits left the prior writer's
 // rows immortal — volume math 38,775 + stale 26,751 = 65,526).
 import { AUTO_THRESHOLD_PREFIX } from "@/lib/contracts/recompute/auto-accrual-prefixes"
+import {
+  loadPreservedCollectedPeriods,
+  periodKey,
+} from "@/lib/contracts/recompute/preserved-collected"
 
 export type ThresholdMetric = "complianceRate" | "currentMarketShare"
 
@@ -635,6 +639,15 @@ export async function recomputeThresholdAccrualForTerm(input: {
     },
   })
 
+  // Windows already covered by a COLLECTED row. Those rows survive the delete
+  // above (it spares collectionDate != null), so re-inserting their window
+  // duplicates them permanently — 2026-07-29 math audit.
+  const preservedCollected = await loadPreservedCollectedPeriods(
+    contractId,
+    termPrefix,
+    isTieIn,
+  )
+
   const toInsert: Array<{
     contractId: string
     facilityId: string
@@ -649,6 +662,8 @@ export async function recomputeThresholdAccrualForTerm(input: {
   for (let i = 0; i < results.length; i++) {
     const r = results[i]
     if (r.periodPayment <= 0) continue
+    // Skip a window a COLLECTED row already covers — see the load above.
+    if (preservedCollected.has(periodKey(r.periodStart, r.periodEnd))) continue
     totalEarned += r.periodPayment
     // 2026-06-09: per-period rows note THIS window's share + tier (was the
     // single scalar stamped on every row — "not showing the rate").
