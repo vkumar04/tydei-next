@@ -606,7 +606,23 @@ model ProposalEvaluation {
 
 model Vendor {
   id             String     @id @default(cuid())
-  name           String
+  /// Unique. Charles 2026-07-28: the vendor catalog had no uniqueness at all, so
+  /// two rows could carry the identical name — and the Settings → Vendors tab
+  /// (which showed only the first 100 of 200) sat directly under an "Add Vendor"
+  /// button, so a user who scrolled for Stryker, failed to find it, and clicked
+  /// Add minted a second Stryker. Every COG/PO/invoice row then split across the
+  /// two, which is the fragmentation the alias system exists to undo.
+  ///
+  /// Deliberately a plain unique, NOT case-insensitive: Prisma cannot express a
+  /// functional index (`lower(name)`) — "Indexes using a function ... are not yet
+  /// supported by Prisma ORM" and are invisible to `db pull`, so a raw one would
+  /// read as drift and a later `migrate dev` could drop it silently. Case
+  /// variants are already caught above the DB, by `createVendor`'s
+  /// case-insensitive check across BOTH name and displayName
+  /// (lib/actions/vendors.ts) and by resolve.ts Pass 1's case-insensitive exact
+  /// match. This constraint is the backstop those two cannot provide: races, and
+  /// any future path that skips them.
+  name           String     @unique
   code           String?
   displayName    String?
   division       String?

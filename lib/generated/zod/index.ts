@@ -1636,6 +1636,24 @@ export const VendorSchema = z.object({
   tier: VendorTierSchema,
   defaultMode: ConnectionModeSchema.nullable(),
   id: z.cuid(),
+  /**
+   * Unique. Charles 2026-07-28: the vendor catalog had no uniqueness at all, so
+   * two rows could carry the identical name — and the Settings → Vendors tab
+   * (which showed only the first 100 of 200) sat directly under an "Add Vendor"
+   * button, so a user who scrolled for Stryker, failed to find it, and clicked
+   * Add minted a second Stryker. Every COG/PO/invoice row then split across the
+   * two, which is the fragmentation the alias system exists to undo.
+   * 
+   * Deliberately a plain unique, NOT case-insensitive: Prisma cannot express a
+   * functional index (`lower(name)`) — "Indexes using a function ... are not yet
+   * supported by Prisma ORM" and are invisible to `db pull`, so a raw one would
+   * read as drift and a later `migrate dev` could drop it silently. Case
+   * variants are already caught above the DB, by `createVendor`'s
+   * case-insensitive check across BOTH name and displayName
+   * (lib/actions/vendors.ts) and by resolve.ts Pass 1's case-insensitive exact
+   * match. This constraint is the backstop those two cannot provide: races, and
+   * any future path that skips them.
+   */
   name: z.string(),
   code: z.string().nullable(),
   displayName: z.string().nullable(),
@@ -12084,10 +12102,26 @@ export const VendorOrderByWithRelationInputSchema: z.ZodType<Prisma.VendorOrderB
 export const VendorWhereUniqueInputSchema: z.ZodType<Prisma.VendorWhereUniqueInput> = z.union([
   z.object({
     id: z.cuid(),
+    name: z.string(),
     organizationId: z.string(),
   }),
   z.object({
     id: z.cuid(),
+    name: z.string(),
+  }),
+  z.object({
+    id: z.cuid(),
+    organizationId: z.string(),
+  }),
+  z.object({
+    id: z.cuid(),
+  }),
+  z.object({
+    name: z.string(),
+    organizationId: z.string(),
+  }),
+  z.object({
+    name: z.string(),
   }),
   z.object({
     organizationId: z.string(),
@@ -12095,11 +12129,11 @@ export const VendorWhereUniqueInputSchema: z.ZodType<Prisma.VendorWhereUniqueInp
 ])
 .and(z.strictObject({
   id: z.cuid().optional(),
+  name: z.string().optional(),
   organizationId: z.string().optional(),
   AND: z.union([ z.lazy(() => VendorWhereInputSchema), z.lazy(() => VendorWhereInputSchema).array() ]).optional(),
   OR: z.lazy(() => VendorWhereInputSchema).array().optional(),
   NOT: z.union([ z.lazy(() => VendorWhereInputSchema), z.lazy(() => VendorWhereInputSchema).array() ]).optional(),
-  name: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
   code: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   displayName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   division: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
