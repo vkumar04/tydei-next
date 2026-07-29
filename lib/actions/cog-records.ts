@@ -9,7 +9,7 @@ import {
   type COGFilters,
   type CreateCOGRecordInput,
 } from "@/lib/validators/cog-records"
-import type { Prisma } from "@/lib/generated/prisma/client"
+import { cogRecordWhere } from "@/lib/contracts/cog-record-filter"
 import { serialize } from "@/lib/serialize"
 
 // ─── List COG Records ───────────────────────────────────────────
@@ -18,41 +18,11 @@ export async function getCOGRecords(input: COGFilters) {
   const { facility } = await requireFacility()
   const filters = cogFiltersSchema.parse(input)
 
-  const conditions: Prisma.COGRecordWhereInput[] = [
-    { facilityId: facility.id },
-  ]
-
-  if (filters.search) {
-    conditions.push({
-      OR: [
-        { inventoryDescription: { contains: filters.search, mode: "insensitive" } },
-        { inventoryNumber: { contains: filters.search, mode: "insensitive" } },
-        { vendorItemNo: { contains: filters.search, mode: "insensitive" } },
-      ],
-    })
-  }
-  if (filters.vendorId) conditions.push({ vendorId: filters.vendorId })
-  if (filters.matchStatus) {
-    // "variance_only" is a UI convenience that expands to the set of
-    // rows the user cares about when investigating cost leaks:
-    // off-contract items and price variances. Everything else is a
-    // literal enum value that matches COGMatchStatus.
-    if (filters.matchStatus === "variance_only") {
-      conditions.push({
-        matchStatus: { in: ["off_contract_item", "price_variance"] },
-      })
-    } else {
-      conditions.push({ matchStatus: filters.matchStatus })
-    }
-  }
-  if (filters.dateFrom) {
-    conditions.push({ transactionDate: { gte: new Date(filters.dateFrom) } })
-  }
-  if (filters.dateTo) {
-    conditions.push({ transactionDate: { lte: new Date(filters.dateTo) } })
-  }
-
-  const where: Prisma.COGRecordWhereInput = { AND: conditions }
+  // Canonical filter — shared with the CSV endpoint (app/api/cog/export).
+  // These two were hand-rolled copies and had drifted: the export never read
+  // `search`, so a searched view exported the whole facility. Route every COG
+  // read through this helper so they cannot disagree again.
+  const where = cogRecordWhere(facility.id, filters)
   const page = filters.page ?? 1
   const pageSize = filters.pageSize ?? 20
 

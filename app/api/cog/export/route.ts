@@ -14,16 +14,15 @@ import { NextResponse } from "next/server"
 import { headers as getHeaders } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import { prisma } from "@/lib/db"
-import type { Prisma, COGMatchStatus } from "@/lib/generated/prisma/client"
+import { cogRecordWhere } from "@/lib/contracts/cog-record-filter"
 
-const ALLOWED_MATCH_STATUSES: readonly COGMatchStatus[] = [
-  "pending",
-  "on_contract",
-  "off_contract_item",
-  "out_of_scope",
-  "unknown_vendor",
-  "price_variance",
-] as const
+/**
+ * Row ceiling for a single export. Kept here (not in the shared filter helper)
+ * because it is a property of THIS transport — the table paginates instead.
+ * When it bites, the response says so: see the filename and the X-* headers
+ * at the bottom of the handler.
+ */
+const EXPORT_ROW_CAP = 100_000
 
 const CSV_HEADERS = [
   "poNumber",
@@ -60,13 +59,8 @@ const csvEscape = (raw: unknown): string => {
   return s
 }
 
-// Parse a query-param date, returning undefined for missing/invalid values
-// (an unguarded `new Date("garbage")` yields an Invalid Date that Prisma rejects).
-const parseQueryDate = (raw: string | undefined): Date | undefined => {
-  if (!raw) return undefined
-  const d = new Date(raw)
-  return Number.isNaN(d.getTime()) ? undefined : d
-}
+// (Date-param parsing now lives in `cogRecordWhere` — one definition, shared
+// with the table's query, including the guard against `new Date("garbage")`.)
 
 const formatDate = (d: Date | null | undefined): string => {
   if (!d) return ""
@@ -97,51 +91,40 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url)
-  const vendorId = url.searchParams.get("vendorId") ?? undefined
-  const dateFrom = url.searchParams.get("dateFrom") ?? undefined
-  const dateTo = url.searchParams.get("dateTo") ?? undefined
-  const matchStatusRaw = url.searchParams.get("matchStatus")
-  const matchStatus =
-    matchStatusRaw &&
-    ALLOWED_MATCH_STATUSES.includes(matchStatusRaw as COGMatchStatus)
-      ? (matchStatusRaw as COGMatchStatus)
-      : undefined
 
-  const conditions: Prisma.COGRecordWhereInput[] = [
-    { facilityId: facility.id },
-  ]
-  if (vendorId) conditions.push({ vendorId })
-  const gteDate = parseQueryDate(dateFrom)
-  const lteDate = parseQueryDate(dateTo)
-  if (gteDate) {
-    conditions.push({ transactionDate: { gte: gteDate } })
-  }
-  if (lteDate) {
-    conditions.push({ transactionDate: { lte: lteDate } })
-  }
-  if (matchStatus === "price_variance" || matchStatus === "off_contract_item") {
-    conditions.push({ matchStatus })
-  } else if (matchStatus) {
-    conditions.push({ matchStatus })
-  } else if (matchStatusRaw === "variance_only") {
-    // Client maps the "Variance only" quick-filter to this literal. Pull
-    // off-contract + price-variance in one query.
-    conditions.push({
-      matchStatus: { in: ["off_contract_item", "price_variance"] },
-    })
-  }
-
-  const where: Prisma.COGRecordWhereInput = { AND: conditions }
+  // Build the where via the CANONICAL helper, the same one `getCOGRecords`
+  // uses to populate the table. This endpoint previously hand-rolled its own
+  // copy which silently omitted `search`, so an operator who searched
+  // "Stryker", saw 108 rows, and hit Export received all 49,269 facility rows
+  // under an identical filename. Two hand-rolled copies of one filter is the
+  // bug; there is now one definition and both callers read it.
+  //
+  // `facility.id` comes from the session below, never from the query string —
+  // a forged `facilityId` param is ignored, as it always was.
+  const where = cogRecordWhere(facility.id, {
+    search: url.searchParams.get("search"),
+    vendorId: url.searchParams.get("vendorId"),
+    matchStatus: url.searchParams.get("matchStatus"),
+    dateFrom: url.searchParams.get("dateFrom"),
+    dateTo: url.searchParams.get("dateTo"),
+  })
 
   // Cap at 100k rows to keep the export within a reasonable memory
   // envelope. Anything larger should use the (future, v2) streaming
   // path called out in the spec.
-  const records = await prisma.cOGRecord.findMany({
-    where,
-    include: { vendor: { select: { name: true } } },
-    orderBy: { transactionDate: "desc" },
-    take: 100_000,
-  })
+  //
+  // Count alongside the read so the cap can be STATED rather than silently
+  // applied. An export that is short by 40,000 rows and says nothing is the
+  // same defect as the dropped search filter, one layer down.
+  const [records, matched] = await Promise.all([
+    prisma.cOGRecord.findMany({
+      where,
+      include: { vendor: { select: { name: true } } },
+      orderBy: { transactionDate: "desc" },
+      take: EXPORT_ROW_CAP,
+    }),
+    prisma.cOGRecord.count({ where }),
+  ])
 
   const lines: string[] = [CSV_HEADERS.join(",")]
   for (const r of records) {
@@ -168,7 +151,17 @@ export async function GET(request: Request) {
   }
 
   const csv = lines.join("\n")
-  const filename = `cog-data-${new Date().toISOString().slice(0, 10)}.csv`
+
+  // Name the artifact after what is actually in it. The codebase already uses
+  // this idiom for the contracts export (`summarizeContractsExport` in
+  // hooks/use-contracts.ts): when rows are missing, both numbers go in the
+  // filename so the file cannot be mistaken for a complete one after it has
+  // been renamed, emailed, or filed away from any UI that could explain it.
+  const stamp = new Date().toISOString().slice(0, 10)
+  const truncated = records.length < matched
+  const filename = truncated
+    ? `cog-data-${stamp}-first-${records.length}-of-${matched}.csv`
+    : `cog-data-${stamp}.csv`
 
   return new NextResponse(csv, {
     status: 200,
@@ -176,6 +169,11 @@ export async function GET(request: Request) {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="${filename}"`,
       "Cache-Control": "no-store",
+      // Read by the client so the toast can state the scope of the download.
+      // `X-Total-Matched` is the server's count for the SAME where clause the
+      // rows came from, so the two numbers are comparable.
+      "X-Rows-Exported": String(records.length),
+      "X-Total-Matched": String(matched),
     },
   })
 }
