@@ -42,6 +42,10 @@ import { determineTier } from "@/lib/rebates/engine/shared/determine-tier"
 // every writer's rows (term-type edits left the prior writer's
 // rows immortal — volume math 38,775 + stale 26,751 = 65,526).
 import { AUTO_INVOICE_PREFIX } from "@/lib/contracts/recompute/auto-accrual-prefixes"
+import {
+  loadPreservedCollectedPeriods,
+  periodKey,
+} from "@/lib/contracts/recompute/preserved-collected"
 
 interface InvoiceRebateTermLike {
   id: string
@@ -228,6 +232,15 @@ export async function recomputeInvoiceAccrualForTerm(input: {
     },
   })
 
+  // Windows already covered by a COLLECTED row. Those rows survive the delete
+  // above (it spares collectionDate != null), so re-inserting their window
+  // duplicates them permanently — 2026-07-29 math audit.
+  const preservedCollected = await loadPreservedCollectedPeriods(
+    contractId,
+    termPrefix,
+    isTieIn,
+  )
+
   let sumEarned = 0
   const toInsert: Array<{
     contractId: string
@@ -241,6 +254,8 @@ export async function recomputeInvoiceAccrualForTerm(input: {
   }> = []
   for (const r of results) {
     if (r.rebateEarned <= 0 && r.count <= 0) continue
+    // Skip a window a COLLECTED row already covers — see the load above.
+    if (preservedCollected.has(periodKey(r.periodStart, r.periodEnd))) continue
     sumEarned += r.rebateEarned
     toInsert.push({
       contractId,
