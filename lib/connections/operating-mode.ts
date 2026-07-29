@@ -56,6 +56,12 @@ export interface ResolvedOperatingMode {
    * keeps reading exactly as before.
    */
   connectionStatus: ConnectionStatus | null
+  /**
+   * Has the FACILITY granted this vendor permission to publish a contract
+   * straight into its tenant, live, with no per-contract review?
+   * (`Connection.autoActivateContracts`.) False when there is no pair row.
+   */
+  autoActivateGranted: boolean
 }
 
 export async function resolveOperatingMode(input: {
@@ -68,7 +74,7 @@ export async function resolveOperatingMode(input: {
     facilityId
       ? prisma.connection.findFirst({
           where: { vendorId, facilityId },
-          select: { mode: true, status: true },
+          select: { mode: true, status: true, autoActivateContracts: true },
         })
       : Promise.resolve(null),
     prisma.vendor.findUnique({
@@ -87,6 +93,7 @@ export async function resolveOperatingMode(input: {
       source: "connection",
       hasConnectionForFacility: true,
       connectionStatus: pairConnection.status,
+      autoActivateGranted: pairConnection.autoActivateContracts,
     }
   }
 
@@ -96,6 +103,7 @@ export async function resolveOperatingMode(input: {
       source: "vendorDefault",
       hasConnectionForFacility: false,
       connectionStatus: null,
+      autoActivateGranted: false,
     }
   }
 
@@ -104,41 +112,50 @@ export async function resolveOperatingMode(input: {
     source: "derived",
     hasConnectionForFacility: false,
     connectionStatus: null,
+    autoActivateGranted: false,
   }
 }
 
 /**
  * Whether a vendor-created contract may skip facility review and land ACTIVE.
  *
- * Two conditions, both required:
- *   - the resolved mode is one_way (nobody is going to review it), AND
- *   - the contract does not name a facility the vendor has no ACCEPTED
- *     Connection with.
+ * Split by whether the contract names a facility, because the two cases put the
+ * risk on completely different parties:
  *
- * That second condition is the tenant-isolation guard. The vendor "New
- * Contract" facility picker used to offer every active facility in the system,
- * so without it a vendor in one_way mode could mint a LIVE contract attributed
- * to any facility — a cross-tenant write. A standalone one_way vendor still
- * gets the behavior Charles asked for; the contract is simply its own
- * (facilityId null) rather than silently attached to someone else's tenant.
+ *   NO facility  → the contract is the vendor's own record. Nobody else's tenant
+ *                  is touched, so a standalone vendor self-serves freely. This
+ *                  is the case the schema means by "nothing flows to the
+ *                  facility", and it is what Charles asked for.
  *
- * Charles 2026-07-27, tightened during the auto-activation build: the check is
- * `status === "accepted"`, not merely "a row exists". `sendConnectionInvite` is
- * a vendor-callable action that creates a `pending` / `one_way` row against a
- * facility matched BY NAME off the wire, with no facility consent — so
- * "a row exists" was forgeable in one call, and invite-then-create would have
- * written a live contract into an unconsenting facility's tenant. An accepted
- * row is the only state the counterparty actually signs off on
- * (`acceptConnection`). This is strictly narrower than the existence check;
- * do not relax it back.
+ *   A facility   → a live Contract row lands on THAT facility's tenant and
+ *                  `recomputeMatchStatusesForVendor` rewrites its COG match
+ *                  statuses. The facility carries that risk, so the facility
+ *                  must have granted it: `Connection.autoActivateContracts`,
+ *                  default false, settable only through a requireFacility()
+ *                  action.
+ *
+ * `mode` deliberately does NOT gate this (2026-07-28). It used to, and that was
+ * backwards: `Connection.mode` is `@default(one_way)` as a FAIL-SECURE posture —
+ * "do not share this facility's actuals with the vendor yet" — so keying
+ * auto-activation off one_way made the most restrictive setting silently the
+ * most permissive one on an unrelated axis, and every newly accepted connection
+ * granted publish rights by default. mode answers "does the facility's data flow
+ * out?"; this answers "may the vendor write in?". Two questions, two flags.
+ *
+ * The accepted-status requirement is retained on top of the grant, not replaced
+ * by it: `sendConnectionInvite` is vendor-callable and mints a `pending` row
+ * against a facility matched BY NAME off the wire, so a pending row proves
+ * nothing. Both conditions are required; do not relax either.
  */
 export function canAutoActivate(
   resolved: ResolvedOperatingMode,
   facilityId: string | null | undefined,
 ): boolean {
-  if (resolved.mode !== "one_way") return false
+  // The vendor's own contract — no other tenant involved.
   if (!facilityId) return true
   return (
-    resolved.hasConnectionForFacility && resolved.connectionStatus === "accepted"
+    resolved.hasConnectionForFacility &&
+    resolved.connectionStatus === "accepted" &&
+    resolved.autoActivateGranted
   )
 }

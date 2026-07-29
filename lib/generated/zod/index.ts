@@ -204,7 +204,7 @@ export const SurgeonUsageScalarFieldEnumSchema = z.enum(['id','surgeonId','surge
 
 export const PayorContractScalarFieldEnumSchema = z.enum(['id','payorName','payorType','facilityId','contractNumber','effectiveDate','expirationDate','status','cptRates','grouperRates','multiProcedureRule','implantPassthrough','implantMarkup','uploadedAt','uploadedBy','fileName','notes']);
 
-export const ConnectionScalarFieldEnumSchema = z.enum(['id','facilityId','facilityName','vendorId','vendorName','status','inviteType','invitedBy','invitedByEmail','invitedAt','respondedAt','respondedBy','expiresAt','message','mode','vendorDivisionId']);
+export const ConnectionScalarFieldEnumSchema = z.enum(['id','facilityId','facilityName','vendorId','vendorName','status','inviteType','invitedBy','invitedByEmail','invitedAt','respondedAt','respondedBy','expiresAt','message','mode','autoActivateContracts','vendorDivisionId']);
 
 export const FeatureFlagScalarFieldEnumSchema = z.enum(['id','facilityId','purchaseOrdersEnabled','aiAgentEnabled','vendorPortalEnabled','advancedReportsEnabled','caseCostingEnabled']);
 
@@ -7434,6 +7434,20 @@ export const ConnectionSchema = z.object({
   respondedBy: z.string().nullable(),
   expiresAt: z.coerce.date(),
   message: z.string().nullable(),
+  /**
+   * May this vendor publish a contract straight into this facility's tenant —
+   * live, with no per-contract review?
+   * 
+   * Granted by the FACILITY, never the vendor: it is the facility that carries
+   * the risk (a live Contract row on its tenant, and a COG match-status
+   * recompute against its records), so the facility owns the switch and can
+   * revoke it. `mode` deliberately does NOT gate this — that axis is about the
+   * facility's data flowing outward, and reusing it here meant every newly
+   * accepted connection auto-granted publish rights via its fail-secure
+   * default. Accepting an invite means "let's do business", not "auto-approve
+   * everything you send me from now on". Charles 2026-07-28.
+   */
+  autoActivateContracts: z.boolean(),
   vendorDivisionId: z.string().nullable(),
 })
 
@@ -7455,6 +7469,20 @@ export const ConnectionOptionalDefaultsSchema = ConnectionSchema.merge(z.object(
   mode: ConnectionModeSchema.optional(),
   id: z.cuid().optional(),
   invitedAt: z.coerce.date().optional(),
+  /**
+   * May this vendor publish a contract straight into this facility's tenant —
+   * live, with no per-contract review?
+   * 
+   * Granted by the FACILITY, never the vendor: it is the facility that carries
+   * the risk (a live Contract row on its tenant, and a COG match-status
+   * recompute against its records), so the facility owns the switch and can
+   * revoke it. `mode` deliberately does NOT gate this — that axis is about the
+   * facility's data flowing outward, and reusing it here meant every newly
+   * accepted connection auto-granted publish rights via its fail-secure
+   * default. Accepting an invite means "let's do business", not "auto-approve
+   * everything you send me from now on". Charles 2026-07-28.
+   */
+  autoActivateContracts: z.boolean().optional(),
 }))
 
 export type ConnectionOptionalDefaults = z.infer<typeof ConnectionOptionalDefaultsSchema>
@@ -10731,6 +10759,7 @@ export const ConnectionSelectSchema: z.ZodType<Prisma.ConnectionSelect> = z.obje
   expiresAt: z.boolean().optional(),
   message: z.boolean().optional(),
   mode: z.boolean().optional(),
+  autoActivateContracts: z.boolean().optional(),
   vendorDivisionId: z.boolean().optional(),
   facility: z.union([z.boolean(),z.lazy(() => FacilityArgsSchema)]).optional(),
   vendor: z.union([z.boolean(),z.lazy(() => VendorArgsSchema)]).optional(),
@@ -17620,6 +17649,7 @@ export const ConnectionWhereInputSchema: z.ZodType<Prisma.ConnectionWhereInput> 
   expiresAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   message: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   mode: z.union([ z.lazy(() => EnumConnectionModeFilterSchema), z.lazy(() => ConnectionModeSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.lazy(() => BoolFilterSchema), z.boolean() ]).optional(),
   vendorDivisionId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   facility: z.union([ z.lazy(() => FacilityScalarRelationFilterSchema), z.lazy(() => FacilityWhereInputSchema) ]).optional(),
   vendor: z.union([ z.lazy(() => VendorScalarRelationFilterSchema), z.lazy(() => VendorWhereInputSchema) ]).optional(),
@@ -17642,6 +17672,7 @@ export const ConnectionOrderByWithRelationInputSchema: z.ZodType<Prisma.Connecti
   expiresAt: z.lazy(() => SortOrderSchema).optional(),
   message: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   mode: z.lazy(() => SortOrderSchema).optional(),
+  autoActivateContracts: z.lazy(() => SortOrderSchema).optional(),
   vendorDivisionId: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   facility: z.lazy(() => FacilityOrderByWithRelationInputSchema).optional(),
   vendor: z.lazy(() => VendorOrderByWithRelationInputSchema).optional(),
@@ -17670,6 +17701,7 @@ export const ConnectionWhereUniqueInputSchema: z.ZodType<Prisma.ConnectionWhereU
   expiresAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   message: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   mode: z.union([ z.lazy(() => EnumConnectionModeFilterSchema), z.lazy(() => ConnectionModeSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.lazy(() => BoolFilterSchema), z.boolean() ]).optional(),
   vendorDivisionId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   facility: z.union([ z.lazy(() => FacilityScalarRelationFilterSchema), z.lazy(() => FacilityWhereInputSchema) ]).optional(),
   vendor: z.union([ z.lazy(() => VendorScalarRelationFilterSchema), z.lazy(() => VendorWhereInputSchema) ]).optional(),
@@ -17692,6 +17724,7 @@ export const ConnectionOrderByWithAggregationInputSchema: z.ZodType<Prisma.Conne
   expiresAt: z.lazy(() => SortOrderSchema).optional(),
   message: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   mode: z.lazy(() => SortOrderSchema).optional(),
+  autoActivateContracts: z.lazy(() => SortOrderSchema).optional(),
   vendorDivisionId: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   _count: z.lazy(() => ConnectionCountOrderByAggregateInputSchema).optional(),
   _max: z.lazy(() => ConnectionMaxOrderByAggregateInputSchema).optional(),
@@ -17717,6 +17750,7 @@ export const ConnectionScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma.Co
   expiresAt: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
   message: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
   mode: z.union([ z.lazy(() => EnumConnectionModeWithAggregatesFilterSchema), z.lazy(() => ConnectionModeSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.lazy(() => BoolWithAggregatesFilterSchema), z.boolean() ]).optional(),
   vendorDivisionId: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
 });
 
@@ -25482,6 +25516,7 @@ export const ConnectionCreateInputSchema: z.ZodType<Prisma.ConnectionCreateInput
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
   facility: z.lazy(() => FacilityCreateNestedOneWithoutConnectionsInputSchema),
   vendor: z.lazy(() => VendorCreateNestedOneWithoutConnectionsInputSchema),
   vendorDivision: z.lazy(() => VendorDivisionCreateNestedOneWithoutConnectionsInputSchema).optional(),
@@ -25503,6 +25538,7 @@ export const ConnectionUncheckedCreateInputSchema: z.ZodType<Prisma.ConnectionUn
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
   vendorDivisionId: z.string().optional().nullable(),
 });
 
@@ -25520,6 +25556,7 @@ export const ConnectionUpdateInputSchema: z.ZodType<Prisma.ConnectionUpdateInput
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   facility: z.lazy(() => FacilityUpdateOneRequiredWithoutConnectionsNestedInputSchema).optional(),
   vendor: z.lazy(() => VendorUpdateOneRequiredWithoutConnectionsNestedInputSchema).optional(),
   vendorDivision: z.lazy(() => VendorDivisionUpdateOneWithoutConnectionsNestedInputSchema).optional(),
@@ -25541,6 +25578,7 @@ export const ConnectionUncheckedUpdateInputSchema: z.ZodType<Prisma.ConnectionUn
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -25560,6 +25598,7 @@ export const ConnectionCreateManyInputSchema: z.ZodType<Prisma.ConnectionCreateM
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
   vendorDivisionId: z.string().optional().nullable(),
 });
 
@@ -25577,6 +25616,7 @@ export const ConnectionUpdateManyMutationInputSchema: z.ZodType<Prisma.Connectio
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
 });
 
 export const ConnectionUncheckedUpdateManyInputSchema: z.ZodType<Prisma.ConnectionUncheckedUpdateManyInput> = z.strictObject({
@@ -25595,6 +25635,7 @@ export const ConnectionUncheckedUpdateManyInputSchema: z.ZodType<Prisma.Connecti
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -31644,6 +31685,7 @@ export const ConnectionCountOrderByAggregateInputSchema: z.ZodType<Prisma.Connec
   expiresAt: z.lazy(() => SortOrderSchema).optional(),
   message: z.lazy(() => SortOrderSchema).optional(),
   mode: z.lazy(() => SortOrderSchema).optional(),
+  autoActivateContracts: z.lazy(() => SortOrderSchema).optional(),
   vendorDivisionId: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -31663,6 +31705,7 @@ export const ConnectionMaxOrderByAggregateInputSchema: z.ZodType<Prisma.Connecti
   expiresAt: z.lazy(() => SortOrderSchema).optional(),
   message: z.lazy(() => SortOrderSchema).optional(),
   mode: z.lazy(() => SortOrderSchema).optional(),
+  autoActivateContracts: z.lazy(() => SortOrderSchema).optional(),
   vendorDivisionId: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -31682,6 +31725,7 @@ export const ConnectionMinOrderByAggregateInputSchema: z.ZodType<Prisma.Connecti
   expiresAt: z.lazy(() => SortOrderSchema).optional(),
   message: z.lazy(() => SortOrderSchema).optional(),
   mode: z.lazy(() => SortOrderSchema).optional(),
+  autoActivateContracts: z.lazy(() => SortOrderSchema).optional(),
   vendorDivisionId: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -42665,6 +42709,7 @@ export const ConnectionCreateWithoutFacilityInputSchema: z.ZodType<Prisma.Connec
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
   vendor: z.lazy(() => VendorCreateNestedOneWithoutConnectionsInputSchema),
   vendorDivision: z.lazy(() => VendorDivisionCreateNestedOneWithoutConnectionsInputSchema).optional(),
 });
@@ -42684,6 +42729,7 @@ export const ConnectionUncheckedCreateWithoutFacilityInputSchema: z.ZodType<Pris
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
   vendorDivisionId: z.string().optional().nullable(),
 });
 
@@ -43653,6 +43699,7 @@ export const ConnectionScalarWhereInputSchema: z.ZodType<Prisma.ConnectionScalar
   expiresAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   message: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   mode: z.union([ z.lazy(() => EnumConnectionModeFilterSchema), z.lazy(() => ConnectionModeSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.lazy(() => BoolFilterSchema), z.boolean() ]).optional(),
   vendorDivisionId: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
 });
 
@@ -44934,6 +44981,7 @@ export const ConnectionCreateWithoutVendorInputSchema: z.ZodType<Prisma.Connecti
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
   facility: z.lazy(() => FacilityCreateNestedOneWithoutConnectionsInputSchema),
   vendorDivision: z.lazy(() => VendorDivisionCreateNestedOneWithoutConnectionsInputSchema).optional(),
 });
@@ -44953,6 +45001,7 @@ export const ConnectionUncheckedCreateWithoutVendorInputSchema: z.ZodType<Prisma
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
   vendorDivisionId: z.string().optional().nullable(),
 });
 
@@ -46500,6 +46549,7 @@ export const ConnectionCreateWithoutVendorDivisionInputSchema: z.ZodType<Prisma.
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
   facility: z.lazy(() => FacilityCreateNestedOneWithoutConnectionsInputSchema),
   vendor: z.lazy(() => VendorCreateNestedOneWithoutConnectionsInputSchema),
 });
@@ -46520,6 +46570,7 @@ export const ConnectionUncheckedCreateWithoutVendorDivisionInputSchema: z.ZodTyp
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
 });
 
 export const ConnectionCreateOrConnectWithoutVendorDivisionInputSchema: z.ZodType<Prisma.ConnectionCreateOrConnectWithoutVendorDivisionInput> = z.strictObject({
@@ -67173,6 +67224,7 @@ export const ConnectionCreateManyFacilityInputSchema: z.ZodType<Prisma.Connectio
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
   vendorDivisionId: z.string().optional().nullable(),
 });
 
@@ -68240,6 +68292,7 @@ export const ConnectionUpdateWithoutFacilityInputSchema: z.ZodType<Prisma.Connec
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   vendor: z.lazy(() => VendorUpdateOneRequiredWithoutConnectionsNestedInputSchema).optional(),
   vendorDivision: z.lazy(() => VendorDivisionUpdateOneWithoutConnectionsNestedInputSchema).optional(),
 });
@@ -68259,6 +68312,7 @@ export const ConnectionUncheckedUpdateWithoutFacilityInputSchema: z.ZodType<Pris
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -68277,6 +68331,7 @@ export const ConnectionUncheckedUpdateManyWithoutFacilityInputSchema: z.ZodType<
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -68886,6 +68941,7 @@ export const ConnectionCreateManyVendorInputSchema: z.ZodType<Prisma.ConnectionC
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
   vendorDivisionId: z.string().optional().nullable(),
 });
 
@@ -69775,6 +69831,7 @@ export const ConnectionUpdateWithoutVendorInputSchema: z.ZodType<Prisma.Connecti
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   facility: z.lazy(() => FacilityUpdateOneRequiredWithoutConnectionsNestedInputSchema).optional(),
   vendorDivision: z.lazy(() => VendorDivisionUpdateOneWithoutConnectionsNestedInputSchema).optional(),
 });
@@ -69794,6 +69851,7 @@ export const ConnectionUncheckedUpdateWithoutVendorInputSchema: z.ZodType<Prisma
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -69812,6 +69870,7 @@ export const ConnectionUncheckedUpdateManyWithoutVendorInputSchema: z.ZodType<Pr
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   vendorDivisionId: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -70193,6 +70252,7 @@ export const ConnectionCreateManyVendorDivisionInputSchema: z.ZodType<Prisma.Con
   expiresAt: z.coerce.date(),
   message: z.string().optional().nullable(),
   mode: z.lazy(() => ConnectionModeSchema).optional(),
+  autoActivateContracts: z.boolean().optional(),
 });
 
 export const PendingContractCreateManyVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractCreateManyVendorDivisionInput> = z.strictObject({
@@ -70503,6 +70563,7 @@ export const ConnectionUpdateWithoutVendorDivisionInputSchema: z.ZodType<Prisma.
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
   facility: z.lazy(() => FacilityUpdateOneRequiredWithoutConnectionsNestedInputSchema).optional(),
   vendor: z.lazy(() => VendorUpdateOneRequiredWithoutConnectionsNestedInputSchema).optional(),
 });
@@ -70523,6 +70584,7 @@ export const ConnectionUncheckedUpdateWithoutVendorDivisionInputSchema: z.ZodTyp
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
 });
 
 export const ConnectionUncheckedUpdateManyWithoutVendorDivisionInputSchema: z.ZodType<Prisma.ConnectionUncheckedUpdateManyWithoutVendorDivisionInput> = z.strictObject({
@@ -70541,6 +70603,7 @@ export const ConnectionUncheckedUpdateManyWithoutVendorDivisionInputSchema: z.Zo
   expiresAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   message: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   mode: z.union([ z.lazy(() => ConnectionModeSchema), z.lazy(() => EnumConnectionModeFieldUpdateOperationsInputSchema) ]).optional(),
+  autoActivateContracts: z.union([ z.boolean(),z.lazy(() => BoolFieldUpdateOperationsInputSchema) ]).optional(),
 });
 
 export const PendingContractUpdateWithoutVendorDivisionInputSchema: z.ZodType<Prisma.PendingContractUpdateWithoutVendorDivisionInput> = z.strictObject({

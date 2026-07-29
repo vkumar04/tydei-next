@@ -1,8 +1,9 @@
 "use server"
 
 import { prisma } from "@/lib/db"
-import { requireVendor } from "@/lib/actions/auth"
+import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
+import { logAudit } from "@/lib/audit"
 import type { ConnectionMode } from "@/lib/generated/prisma/client"
 
 /**
@@ -71,4 +72,46 @@ export async function setVendorOperatingMode(
     data: { defaultMode: mode },
   })
   return { mode }
+}
+
+/**
+ * Facility grants (or revokes) a vendor's permission to publish a contract
+ * straight into its tenant, live, with no per-contract review.
+ *
+ * `requireFacility()`, deliberately — the mirror of `setConnectionMode` above,
+ * which is vendor-only. The party that carries the risk owns the switch: an
+ * auto-activated contract creates a live Contract row on THIS facility's tenant
+ * and triggers a COG match-status recompute against ITS records. A vendor must
+ * not be able to grant itself that, and until 2026-07-28 it effectively could —
+ * the gate keyed off `Connection.mode`, which is vendor-settable and defaults to
+ * `one_way`, so accepting any invite auto-granted publish rights.
+ *
+ * Scoped to the caller's own facility (no IDOR) and gated for read-only users.
+ */
+export async function setConnectionAutoActivate(
+  connectionId: string,
+  enabled: boolean,
+): Promise<{ id: string; autoActivateContracts: boolean }> {
+  await requireCanMutate()
+  const { facility, user } = await requireFacility()
+
+  // The facilityId predicate is the ownership check — a facility can only grant
+  // this on a connection where it is the facility party.
+  const result = await prisma.connection.updateMany({
+    where: { id: connectionId, facilityId: facility.id },
+    data: { autoActivateContracts: enabled },
+  })
+  if (result.count === 0) throw new Error("Connection not found")
+
+  await logAudit({
+    userId: user.id,
+    action: enabled
+      ? "connection.auto_activate.granted"
+      : "connection.auto_activate.revoked",
+    entityType: "connection",
+    entityId: connectionId,
+    metadata: { facilityId: facility.id },
+  })
+
+  return { id: connectionId, autoActivateContracts: enabled }
 }

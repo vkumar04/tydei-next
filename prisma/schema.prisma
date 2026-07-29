@@ -194,10 +194,22 @@ enum AccessTier {
 }
 
 // Vendor's interaction mode with a facility, set per facility–vendor
-// connection. two_way = full bidirectional (vendor contracts flow to the
-// facility once invited+accepted). one_way = vendor self-serves contracts
-// (no facility approval) and may enter its OWN COG; nothing flows to the
-// facility.
+// connection. This axis is about whether the FACILITY'S DATA flows to the
+// vendor — nothing else.
+//
+//   two_way  = the facility's actuals (COG/purchasing) are shared with the vendor.
+//   one_way  = they are not; the vendor self-serves from its OWN COG.
+//
+// 2026-07-28: the previous comment also claimed one_way meant "no facility
+// approval ... nothing flows to the facility". Those two clauses can only both
+// hold when a contract names NO facility, and both contradicted this enum's own
+// field comment on Connection.mode ("the facility's actuals do NOT flow to the
+// vendor") and the settings UI ("facility data is not used"). Worse, code briefly
+// keyed contract AUTO-ACTIVATION off one_way — which is the FAIL-SECURE default
+// for a brand-new connection, so the most restrictive setting silently became the
+// most permissive one on a different axis. Whether a vendor may publish a live
+// contract into a facility's tenant is now its own facility-granted permission:
+// Connection.autoActivateContracts.
 enum ConnectionMode {
   one_way
   two_way
@@ -2131,6 +2143,18 @@ model Connection {
   // connection was accepted. Existing rows are unaffected (a @default only
   // applies at INSERT); no connections are seeded, so nothing to backfill.
   mode           ConnectionMode @default(one_way)
+  /// May this vendor publish a contract straight into this facility's tenant —
+  /// live, with no per-contract review?
+  ///
+  /// Granted by the FACILITY, never the vendor: it is the facility that carries
+  /// the risk (a live Contract row on its tenant, and a COG match-status
+  /// recompute against its records), so the facility owns the switch and can
+  /// revoke it. `mode` deliberately does NOT gate this — that axis is about the
+  /// facility's data flowing outward, and reusing it here meant every newly
+  /// accepted connection auto-granted publish rights via its fail-secure
+  /// default. Accepting an invite means "let's do business", not "auto-approve
+  /// everything you send me from now on". Charles 2026-07-28.
+  autoActivateContracts Boolean @default(false)
   // Optional division scope for the connection (vendor-wide when null).
   vendorDivisionId String?
 

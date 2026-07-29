@@ -50,6 +50,7 @@ function resolved(
     source: "derived",
     hasConnectionForFacility: false,
     connectionStatus: null,
+    autoActivateGranted: false,
     ...over,
   }
 }
@@ -60,7 +61,7 @@ beforeEach(() => {
   vendorFindUnique.mockResolvedValue(null)
 })
 
-describe("canAutoActivate — one_way", () => {
+describe("canAutoActivate — the facility grant", () => {
   it("no facility named → true (standalone vendor's OWN contract)", () => {
     expect(canAutoActivate(resolved(), null)).toBe(true)
     expect(canAutoActivate(resolved(), undefined)).toBe(true)
@@ -69,17 +70,52 @@ describe("canAutoActivate — one_way", () => {
     expect(canAutoActivate(resolved(), "")).toBe(true)
   })
 
-  it("facility WITH an accepted connection → true", () => {
+  it("facility WITH an accepted connection AND the grant → true", () => {
     expect(
       canAutoActivate(
         resolved({
           source: "connection",
           hasConnectionForFacility: true,
           connectionStatus: "accepted",
+          autoActivateGranted: true,
         }),
         "fac-1",
       ),
     ).toBe(true)
+  })
+
+  it("accepted but NOT granted → false (accepting is not blanket approval)", () => {
+    // The defect this flag exists to close. Auto-activation used to key off
+    // `mode`, which is vendor-settable and @default(one_way) as a FAIL-SECURE
+    // posture — so merely accepting an invite auto-granted publish rights, and
+    // the most restrictive setting became the most permissive one.
+    expect(
+      canAutoActivate(
+        resolved({
+          source: "connection",
+          hasConnectionForFacility: true,
+          connectionStatus: "accepted",
+          autoActivateGranted: false,
+        }),
+        "fac-1",
+      ),
+    ).toBe(false)
+  })
+
+  it("the grant alone is not enough — the connection must be accepted", () => {
+    // A vendor can mint a `pending` row against any facility it can name, so a
+    // grant on an unaccepted row must not count. Both conditions, always.
+    expect(
+      canAutoActivate(
+        resolved({
+          source: "connection",
+          hasConnectionForFacility: true,
+          connectionStatus: "pending",
+          autoActivateGranted: true,
+        }),
+        "fac-1",
+      ),
+    ).toBe(false)
   })
 
   it("facility WITHOUT any connection → false (the cross-tenant guard)", () => {
@@ -111,6 +147,7 @@ describe("canAutoActivate — one_way", () => {
             source: "connection",
             hasConnectionForFacility: true,
             connectionStatus: status,
+            autoActivateGranted: true,
           }),
           "fac-1",
         ),
@@ -119,10 +156,27 @@ describe("canAutoActivate — one_way", () => {
   })
 })
 
-describe("canAutoActivate — two_way", () => {
-  it("is false in every case (a reviewer exists; the facility reviews)", () => {
-    expect(canAutoActivate(resolved({ mode: "two_way" }), null)).toBe(false)
-    expect(canAutoActivate(resolved({ mode: "two_way" }), undefined)).toBe(false)
+describe("canAutoActivate — mode is NOT the gate", () => {
+  it("two_way with the facility's grant still auto-activates", () => {
+    // 2026-07-28: `mode` answers "does the facility's data flow OUT to the
+    // vendor?"; the grant answers "may the vendor write IN?". Two unrelated
+    // questions. Gating publish rights on `mode` is what let a fail-secure
+    // default grant them, so mode is deliberately not consulted here.
+    expect(
+      canAutoActivate(
+        resolved({
+          mode: "two_way",
+          source: "connection",
+          hasConnectionForFacility: true,
+          connectionStatus: "accepted",
+          autoActivateGranted: true,
+        }),
+        "fac-1",
+      ),
+    ).toBe(true)
+  })
+
+  it("two_way without the grant is still refused", () => {
     expect(
       canAutoActivate(
         resolved({
@@ -134,12 +188,6 @@ describe("canAutoActivate — two_way", () => {
         "fac-1",
       ),
     ).toBe(false)
-    expect(
-      canAutoActivate(
-        resolved({ mode: "two_way", source: "vendorDefault" }),
-        "fac-1",
-      ),
-    ).toBe(false)
   })
 })
 
@@ -148,6 +196,7 @@ describe("resolveOperatingMode — precedence", () => {
     connectionFindFirst.mockResolvedValueOnce({
       mode: "one_way",
       status: "accepted",
+      autoActivateContracts: true,
     })
     vendorFindUnique.mockResolvedValueOnce({ defaultMode: "two_way" })
 
@@ -161,6 +210,7 @@ describe("resolveOperatingMode — precedence", () => {
       source: "connection",
       hasConnectionForFacility: true,
       connectionStatus: "accepted",
+      autoActivateGranted: true,
     })
     // The pair lookup is vendor-scoped — a foreign facilityId can only ever
     // resolve to a row this vendor is a party to.
@@ -202,8 +252,16 @@ describe("resolveOperatingMode — precedence", () => {
       source: "derived",
       hasConnectionForFacility: false,
       connectionStatus: null,
+      autoActivateGranted: false,
     })
-    expect(canAutoActivate(twoWay, null)).toBe(false)
+    // A facility-LESS contract auto-activates regardless of mode (2026-07-28).
+    // This assertion used to expect false, encoding the old rule that two_way
+    // means "a reviewer exists". With no facility named there is no other
+    // tenant AND no reviewer, so refusing would strand the row in `submitted`
+    // forever — the exact bug Charles reported for one_way. `mode` describes
+    // whether the FACILITY'S DATA flows out; it has nothing to say about a
+    // contract that names no facility.
+    expect(canAutoActivate(twoWay, null)).toBe(true)
 
     vi.clearAllMocks()
     connectionFindFirst.mockResolvedValue(null)

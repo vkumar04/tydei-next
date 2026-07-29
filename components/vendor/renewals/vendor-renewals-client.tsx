@@ -18,6 +18,7 @@ import { toast } from "sonner"
 import Link from "next/link"
 import { useExpiringContracts } from "@/hooks/use-renewals"
 import { useVendorContracts } from "@/hooks/use-vendor-contracts"
+import { useVendorPendingContracts } from "@/hooks/use-pending-contracts"
 import type { ExpiringContract } from "@/lib/actions/renewals"
 import { PageHeader } from "@/components/shared/page-header"
 import { VendorRenewalPipeline } from "./vendor-renewal-pipeline"
@@ -97,6 +98,26 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
   // contracts page's (keys include the filter object), so it would otherwise be
   // a second full fetch rather than a cache hit.
   const { data: portfolioData } = useVendorContracts(vendorId, { pageSize: 1 })
+  // Same population /vendor/contracts counts: the server portfolio rollup PLUS
+  // in-flight submissions (vendor-contract-list.tsx:236-253). Counting only the
+  // rollup here meant the two surfaces disagreed whenever a submission was in
+  // flight — "5 contracts" on one page, "All 4 contracts…" on the other, which
+  // is the same two-numbers-that-contradict defect this whole sweep has been
+  // closing. Derived identically so they cannot drift apart again.
+  const { data: pendingData } = useVendorPendingContracts(vendorId)
+  const inFlightPendingCount = useMemo(
+    () =>
+      (pendingData ?? []).filter(
+        // The SAME three statuses vendor-contract-list.tsx:236-243 counts
+        // (there it reads `pendingStatus`, which is just `status` renamed at
+        // :99). Rejected and withdrawn stay browsable but are not portfolio.
+        (pc) =>
+          pc.status === "draft" ||
+          pc.status === "submitted" ||
+          pc.status === "revision_requested",
+      ).length,
+    [pendingData],
+  )
   const contracts: ExpiringContract[] = useMemo(() => data ?? [], [data])
 
   const [stage, setStage] = useState<VendorRenewalStage>("upcoming")
@@ -158,10 +179,12 @@ export function VendorRenewalsClient({ vendorId }: VendorRenewalsClientProps) {
       atRisk,
       // Portfolio-wide. The expiring buckets above stay window-scoped, which is
       // correct — they describe the window. Only this one names the portfolio.
-      totalContracts: portfolioData?.portfolio?.contractCount ?? contracts.length,
+      totalContracts:
+        (portfolioData?.portfolio?.contractCount ?? contracts.length) +
+        inFlightPendingCount,
       criticalUnstarted,
     }
-  }, [contracts, portfolioData?.portfolio?.contractCount])
+  }, [contracts, portfolioData?.portfolio?.contractCount, inFlightPendingCount])
 
   const filteredByChrome = useMemo(() => {
     const needle = search.trim().toLowerCase()

@@ -63,6 +63,12 @@ export interface ConnectionData {
   status: ConnectionStatus
   /** 1-way (vendor keeps contracts private) vs 2-way (contracts flow to the facility). */
   mode: ConnectionMode
+  /**
+   * Facility-granted: may this vendor publish a contract straight into the
+   * facility's tenant, live, with no per-contract review? Set only by the
+   * facility (setConnectionAutoActivate). See Connection.autoActivateContracts.
+   */
+  autoActivateContracts: boolean
   inviteType: string
   invitedByEmail: string
   invitedAt: string
@@ -117,6 +123,7 @@ export async function getConnections(input: {
     vendorName: c.vendorName,
     status: c.status,
     mode: c.mode,
+    autoActivateContracts: c.autoActivateContracts,
     inviteType: c.inviteType,
     invitedByEmail: c.invitedByEmail,
     invitedAt: c.invitedAt.toISOString(),
@@ -284,6 +291,7 @@ export async function sendConnectionInvite(input: {
     vendorName: connection.vendorName,
     status: connection.status,
     mode: connection.mode,
+    autoActivateContracts: connection.autoActivateContracts,
     inviteType: connection.inviteType,
     invitedByEmail: connection.invitedByEmail,
     invitedAt: connection.invitedAt.toISOString(),
