@@ -14,7 +14,7 @@
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { v0RenewalRisk } from "@/lib/v0-spec/contract-performance"
+import { renewalRisk } from "@/lib/contracts/performance-metrics"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
@@ -193,7 +193,7 @@ async function _getVendorRenewalRiskBatchImpl(
       Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)),
     )
 
-    const result = v0RenewalRisk({
+    const result = renewalRisk({
       daysRemaining,
       compliancePct: Number(c.complianceRate ?? 50),
       avgPriceVariancePct: c.facilityId

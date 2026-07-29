@@ -6,7 +6,7 @@
  * they sell to? High HHI = a few facilities account for the bulk
  * of revenue (lock-in / churn risk on the vendor side).
  *
- * Reuses `v0SpendConcentration` so vendors and facilities see the
+ * Reuses `spendConcentration` so vendors and facilities see the
  * same banding (low / moderate / high) and the math stays in one
  * place.
  */
@@ -14,7 +14,7 @@
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { v0SpendConcentration } from "@/lib/v0-spec/contract-performance"
+import { spendConcentration } from "@/lib/contracts/performance-metrics"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export async function getVendorCustomerConcentration(input?: {
@@ -63,7 +63,7 @@ async function _getVendorCustomerConcentrationImpl(input?: {
     spend,
   }))
 
-  const result = v0SpendConcentration(facilitySpends)
+  const result = spendConcentration(facilitySpends)
   return serialize({
     ...result,
     facilityCount: facilitySpends.length,

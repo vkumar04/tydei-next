@@ -24,7 +24,11 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { DefinitionTooltip } from "@/components/shared/definition-tooltip"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
-import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
+import {
+  scaleRebateValueForEngine,
+  type TierLike,
+  type RebateMethodName,
+} from "@/lib/rebates/calculate"
 import {
   pickThresholdMetric,
   computeTierBarProgress,
@@ -63,12 +67,30 @@ function TierProgressCard({
 }) {
   if (term.tiers.length === 0) return null
 
+  // 2026-07-29 math audit (CRITICAL). `ContractTier.rebateValue` is stored
+  // as a FRACTION for percent_of_spend (0.10 = 10%), but every rebate engine
+  // entry point takes INTEGER PERCENT and divides by 100 internally
+  // (lib/rebates/engine/shared/cumulative.ts: `eligibleAmount * rebateValue / 100`).
+  // Passing the raw fraction divided by 100 a second time, so every dollar
+  // this card projected was 100x too small.
+  //
+  // Measured on the live Smith & Nephew ladder (T1 0-1,499,999 @ 0.10,
+  // T2 1.5M-1,999,999 @ 0.15, T3 2M+ @ 0.20) at $806,162.47 contract spend:
+  //   before  projectedAdditionalRebate = $1,443.84
+  //   after                             = $144,383.75   (ratio exactly 100)
+  // The engine's own unit contract is settled by tests/contracts/tier-progress.test.ts,
+  // whose fixtures use 2 / 3 / 4 — integer percent.
+  //
+  // `scaleRebateValueForEngine` is the one helper that owns this conversion
+  // (CLAUDE.md "Rebate units are per-rebateType"): it multiplies by 100 ONLY
+  // for percent_of_spend and leaves fixed-dollar types alone, so a
+  // $30,000 fixed_rebate tier does not become $3,000,000.
   const tiersForEngine: TierLike[] = term.tiers.map((t) => ({
     tierNumber: t.tierNumber,
     tierName: t.tierName ?? null,
     spendMin: Number(t.spendMin),
     spendMax: t.spendMax ? Number(t.spendMax) : null,
-    rebateValue: Number(t.rebateValue),
+    rebateValue: scaleRebateValueForEngine(t.rebateValue, t.rebateType),
   }))
   const method = (term.rebateMethod ?? "cumulative") as RebateMethodName
 

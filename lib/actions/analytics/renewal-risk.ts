@@ -2,7 +2,7 @@
 
 /**
  * Charles audit suggestion (v0-port): Renewal Risk Score per contract.
- * Wraps `v0RenewalRisk` with live data so the contract-detail surface
+ * Wraps `renewalRisk` with live data so the contract-detail surface
  * can render LOW/MED/HIGH with the contributing factors.
  *
  * v0 doc §9 weights:
@@ -16,7 +16,7 @@
 
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
-import { v0RenewalRisk } from "@/lib/v0-spec/contract-performance"
+import { renewalRisk } from "@/lib/contracts/performance-metrics"
 import { sumEarnedRebatesLifetime } from "@/lib/contracts/rebate-earned-filter"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
@@ -130,7 +130,7 @@ async function _getRenewalRiskImpl(contractId: string) {
     Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)),
   )
 
-  const result = v0RenewalRisk({
+  const result = renewalRisk({
     daysRemaining,
     compliancePct: Number(contract.complianceRate ?? 50),
     avgPriceVariancePct: avgPriceVariance,

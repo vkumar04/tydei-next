@@ -23,7 +23,7 @@ export interface RebateOpportunity {
   currentRebatePercent: number
   nextRebatePercent: number
   // Charles 2026-04-25 v0-port Tier-2: ladder ceiling so the UI can
-  // compute v0RebateUtilization without an extra round-trip — actual
+  // compute rebate utilization without an extra round-trip — actual
   // rebate at currentRebatePercent vs ceiling at topTierRebatePercent.
   topTierRebatePercent: number
   topTierThreshold: number

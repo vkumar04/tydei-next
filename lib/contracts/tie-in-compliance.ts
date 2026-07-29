@@ -1,10 +1,9 @@
 /**
  * Tie-in compliance math — the tydei implementation of Charles's v0
  * "bundled multi-product tie-in" spec. Mirrors:
- *   `lib/v0-spec/rebate-math.ts::v0TieInAllOrNothing`
- *   `lib/v0-spec/rebate-math.ts::v0TieInProportional`
- *   `lib/v0-spec/tie-in.ts::v0CrossVendorTieIn`
- *   `lib/v0-spec/tie-in.ts::v0TieInImpactAnalysis`
+ *   `lib/contracts/tie-in-bundle-math.ts::tieInAllOrNothing`
+ *   `lib/contracts/tie-in-bundle-math.ts::tieInProportional`
+ *   `lib/contracts/tie-in-bundle-math.ts::crossVendorTieIn`
  *
  * This is deliberately a pure-function module with no Prisma / I/O so
  *   (a) the oracle can parity-check against the v0 reference.

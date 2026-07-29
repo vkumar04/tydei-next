@@ -381,7 +381,11 @@ const BASELINE_HITS = new Set<string>([
   // (deleteInvoice's post-authorized delete now carries an inline
   // auth-scope-scanner-skip comment instead of a baseline entry —
   // 2026-06-17 best-practices sweep, robust to line drift.)
-  "lib/actions/invoices.ts:246",
+  // (importInvoice's PO ownership probe moved to an inline
+  // auth-scope-scanner-skip comment 2026-07-29 — the "lib/actions/invoices.ts:246"
+  // entry that used to live here broke when an unrelated import shifted the
+  // file by one line, which is the third line-drift false alarm this baseline
+  // has produced. Prefer inline markers; they travel with the code.)
   // payor-contracts.ts: FIXED 2026-06-09 (audit BLOCKER) — the
   // calculatePayorMargins read is now facility-scoped (findFirstOrThrow
   // with facilityId).

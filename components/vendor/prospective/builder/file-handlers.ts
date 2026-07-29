@@ -13,6 +13,7 @@ import {
 } from "@/components/shared/uploads/field-spec"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
 import type { NewProposalState, ProposalProduct, FileUploadProgressState, TermSuggestionsState } from "./types"
+import { roundToCents } from "@/lib/money/round"
 
 // ─── File parsing + column resolution ─────────────────────────────
 // Bugs 2026-06-13 ("Pricing file must have a product name or reference
@@ -200,7 +201,7 @@ const parseMoney = (v: string): number => parseFloat(v.replace(/[$,]/g, "")) || 
  */
 /** Round to cents — seeded dollar figures must not carry float tails
  *  (Charles 2026-07-05: "3924864.7300000004" in Projected Annual Spend). */
-const toCents = (n: number): number => Math.round(n * 100) / 100
+const toCents = (n: number): number => roundToCents(n)
 
 const productKey = (refNumber: string | undefined, productName: string): string =>
   normalizeSku(refNumber) || productName.trim().toLowerCase()

@@ -2,7 +2,7 @@
 
 /**
  * Charles audit suggestion (v0-port): Tie-in Bundle Compliance.
- * Wraps `v0TieInAllOrNothing` + `v0TieInProportional` with bonus
+ * Wraps `tieInAllOrNothing` + `tieInProportional` with bonus
  * + accelerator tiers (20% / 50% over). Members are derived from the
  * contract's term scopes and YTD spend per scope.
  */
@@ -11,9 +11,9 @@ import { prisma } from "@/lib/db"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import { serialize } from "@/lib/serialize"
 import {
-  v0TieInAllOrNothing,
-  v0TieInProportional,
-} from "@/lib/v0-spec/rebate-math"
+  tieInAllOrNothing,
+  tieInProportional,
+} from "@/lib/contracts/tie-in-bundle-math"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 import { selectBundleBaseRate } from "@/lib/contracts/bundle-base-rate"
@@ -28,8 +28,8 @@ export interface TieInComplianceResult {
     currentSpend: number
     metPct: number
   }>
-  allOrNothing: ReturnType<typeof v0TieInAllOrNothing>
-  proportional: ReturnType<typeof v0TieInProportional>
+  allOrNothing: ReturnType<typeof tieInAllOrNothing>
+  proportional: ReturnType<typeof tieInProportional>
 }
 
 export async function getTieInCompliance(
@@ -155,8 +155,8 @@ async function _getTieInComplianceImpl(
     acceleratorMultiplier: 1.5,
   }
 
-  const allOrNothing = v0TieInAllOrNothing(members, bundle)
-  const proportional = v0TieInProportional(
+  const allOrNothing = tieInAllOrNothing(members, bundle)
+  const proportional = tieInProportional(
     members.map((m) => ({ ...m, weight: 1 / members.length })),
     baseRate,
   )

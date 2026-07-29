@@ -13,6 +13,7 @@ import {
   linearRegression,
   seasonalDecompose,
 } from "@/lib/analysis/forecasting"
+import { roundToCents } from "@/lib/money/round"
 
 export interface RebateForecastPoint {
   period: string
@@ -133,12 +134,12 @@ export function computeRebateForecast(
     const { achievedTier, rate } = projectRate(cumulative)
     return {
       period: key,
-      spend: Math.round(spend * 100) / 100,
+      spend: roundToCents(spend),
       isForecast,
-      cumulativeYtdSpend: Math.round(cumulative * 100) / 100,
+      cumulativeYtdSpend: roundToCents(cumulative),
       achievedTier,
       achievedRatePct: Math.round(rate * 10000) / 100,
-      rebateForPeriod: Math.round(spend * rate * 100) / 100,
+      rebateForPeriod: roundToCents(spend * rate),
     }
   }
 

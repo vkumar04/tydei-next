@@ -96,7 +96,17 @@ export type PrismaTermWithTiers = PrismaContractTerm & {
  *     `scaleRebateValueForEngine` directly and aren't routed through
  *     the engine's /100 path — keep their current numbers.
  */
-function mapTier(t: PrismaContractTier): RebateTier {
+/**
+ * What the engine will multiply this tier's `rebateValue` against.
+ *   "count"   — VOLUME_REBATE: eligibleAmount is an occurrence count
+ *   "dollars" — SPEND_REBATE:  eligibleAmount is dollars of spend
+ */
+type EligibleAmountBasis = "count" | "dollars"
+
+function mapTier(
+  t: PrismaContractTier,
+  basis: EligibleAmountBasis,
+): RebateTier {
   const isFixedRebate = t.rebateType === "fixed_rebate"
   const isUnitBased =
     t.rebateType === "fixed_rebate_per_unit" ||
@@ -104,10 +114,34 @@ function mapTier(t: PrismaContractTier): RebateTier {
   let rebateValueForEngine: number
   if (isFixedRebate) {
     rebateValueForEngine = 0
-  } else if (isUnitBased) {
+  } else if (isUnitBased && basis === "count") {
     // ×100 to undo the engine's internal /100 — see bridge header rules
     // table. Yields `count × tier.rebateValue` after the engine divides.
     rebateValueForEngine = Number(t.rebateValue) * 100
+  } else if (isUnitBased) {
+    // 2026-07-29 math audit (CRITICAL). `basis === "dollars"`.
+    //
+    // This branch used to be folded into the one above, so the ×100 was
+    // applied on the strength of `rebateType` alone — with no regard for what
+    // the engine would multiply it against. But `buildRebateConfigFromPrisma`
+    // routes po_rebate / payment_rebate / compliance_rebate / fixed_fee /
+    // locked_pricing / spend_rebate to SPEND_REBATE, where `eligibleAmount` is
+    // DOLLARS. A $100-per-PO tier on a po_rebate term with $500,000 of spend
+    // therefore computed (500000 × 10000) / 100 = $50,000,000.
+    //
+    // A per-unit dollar rate is meaningless against dollars: the engine has no
+    // unit count on this path, so there is no correct number to return. It
+    // returns 0 rather than inventing one. Note the other live caller of the
+    // same tier row (recompute-accrual.ts → scaleRebateValueForEngine, which
+    // leaves non-percent types unscaled) yields $500,000 — also wrong, just
+    // wrong by 100× less. Neither figure is `units × $100`.
+    //
+    // Latent as of this writing: production carries only percent_of_spend
+    // tiers, and the seed puts fixed_rebate_per_unit exclusively on
+    // volume_rebate terms, which correctly route to VOLUME_REBATE. It fires
+    // the first time someone attaches a per-unit tier to a spend-basis term.
+    // Pinned by `prisma-engine-bridge-unit-basis.test.ts`.
+    rebateValueForEngine = 0
   } else {
     // percent_of_spend: scale fraction → integer percent.
     rebateValueForEngine = scaleRebateValueForEngine(
@@ -187,7 +221,8 @@ function mapSpendBasis(
 function buildSpendRebateConfig(
   term: PrismaTermWithTiers,
 ): SpendRebateConfig {
-  const tiers = term.tiers.map(mapTier)
+  // SPEND_REBATE multiplies rebateValue against DOLLARS of spend.
+  const tiers = term.tiers.map((t) => mapTier(t, "dollars"))
   const hasNegotiated =
     term.negotiatedBaseline !== null && term.negotiatedBaseline !== undefined
   const spendBasis = mapSpendBasis(
@@ -224,7 +259,8 @@ function buildSpendRebateConfig(
 function buildVolumeRebateConfig(
   term: PrismaTermWithTiers,
 ): VolumeRebateConfig {
-  const tiers = term.tiers.map(mapTier)
+  // VOLUME_REBATE multiplies rebateValue against an occurrence COUNT.
+  const tiers = term.tiers.map((t) => mapTier(t, "count"))
   const hasNegotiated =
     term.negotiatedBaseline !== null && term.negotiatedBaseline !== undefined
   return {
@@ -249,7 +285,8 @@ function buildVolumeRebateConfig(
 function buildTierPriceReductionConfig(
   term: PrismaTermWithTiers,
 ): TierPriceReductionConfig {
-  const tiers = term.tiers.map(mapTier)
+  // Price reduction is evaluated against DOLLARS of spend.
+  const tiers = term.tiers.map((t) => mapTier(t, "dollars"))
   const spendBasis = mapSpendBasis(
     term.appliesTo,
     term.categories,
@@ -286,7 +323,8 @@ function buildMarketShareRebateConfig(
     type: "MARKET_SHARE_REBATE",
     method: mapMethod(term.rebateMethod),
     boundaryRule: mapBoundaryRule(term.boundaryRule),
-    tiers: term.tiers.map(mapTier),
+    // Market share is evaluated against DOLLARS of vendor category spend.
+    tiers: term.tiers.map((t) => mapTier(t, "dollars")),
     marketShareVendorId: term.marketShareVendorId ?? null,
     marketShareCategory: term.marketShareCategory ?? null,
   }

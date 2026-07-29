@@ -9,7 +9,7 @@
  *   1. Vendor is on contract (active, in-period)
  *   2. Purchase date in contract period
  *   3. Item on contract (ContractPricing.vendorItemNo lookup)
- *   4. Price variance vs contract price (band per v0CogPriceVarianceBand)
+ *   4. Price variance vs contract price (band per cogPriceVarianceBand)
  *   5. Quantity ≤ contract max (when set; tydei doesn't carry this yet)
  */
 
@@ -17,7 +17,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
-import { v0CogPriceVarianceBand } from "@/lib/v0-spec/cog"
+import { cogPriceVarianceBand } from "@/lib/contracts/cog-variance-band"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export interface ComplianceViolation {
@@ -329,7 +329,7 @@ function auditPurchase(
       for (const c of inPeriod) {
         const matched = c.pricingItems.find((p) => p.vendorItemNo === itemNo)
         if (matched) {
-          const v = v0CogPriceVarianceBand(
+          const v = cogPriceVarianceBand(
             Number(r.unitCost),
             Number(matched.unitPrice),
           )

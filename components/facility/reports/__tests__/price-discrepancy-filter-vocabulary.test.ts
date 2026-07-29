@@ -23,7 +23,7 @@ import {
   varianceBandFilterValue,
   type PriceDiscrepancy,
 } from "@/components/facility/reports/price-discrepancy-table"
-import type { V0CogVarianceBand } from "@/lib/v0-spec/cog"
+import type { CogVarianceBand } from "@/lib/contracts/cog-variance-band"
 
 /** The text a badge element renders, without a DOM. */
 function badgeText(element: { props: unknown }): unknown {
@@ -54,7 +54,7 @@ function discrepancy(
 const ALL_TYPES = Object.keys(DISCREPANCY_TYPE_LABEL) as Array<
   keyof typeof DISCREPANCY_TYPE_LABEL
 >
-const ALL_BANDS = Object.keys(V0_BAND_LABEL) as V0CogVarianceBand[]
+const ALL_BANDS = Object.keys(V0_BAND_LABEL) as CogVarianceBand[]
 
 describe("Type column — filter options match the cells", () => {
   it("the accessor emits exactly the string the cell prints", () => {

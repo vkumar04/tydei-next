@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge"
 import { chartTooltipStyle } from "@/lib/chart-config"
 import { formatCompactCurrency } from "@/lib/formatting"
 import type { MonthlyTrendPoint } from "@/lib/reports/monthly-trend"
-import { v0SpendTrend } from "@/lib/v0-spec/cog"
+import { spendTrend } from "@/lib/contracts/cog-variance-band"
 
 interface DashboardSpendTrendChartProps {
   data: MonthlyTrendPoint[]
@@ -57,7 +57,7 @@ export function DashboardSpendTrendChart({
   // v0 doc §6 spend trend (last 3mo avg vs prior 3mo avg). Pass the
   // chronologically-sorted spend series; helper returns "stable" when
   // < 6 months are available so it's safe to call unconditionally.
-  const trend = v0SpendTrend(data.map((p) => p.spend))
+  const trend = spendTrend(data.map((p) => p.spend))
   const trendBadge = (() => {
     const sign = trend.changePct > 0 ? "+" : ""
     if (trend.trend === "up")

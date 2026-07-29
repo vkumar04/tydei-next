@@ -2,7 +2,7 @@
 
 /**
  * Charles audit suggestion (v0-port): Spend Concentration (HHI) for
- * the facility. Routes vendor-spend totals through `v0SpendConcentration`
+ * the facility. Routes vendor-spend totals through `spendConcentration`
  * to produce the HHI + Low/Moderate/High classification + top-vendor +
  * top-3 concentration.
  *
@@ -12,7 +12,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { v0SpendConcentration } from "@/lib/v0-spec/contract-performance"
+import { spendConcentration } from "@/lib/contracts/performance-metrics"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
 
 export async function getFacilitySpendConcentration(input?: {
@@ -61,10 +61,10 @@ async function _getFacilitySpendConcentrationImpl(input?: {
     spend,
   }))
 
-  const result = v0SpendConcentration(vendorSpends)
+  const result = spendConcentration(vendorSpends)
 
   // 2026-06-08 (Charles "Top vendor share … should have the names of the
-  // vendors as well"): v0SpendConcentration returns name-free aggregates.
+  // vendors as well"): spendConcentration returns name-free aggregates.
   // Attach the named top-5 so the dashboard card can label the shares.
   const total = Array.from(byId.values()).reduce((s, v) => s + v, 0)
   const topVendors = Array.from(byId.entries())

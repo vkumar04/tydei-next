@@ -49,6 +49,7 @@ import { computeContractYears } from "@/lib/contracts/term-years"
 import { formatDateRange } from "@/lib/formatting"
 import { BasicInformationCard } from "@/components/contracts/_form/_basic-information-card"
 import { ContractDatesCard } from "@/components/contracts/_form/_contract-dates-card"
+import { roundToCents } from "@/lib/money/round"
 
 interface VendorOption {
   id: string
@@ -427,7 +428,7 @@ export function ContractFormBasicInfo({
     const years = computeContractYears(effectiveDateStr, expirationDateStr)
     setValue(
       "annualValue",
-      Math.round((totalValue / years) * 100) / 100,
+      roundToCents(totalValue / years),
       { shouldDirty: false },
     )
   }, [totalValue, effectiveDateStr, expirationDateStr, setValue])

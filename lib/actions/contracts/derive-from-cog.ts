@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { roundToCents } from "@/lib/money/round"
 
 export interface DeriveFromCOGResult {
   /**
@@ -140,8 +141,8 @@ export async function deriveContractTotalFromCOG(
   }
 
   return {
-    totalValue: Math.round(totalValue * 100) / 100,
-    annualValue: Math.round(annualValue * 100) / 100,
+    totalValue: roundToCents(totalValue),
+    annualValue: roundToCents(annualValue),
     monthsObserved: annualWindowMonths,
     windowMonthsObserved,
   }

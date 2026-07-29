@@ -150,11 +150,6 @@ function check(): Violation[] {
         // Skip the invariants script itself so it doesn't flag its own
         // pattern literals.
         if (file.endsWith("scripts/check-invariants.ts")) continue
-        // Skip the v0-spec reference modules — they're intentional
-        // independent implementations used as oracle ground truth.
-        if (file.startsWith("./lib/v0-spec/") || file.includes("/lib/v0-spec/")) {
-          continue
-        }
         violations.push({
           rule: rule.name,
           file,
