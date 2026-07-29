@@ -62,7 +62,11 @@ export function NotificationBell() {
       await queryClient.cancelQueries({ queryKey: NOTIF_KEY })
       const prev = queryClient.getQueryData<NotificationsData>(NOTIF_KEY)
       if (prev) {
+        // Spread `prev` so fields this callback does not touch (total, limit)
+        // survive the optimistic write. Rebuilding the object literally is how
+        // the truncation footer would blink out on every click.
         queryClient.setQueryData<NotificationsData>(NOTIF_KEY, {
+          ...prev,
           rows: prev.rows.map((r) =>
             r.id === id && !r.readAt ? { ...r, readAt: nowIso() } : r,
           ),
@@ -85,6 +89,7 @@ export function NotificationBell() {
       const prev = queryClient.getQueryData<NotificationsData>(NOTIF_KEY)
       if (prev) {
         queryClient.setQueryData<NotificationsData>(NOTIF_KEY, {
+          ...prev,
           rows: prev.rows.map((r) => (r.readAt ? r : { ...r, readAt: nowIso() })),
           unreadCount: 0,
         })
@@ -98,6 +103,12 @@ export function NotificationBell() {
   })
   const unreadCount = data?.unreadCount ?? 0
   const rows = data?.rows ?? []
+  // `total` is the server's uncapped count for this user; `rows` is the capped
+  // page. Comparing them is the whole point — the bug was that the badge came
+  // from an uncapped count while the list came from a capped read, and nothing
+  // on screen reconciled the two.
+  const total = data?.total ?? rows.length
+  const hidden = Math.max(0, total - rows.length)
 
   return (
     <DropdownMenu>
@@ -132,7 +143,12 @@ export function NotificationBell() {
               onClick={() => markAll.mutate()}
               disabled={markAll.isPending}
             >
-              <Check className="mr-1 size-3" /> Mark all read
+              {/* Name the count. "Mark all read" clears every unread row the
+                  user owns, including any this dropdown never showed them —
+                  that is the right behaviour for "all", but it has to be
+                  stated, or the button silently discards notifications the
+                  user was never given a chance to see. */}
+              <Check className="mr-1 size-3" /> Mark all {unreadCount} read
             </Button>
           )}
         </div>
@@ -142,7 +158,8 @@ export function NotificationBell() {
             No notifications yet.
           </div>
         ) : (
-          rows.map((n) => (
+          <div className="max-h-96 overflow-y-auto">
+          {rows.map((n) => (
             <DropdownMenuItem
               key={n.id}
               onSelect={(e) => {
@@ -172,7 +189,19 @@ export function NotificationBell() {
                 {new Date(n.createdAt).toLocaleString()}
               </span>
             </DropdownMenuItem>
-          ))
+          ))}
+          </div>
+        )}
+        {hidden > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            {/* A labelled cap is a feature; a silent one is the bug. Until
+                there is a full notifications page to link to, at minimum the
+                user must be able to tell that older rows exist. */}
+            <p className="px-3 py-2 text-center text-[11px] text-muted-foreground">
+              Showing the {rows.length} most recent of {total}.
+            </p>
+          </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

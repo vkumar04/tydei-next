@@ -16,6 +16,21 @@ import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 
+/**
+ * Rows the bell dropdown fetches.
+ *
+ * Deliberately NOT exported: this is a `"use server"` file, where every export
+ * must be an async function (a bare `export const` gets wrapped in
+ * `registerServerReference` and kills every action in the module at load).
+ * The value ships to the client inside `getMyNotifications`'s payload instead,
+ * so the UI never hard-codes a second copy that could drift from this one.
+ *
+ * 50 rather than 20 because the dropdown now scrolls: at the observed
+ * production shape (max 26 notifications for any one user) this covers every
+ * user completely, and when it does not, the footer says so.
+ */
+const NOTIFICATION_BELL_LIMIT = 50
+
 export interface NotificationRow {
   id: string
   type: string
@@ -52,17 +67,28 @@ export interface NotificationRow {
 export async function getMyNotifications(): Promise<{
   rows: NotificationRow[]
   unreadCount: number
+  total: number
+  limit: number
 }> {
   const userId = await currentUserIdOrThrow()
-  const [rows, unreadCount] = await Promise.all([
+  const [rows, unreadCount, total] = await Promise.all([
     prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: NOTIFICATION_BELL_LIMIT,
     }),
     prisma.notification.count({ where: { userId, readAt: null } }),
+    // Uncapped, so the bell can SAY how much it is not showing. Previously
+    // the list was capped at 20 while `unreadCount` was uncapped, and nothing
+    // reconciled the two: a user with 25 unread saw a badge reading 25 above
+    // a list of 20, with no pager, no "view all", and no total — so five
+    // notifications, including actionable ones, were unreachable from
+    // anywhere in the app (Charles 2026-07-28 revalidation).
+    prisma.notification.count({ where: { userId } }),
   ])
   return serialize({
+    total,
+    limit: NOTIFICATION_BELL_LIMIT,
     rows: rows.map((r) => ({
       id: r.id,
       type: r.type,

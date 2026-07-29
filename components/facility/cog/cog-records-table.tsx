@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react"
 import { Plus, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { hasCogFilters } from "@/lib/contracts/cog-record-filter"
 import { useForm } from "react-hook-form"
 import { useCOGRecords, useDeleteCOGRecord, useUpdateCOGRecord } from "@/hooks/use-cog"
 import { useQuery } from "@tanstack/react-query"
@@ -159,10 +160,16 @@ export function COGRecordsTable({
   const filteredRecords = data?.records ?? []
 
   const hasAnyRecords = filteredRecords.length > 0
-  const hasFilters =
-    !!vendorFilter && vendorFilter !== "all"
-      ? true
-      : matchFilter !== "all" || !!dateFrom || !!dateTo
+  // Canonical — the old inline version omitted `search`, so a search that
+  // matched nothing rendered the "no data, upload a file" empty state instead
+  // of "nothing matched your search".
+  const hasFilters = hasCogFilters({
+    search,
+    vendorId: vendorFilter && vendorFilter !== "all" ? vendorFilter : undefined,
+    matchStatus: matchFilter !== "all" ? matchFilter : undefined,
+    dateFrom,
+    dateTo,
+  })
 
   const handleExport = async () => {
     setExporting(true)
@@ -174,6 +181,10 @@ export function COGRecordsTable({
       if (dateFrom) params.set("dateFrom", dateFrom)
       if (dateTo) params.set("dateTo", dateTo)
       if (matchFilter !== "all") params.set("matchStatus", matchFilter)
+      // The one that was missing. Every OTHER filter was forwarded, so a user
+      // narrowing by vendor or date got a correct file and learned to trust
+      // the button — which is what made the search case so easy to miss.
+      if (search.trim()) params.set("search", search.trim())
 
       const res = await fetch(`/api/cog/export?${params.toString()}`, {
         method: "GET",
@@ -182,15 +193,33 @@ export function COGRecordsTable({
         throw new Error(`Export failed: ${res.status}`)
       }
       const blob = await res.blob()
+
+      // Take the filename the server chose. It encodes the row cap when the
+      // cap bit (`…-first-N-of-M.csv`); rebuilding it here would throw that
+      // away and hand the user a file that looks complete.
+      const disposition = res.headers.get("Content-Disposition") ?? ""
+      const serverName = /filename="([^"]+)"/.exec(disposition)?.[1]
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `cog-data-${new Date().toISOString().slice(0, 10)}.csv`
+      a.download =
+        serverName ?? `cog-data-${new Date().toISOString().slice(0, 10)}.csv`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      toast.success("Export downloaded")
+
+      const exported = Number(res.headers.get("X-Rows-Exported") ?? NaN)
+      const matched = Number(res.headers.get("X-Total-Matched") ?? NaN)
+      if (Number.isFinite(exported) && Number.isFinite(matched)) {
+        toast.success(
+          exported < matched
+            ? `Exported the ${exported.toLocaleString()} most recent of ${matched.toLocaleString()} matching records — the export caps at 100,000 rows.`
+            : `Exported ${exported.toLocaleString()} ${exported === 1 ? "record" : "records"}${hasFilters ? " matching the current filters" : ""}.`,
+        )
+      } else {
+        toast.success("Export downloaded")
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Export failed")
     } finally {
