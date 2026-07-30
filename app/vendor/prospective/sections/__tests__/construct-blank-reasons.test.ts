@@ -1,21 +1,28 @@
 import { describe, expect, it } from "vitest"
 
 /**
- * Charles 2026-07-28: "these should fill in from the loaded benchmark file."
+ * Charles 2026-07-28 → Vick 2026-07-29: "these should fill in from the loaded
+ * benchmark file."
  *
- * They cannot, and the constructs table gave no hint why — the same silent-gap
- * complaint he raised about the Benchmarks tab, resurfacing at the point of USE.
- * His benchmark rows in production carry ONLY `nationalAvgPrice`; p25, p50, min,
- * max, sampleSize and category are all NULL (verified against the prod
- * snapshot). So `addBenchmarkConstruct` seeds:
+ * The first answer to this was an EXPLANATION, on the belief that his benchmark
+ * file was two columns (Construct | National Avg Price) and the missing cells
+ * were therefore unfillable. The real workbook is nine columns: Current Pricing
+ * and TRL 12 Units were in the file all along and the importer dropped them.
+ * They now import (`currentPrice` / `annualUnits`) and seed the construct
+ * directly, so `addBenchmarkConstruct` reads:
  *
- *   benchTarget = percentile50 > 0 ? percentile50 : nationalAvgPrice  → 3300 ✓
- *   benchFloor  = minPrice     > 0 ? minPrice     : percentile25      → 0, blank
+ *   current = currentPrice > 0 ? currentPrice : <price file by SKU>
+ *   volume  = annualUnits  > 0 ? annualUnits  : <usage file by SKU>
+ *   floor   = minPrice     > 0 ? minPrice     : percentile25
+ *   target  = percentile50 > 0 ? percentile50 : nationalAvgPrice
  *
- * and Current/Volume come from the separately-uploaded price and usage files.
+ * Ask has no source at all — it is the vendor's opening position, typed by
+ * hand — so it is never a "blank reason".
  *
  * This mirrors the derivation in DealScorerSection so the reasons stay tied to
- * the same inputs the auto-fill actually reads.
+ * the same inputs the auto-fill actually reads: whichever cell is still blank,
+ * the note must name BOTH places it could have come from, or it sends the
+ * vendor to fix the wrong file.
  */
 type Construct = {
   benchmarkId: string | null
@@ -34,28 +41,28 @@ function blankReasons(
   const reasons: string[] = []
   if (fromBenchmark.some((c) => !c.floor)) {
     reasons.push(
-      "Floor needs a Min or 25th-percentile column, which your benchmark file does not have",
+      "Floor needs a Min / Hard Floor or 25th-percentile column, which your benchmark file does not have",
     )
   }
   if (fromBenchmark.some((c) => !c.current)) {
     reasons.push(
       priceLoadedCount > 0
-        ? "Current is filled from the price file by item number — these products did not match one"
-        : "Current comes from a price file, which is not loaded",
+        ? "Current needs a Current price column on the benchmark file, or a price-file row matching the item number — these products have neither"
+        : "Current needs a Current price column on the benchmark file, or a price file (none loaded)",
     )
   }
   if (fromBenchmark.some((c) => !c.annualVolume)) {
     reasons.push(
       usageLoadedCount > 0
-        ? "Volume is filled from the usage file by item number — these products did not match one"
-        : "Volume comes from a usage file, which is not loaded",
+        ? "Volume needs an Annual units column on the benchmark file, or a usage-file row matching the item number — these products have neither"
+        : "Volume needs an Annual units column on the benchmark file, or a usage file (none loaded)",
     )
   }
   return reasons
 }
 
-/** Exactly what Charles's screenshot shows: Target seeded, everything else blank. */
-const CHARLES_ROW: Construct = {
+/** What Charles's screenshot showed: Target seeded, everything else blank. */
+const BLANK_ROW: Construct = {
   benchmarkId: "b-cemented-knee",
   floor: "",
   current: "",
@@ -63,32 +70,43 @@ const CHARLES_ROW: Construct = {
 }
 
 describe("why a benchmark construct's cells are blank", () => {
-  it("names all three causes for a national-avg-only file with no side files", () => {
-    const r = blankReasons([CHARLES_ROW], 0, 0)
+  it("names all three causes when neither the benchmark file nor the side files carry them", () => {
+    const r = blankReasons([BLANK_ROW], 0, 0)
     expect(r).toHaveLength(3)
-    expect(r[0]).toMatch(/Min or 25th-percentile/)
-    expect(r[1]).toMatch(/price file, which is not loaded/)
-    expect(r[2]).toMatch(/usage file, which is not loaded/)
+    expect(r[0]).toMatch(/Min \/ Hard Floor or 25th-percentile/)
+    expect(r[1]).toMatch(/price file \(none loaded\)/)
+    expect(r[2]).toMatch(/usage file \(none loaded\)/)
+  })
+
+  it("names the benchmark file's own column as a source, not just the side file", () => {
+    // The 2026-07-28 copy said Current "comes from a price file" full stop.
+    // That was the bug's cover story: it pointed the vendor at the wrong
+    // upload while the number sat unread in the benchmark file he'd loaded.
+    const r = blankReasons([BLANK_ROW], 0, 0)
+    expect(r[1]).toMatch(/Current price column on the benchmark file/)
+    expect(r[2]).toMatch(/Annual units column on the benchmark file/)
   })
 
   it("distinguishes 'file not loaded' from 'loaded but did not match'", () => {
     // A loaded file that simply has no row for this item number is a DIFFERENT
     // problem — telling the user to upload a file they already uploaded would
     // send them down the wrong path.
-    const r = blankReasons([CHARLES_ROW], 12, 12)
-    expect(r[1]).toMatch(/did not match/)
-    expect(r[2]).toMatch(/did not match/)
-    expect(r.join(" ")).not.toMatch(/not loaded/)
+    const r = blankReasons([BLANK_ROW], 12, 12)
+    expect(r[1]).toMatch(/did not match|have neither/)
+    expect(r[2]).toMatch(/did not match|have neither/)
+    expect(r.join(" ")).not.toMatch(/none loaded/)
   })
 
   it("says nothing when the benchmark file carried the columns", () => {
-    const full: Construct = {
+    // The 2026-07-29 shape: Current + Volume seeded from the benchmark row
+    // itself, with no price or usage file loaded at all.
+    const seededFromBenchmark: Construct = {
       benchmarkId: "b-full",
-      floor: "2800",
-      current: "3200",
-      annualVolume: "300",
+      floor: "2850",
+      current: "3800",
+      annualVolume: "240",
     }
-    expect(blankReasons([full], 1, 1)).toEqual([])
+    expect(blankReasons([seededFromBenchmark], 0, 0)).toEqual([])
   })
 
   it("ignores hand-added custom rows — blanks there are the user's own", () => {
@@ -108,7 +126,7 @@ describe("why a benchmark construct's cells are blank", () => {
       current: "3200",
       annualVolume: "300",
     }
-    const r = blankReasons([full, CHARLES_ROW], 1, 1)
+    const r = blankReasons([full, BLANK_ROW], 1, 1)
     expect(r).toHaveLength(3)
   })
 })

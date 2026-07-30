@@ -305,6 +305,8 @@ describe("mapBenchmarkRows — per-field coverage", () => {
     expect(items).toHaveLength(4)
     expect(coverage).toEqual({
       category: 0,
+      currentPrice: 0,
+      annualUnits: 0,
       nationalAvgPrice: 4,
       percentile25: 0,
       percentile50: 0,
@@ -315,6 +317,8 @@ describe("mapBenchmarkRows — per-field coverage", () => {
     })
     expect(benchmarkCoverageGaps(coverage).map((g) => g.key)).toEqual([
       "category",
+      "currentPrice",
+      "annualUnits",
       "percentile25",
       "percentile50",
       "percentile75",
@@ -326,6 +330,8 @@ describe("mapBenchmarkRows — per-field coverage", () => {
     // the mapping dialog and the CSV template do.
     expect(benchmarkCoverageGaps(coverage).map((g) => g.label)).toEqual([
       "Category",
+      "Current price (what the facility pays today)",
+      "Annual units (trailing 12 months)",
       "25th percentile price",
       "Median price (P50)",
       "75th percentile price",
@@ -340,6 +346,8 @@ describe("mapBenchmarkRows — per-field coverage", () => {
       "Item Number",
       "Description",
       "Category",
+      "Current Price",
+      "Annual Units",
       "National Avg Price",
       "P25",
       "Median",
@@ -352,13 +360,15 @@ describe("mapBenchmarkRows — per-field coverage", () => {
     const { items, coverage } = mapBenchmarkRows(
       headers,
       rowsFor(headers, [
-        ["AR-1", "Knee", "Joints", "3300", "3100", "3250", "3500", "2800", "4100", "120", "2026-01-15"],
-        ["AR-2", "Hip", "Joints", "4200", "4000", "4150", "4400", "3700", "5000", "80", "2026-01-15"],
+        ["AR-1", "Knee", "Joints", "3800", "240", "3300", "3100", "3250", "3500", "2800", "4100", "120", "2026-01-15"],
+        ["AR-2", "Hip", "Joints", "4800", "160", "4200", "4000", "4150", "4400", "3700", "5000", "80", "2026-01-15"],
       ]),
     )
     expect(items).toHaveLength(2)
     expect(coverage).toEqual({
       category: 2,
+      currentPrice: 2,
+      annualUnits: 2,
       nationalAvgPrice: 2,
       percentile25: 2,
       percentile50: 2,
@@ -383,6 +393,8 @@ describe("mapBenchmarkRows — per-field coverage", () => {
     expect(coverage.sampleSize).toBe(1)
     expect(benchmarkCoverageGaps(coverage).map((g) => g.key)).toEqual([
       "category",
+      "currentPrice",
+      "annualUnits",
       "percentile50",
       "percentile75",
       "minPrice",
@@ -414,6 +426,8 @@ describe("mapBenchmarkRows — per-field coverage", () => {
         itemNumber: "Code",
         description: null,
         category: null,
+        currentPrice: null,
+        annualUnits: null,
         nationalAvgPrice: "Avg",
         percentile25: null, // user unmapped it — coverage must follow
         percentile50: null,
@@ -452,7 +466,7 @@ describe("buildBenchmarkTemplateCsv", () => {
     const { items, coverage } = mapBenchmarkRows(
       headers,
       rowsFor(headers, [
-        ["AR-1", "Knee", "Joints", "3300", "3100", "3250", "3500", "2800", "4100", "120", "2026-01-15"],
+        ["AR-1", "Knee", "Joints", "3800", "240", "3300", "3100", "3250", "3500", "2800", "4100", "120", "2026-01-15"],
       ]),
     )
     expect(items).toHaveLength(1)
@@ -491,6 +505,276 @@ describe("buildBenchmarkTemplateCsv", () => {
     expect(items[0]!.percentile50).toBeUndefined()
     expect(coverage.percentile75).toBe(1)
     expect(coverage.percentile25).toBe(0)
+  })
+})
+
+// The workbook itself, header-for-header (Benchmarks.xlsx, 2026-07-29). The
+// 2026-07-07 test below pinned a FOUR-column subset, which is how the belief
+// that "the mapping is complete" survived: the real file is nine columns, and
+// the two the Deal Scorer needed most — Current Pricing and TRL 12 Units —
+// were parsed and dropped for want of a field to land in. Pin the whole row.
+describe("mapBenchmarkRows — Charles's real workbook (2026-07-29)", () => {
+  const headers = [
+    "Construct",
+    "TRL 12 Units",
+    "National ASP",
+    "Hard Floor",
+    "Current Pricing",
+    "TRG",
+    "5% admin fee removed",
+    "Dual 80w/ 50%ZB",
+    "Dual 80 W/ 90% ZB",
+  ]
+  const row = (vals: string[]) => rowsFor(headers, [vals])
+
+  it("carries Current Pricing and TRL 12 Units through, alongside the market columns", () => {
+    const { items } = mapBenchmarkRows(
+      headers,
+      row(["Cemented Knee", "240", "3300", "2850", "3800", "2900", "2755", "2617", "2480"]),
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]).toEqual({
+      vendorItemNo: "Cemented Knee",
+      description: undefined,
+      category: undefined,
+      currentPrice: 3800, // ← "Current Pricing", dropped before this change
+      annualUnits: 240, // ← "TRL 12 Units", dropped before this change
+      nationalAvgPrice: 3300,
+      percentile25: undefined,
+      percentile50: undefined,
+      percentile75: undefined,
+      minPrice: 2850, // ← "Hard Floor"
+      maxPrice: undefined,
+      sampleSize: undefined,
+      dataDate: undefined,
+    })
+  })
+
+  it("leaves TRG unmapped — Target is entered by hand (Vick 2026-07-29)", () => {
+    // Target and Ask are the vendor's negotiating position, not file data.
+    // No benchmark field may claim TRG, or picking a benchmark would silently
+    // overwrite a number he means to type himself.
+    const { mapping } = resolveMapping(headers, BENCHMARK_UPLOAD_SPECS)
+    expect(Object.values(mapping)).not.toContain("TRG")
+    // The three scenario columns are likewise out of scope for now.
+    expect(Object.values(mapping)).not.toContain("5% admin fee removed")
+    expect(Object.values(mapping)).not.toContain("Dual 80w/ 50%ZB")
+    expect(Object.values(mapping)).not.toContain("Dual 80 W/ 90% ZB")
+  })
+
+  it("auto-detects every mapped column exactly — no fuzzy 'best guess' badge", () => {
+    // A fuzzy hit makes the dialog demand verification on a file that needs
+    // none, and fuzzy matching is where a stray column could steal TRG.
+    const { mapping, missingRequired, provenance } = resolveMapping(
+      headers,
+      BENCHMARK_UPLOAD_SPECS,
+    )
+    expect(missingRequired).toEqual([])
+    expect(mapping.itemNumber).toBe("Construct")
+    expect(mapping.currentPrice).toBe("Current Pricing")
+    expect(mapping.annualUnits).toBe("TRL 12 Units")
+    expect(mapping.nationalAvgPrice).toBe("National ASP")
+    expect(mapping.minPrice).toBe("Hard Floor")
+    expect(Object.values(provenance)).not.toContain("fuzzy")
+  })
+
+  it("the empty TRL 12 Units column in the shipped file is a gap, not a zero", () => {
+    // Every row's units cell is blank in the workbook as sent. That must read
+    // as "column not supplied" (Volume stays blank, the copy says so) — never
+    // as 0 units, which would zero the construct out of the blend.
+    const { items, coverage } = mapBenchmarkRows(
+      headers,
+      row(["Press fit knee", "", "4200", "3915", "4400", "3400", "3240", "3080", "2907"]),
+    )
+    expect(items[0]!.annualUnits).toBeUndefined()
+    expect(coverage.annualUnits).toBe(0)
+    expect(coverage.currentPrice).toBe(1)
+    expect(benchmarkCoverageGaps(coverage).map((g) => g.key)).toContain(
+      "annualUnits",
+    )
+  })
+
+  it("keeps a row whose only money column is Current Pricing", () => {
+    // A price-ish gate that ignored currentPrice would drop the row entirely
+    // — the same silent loss, one column over.
+    const { items, droppedNoPrice } = mapBenchmarkRows(
+      headers,
+      row(["Cemented Knee", "240", "", "", "3800", "", "", "", ""]),
+    )
+    expect(droppedNoPrice).toBe(0)
+    expect(items[0]!.currentPrice).toBe(3800)
+  })
+})
+
+// One unstorable cell used to cost the vendor the WHOLE upload: Postgres
+// rejects it, the insert is one transaction, and the toast reads "Benchmark
+// import failed" with all N rows gone. The realistic trigger is a mis-mapped
+// column — the generic units aliases match "Units"/"Volume"/"Quantity"
+// headers, which in some real exports hold dollar spend.
+describe("mapBenchmarkRows — values too large to store", () => {
+  const headers = ["Item Number", "National Avg Price", "Units", "Sample Size"]
+
+  it("drops an out-of-INTEGER-range units value instead of failing the file", () => {
+    const { items, outOfRange } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [
+        ["A-1", "3300", "3900000000", ""], // a spend figure in a "Units" column
+        ["A-2", "3400", "240", ""], // the good row must survive
+      ]),
+    )
+    expect(items).toHaveLength(2)
+    expect(items[0]!.annualUnits).toBeUndefined()
+    expect(items[1]!.annualUnits).toBe(240)
+    expect(outOfRange).toBe(1)
+  })
+
+  it("keeps the largest values each column CAN hold", () => {
+    // The bound must reject only what Postgres rejects — clipping real data
+    // would be its own silent loss.
+    const wide = ["Item Number", "National Avg Price", "Units"]
+    const { items, outOfRange } = mapBenchmarkRows(
+      wide,
+      rowsFor(wide, [["A-1", "9999999999.99", "2147483647"]]),
+    )
+    expect(items[0]!.nationalAvgPrice).toBe(9_999_999_999.99)
+    expect(items[0]!.annualUnits).toBe(2_147_483_647)
+    expect(outOfRange).toBe(0)
+  })
+
+  it("drops an over-large money value, keeping the row's other columns", () => {
+    const wide = ["Item Number", "National Avg Price", "Current Price"]
+    const { items, outOfRange, coverage } = mapBenchmarkRows(
+      wide,
+      rowsFor(wide, [["A-1", "3300", "100000000000"]]),
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0]!.nationalAvgPrice).toBe(3300)
+    expect(items[0]!.currentPrice).toBeUndefined()
+    expect(coverage.currentPrice).toBe(0)
+    expect(outOfRange).toBe(1)
+  })
+
+  it("rounds fractional counts — a units column is a count, not a fraction", () => {
+    // Prisma rejects a non-integer for an INTEGER column outright.
+    const { items } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["A-1", "3300", "240.7", "1250.4"]]),
+    )
+    expect(items[0]!.annualUnits).toBe(241)
+    expect(items[0]!.sampleSize).toBe(1250)
+  })
+
+  it("drops a negative count rather than seeding a volume nothing can use", () => {
+    const { items, outOfRange } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["A-1", "3300", "-5", ""]]),
+    )
+    expect(items[0]!.annualUnits).toBeUndefined()
+    expect(outOfRange).toBe(1)
+  })
+
+  it("reports zero out-of-range for an ordinary file", () => {
+    const { outOfRange } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["A-1", "3300", "240", "1250"]]),
+    )
+    expect(outOfRange).toBe(0)
+  })
+})
+
+// The two new fields widened auto-detection; these are the header spellings a
+// real workbook uses, plus the collisions that widening could cause.
+describe("mapBenchmarkRows — Current price / Annual units header variants", () => {
+  const detect = (header: string, value: string) => {
+    const headers = ["Item Number", "National Avg Price", header]
+    return mapBenchmarkRows(headers, rowsFor(headers, [["A-1", "3300", value]]))
+      .items[0]!
+  }
+
+  it.each([
+    "Current Pricing",
+    "Current Price",
+    "current_price",
+    "Current Unit Price",
+    "Current Cost",
+    "Existing Price",
+  ])("detects %s as the current price", (header) => {
+    expect(detect(header, "3800").currentPrice).toBe(3800)
+  })
+
+  it.each([
+    "TRL 12 Units",
+    "TRL12 Units",
+    "Trailing 12 Units",
+    "TTM Units",
+    "Annual Units",
+    "Annual Volume",
+    "Units",
+    "Volume",
+    "Quantity",
+  ])("detects %s as annual units", (header) => {
+    expect(detect(header, "240").annualUnits).toBe(240)
+  })
+
+  it("does not let the current-price aliases claim the market average", () => {
+    // NATIONAL_AVG_ALIASES ends in the broad UNIT_PRICE_ALIASES, and
+    // currentPrice resolves FIRST — the ordering must not cost the file its
+    // National Avg column when both are present.
+    const headers = ["Item Number", "Current Price", "Price"]
+    const { items } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["A-1", "3800", "3300"]]),
+    )
+    expect(items[0]!.currentPrice).toBe(3800)
+    expect(items[0]!.nationalAvgPrice).toBe(3300)
+  })
+
+  it("keeps Sample size and Annual units apart when both are present", () => {
+    const headers = ["Item Number", "National Avg Price", "Units", "Sample Size"]
+    const { items } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["A-1", "3300", "240", "1250"]]),
+    )
+    expect(items[0]!.annualUnits).toBe(240)
+    expect(items[0]!.sampleSize).toBe(1250)
+  })
+
+  it("does not steal the Min column for Current price", () => {
+    const headers = ["Item Number", "Hard Floor", "Current Pricing"]
+    const { items } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["A-1", "2850", "3800"]]),
+    )
+    expect(items[0]!.minPrice).toBe(2850)
+    expect(items[0]!.currentPrice).toBe(3800)
+  })
+
+  it("still imports a market-only file exactly as before", () => {
+    // The regression that matters most: every vendor whose benchmark file has
+    // no current-price or units column must be untouched by this change.
+    const headers = ["Item Number", "National Avg Price", "P25", "Median", "P75"]
+    const { items, coverage, outOfRange } = mapBenchmarkRows(
+      headers,
+      rowsFor(headers, [["A-1", "3300", "3100", "3250", "3500"]]),
+    )
+    expect(items[0]).toEqual({
+      vendorItemNo: "A-1",
+      description: undefined,
+      category: undefined,
+      currentPrice: undefined,
+      annualUnits: undefined,
+      nationalAvgPrice: 3300,
+      percentile25: 3100,
+      percentile50: 3250,
+      percentile75: 3500,
+      minPrice: undefined,
+      maxPrice: undefined,
+      sampleSize: undefined,
+      dataDate: undefined,
+    })
+    expect(coverage.currentPrice).toBe(0)
+    expect(coverage.annualUnits).toBe(0)
+    expect(outOfRange).toBe(0)
   })
 })
 

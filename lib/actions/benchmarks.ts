@@ -14,18 +14,35 @@ const benchmarkFiltersSchema = z.object({
   pageSize: z.number().default(25),
 })
 
+// Column storage bounds. Postgres rejects an over-large value with "Value out
+// of range for the type", and since the insert runs in ONE transaction that
+// error costs the caller every row in the batch. Validating here turns it into
+// a named, row-level message. The vendor upload path never reaches this: the
+// file reader drops unstorable cells before they get here (parseMoneyBounded /
+// parseCountBounded) so one junk cell can't fail a 500-row file.
+const DECIMAL_12_2_MAX = 9_999_999_999.99
+const PG_INT_MAX = 2_147_483_647
+const money = () => z.number().min(-DECIMAL_12_2_MAX).max(DECIMAL_12_2_MAX)
+const count = () => z.number().int().min(0).max(PG_INT_MAX)
+
 const createBenchmarkSchema = z.object({
   vendorId: z.string().optional(),
   vendorItemNo: z.string().min(1),
   description: z.string().optional(),
   category: z.string().optional(),
-  nationalAvgPrice: z.number().optional(),
-  percentile25: z.number().optional(),
-  percentile50: z.number().optional(),
-  percentile75: z.number().optional(),
-  minPrice: z.number().optional(),
-  maxPrice: z.number().optional(),
-  sampleSize: z.number().int().optional(),
+  nationalAvgPrice: money().optional(),
+  percentile25: money().optional(),
+  percentile50: money().optional(),
+  percentile75: money().optional(),
+  minPrice: money().optional(),
+  maxPrice: money().optional(),
+  // The deal BASELINE + volume reference a real benchmark workbook carries
+  // alongside the market columns (Charles 2026-07-29 "Current Pricing" /
+  // "TRL 12 Units"). Optional like every other column — a market-only file
+  // imports exactly as before.
+  currentPrice: money().optional(),
+  annualUnits: count().optional(),
+  sampleSize: count().optional(),
   // Benchmarks-tab import (Vick 2026-06-12): the file reader sends an ISO
   // date string; tolerate Date too. Unparseable values drop to undefined
   // rather than rejecting the whole batch.

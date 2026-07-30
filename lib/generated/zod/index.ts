@@ -191,7 +191,7 @@ export const VendorAliasScalarFieldEnumSchema = z.enum(['id','vendorId','alias',
 
 export const CategoryMappingScalarFieldEnumSchema = z.enum(['id','cogCategory','contractCategory','similarityScore','isConfirmed','createdAt']);
 
-export const ProductBenchmarkScalarFieldEnumSchema = z.enum(['id','vendorId','vendorItemNo','description','category','nationalAvgPrice','percentile25','percentile50','percentile75','minPrice','maxPrice','sampleSize','dataDate','source','createdAt']);
+export const ProductBenchmarkScalarFieldEnumSchema = z.enum(['id','vendorId','vendorItemNo','description','category','nationalAvgPrice','percentile25','percentile50','percentile75','minPrice','maxPrice','currentPrice','annualUnits','sampleSize','dataDate','source','createdAt']);
 
 export const CaseScalarFieldEnumSchema = z.enum(['id','caseNumber','facilityId','surgeonName','surgeonId','patientDob','patientBmi','payorClass','dateOfSurgery','timeInOr','timeOutOr','primaryCptCode','totalSpend','totalReimbursement','margin','complianceStatus','createdAt','updatedAt']);
 
@@ -6819,6 +6819,22 @@ export const ProductBenchmarkSchema = z.object({
   percentile75: z.instanceof(PrismaDecimal, { message: "Field 'percentile75' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
   minPrice: z.instanceof(PrismaDecimal, { message: "Field 'minPrice' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
   maxPrice: z.instanceof(PrismaDecimal, { message: "Field 'maxPrice' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
+  /**
+   * *
+   * * What the facility pays TODAY for this construct, when the benchmark file
+   * * carries it ("Current Pricing" in Charles's real workbook, 2026-07-29).
+   * * Distinct from the market columns above: it is the deal's BASELINE, not a
+   * * distribution point. Seeds the Deal Scorer's Current cell — before this
+   * * column the whole column was dropped at import and every construct row
+   * * rendered blank ("these should fill in from the loaded benchmark file").
+   */
+  currentPrice: z.instanceof(PrismaDecimal, { message: "Field 'currentPrice' must be a Decimal. Location: ['Models', 'ProductBenchmark']"}).nullable(),
+  /**
+   * *
+   * * Trailing-12-month units for this construct ("TRL 12 Units"). Seeds the
+   * * Deal Scorer's Volume cell when the usage file doesn't cover the item.
+   */
+  annualUnits: z.number().int().nullable(),
   sampleSize: z.number().int().nullable(),
   dataDate: z.coerce.date().nullable(),
   source: z.string(),
@@ -10571,6 +10587,8 @@ export const ProductBenchmarkSelectSchema: z.ZodType<Prisma.ProductBenchmarkSele
   percentile75: z.boolean().optional(),
   minPrice: z.boolean().optional(),
   maxPrice: z.boolean().optional(),
+  currentPrice: z.boolean().optional(),
+  annualUnits: z.boolean().optional(),
   sampleSize: z.boolean().optional(),
   dataDate: z.boolean().optional(),
   source: z.boolean().optional(),
@@ -17001,6 +17019,8 @@ export const ProductBenchmarkWhereInputSchema: z.ZodType<Prisma.ProductBenchmark
   percentile75: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
   minPrice: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
   maxPrice: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
+  currentPrice: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
+  annualUnits: z.union([ z.lazy(() => IntNullableFilterSchema), z.number() ]).optional().nullable(),
   sampleSize: z.union([ z.lazy(() => IntNullableFilterSchema), z.number() ]).optional().nullable(),
   dataDate: z.union([ z.lazy(() => DateTimeNullableFilterSchema), z.coerce.date() ]).optional().nullable(),
   source: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
@@ -17020,6 +17040,8 @@ export const ProductBenchmarkOrderByWithRelationInputSchema: z.ZodType<Prisma.Pr
   percentile75: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   minPrice: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   maxPrice: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  currentPrice: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  annualUnits: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   sampleSize: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   dataDate: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   source: z.lazy(() => SortOrderSchema).optional(),
@@ -17045,6 +17067,8 @@ export const ProductBenchmarkWhereUniqueInputSchema: z.ZodType<Prisma.ProductBen
   percentile75: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
   minPrice: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
   maxPrice: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
+  currentPrice: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
+  annualUnits: z.union([ z.lazy(() => IntNullableFilterSchema), z.number() ]).optional().nullable(),
   sampleSize: z.union([ z.lazy(() => IntNullableFilterSchema), z.number() ]).optional().nullable(),
   dataDate: z.union([ z.lazy(() => DateTimeNullableFilterSchema), z.coerce.date() ]).optional().nullable(),
   source: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
@@ -17064,6 +17088,8 @@ export const ProductBenchmarkOrderByWithAggregationInputSchema: z.ZodType<Prisma
   percentile75: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   minPrice: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   maxPrice: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  currentPrice: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  annualUnits: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   sampleSize: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   dataDate: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   source: z.lazy(() => SortOrderSchema).optional(),
@@ -17090,6 +17116,8 @@ export const ProductBenchmarkScalarWhereWithAggregatesInputSchema: z.ZodType<Pri
   percentile75: z.union([ z.lazy(() => DecimalNullableWithAggregatesFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
   minPrice: z.union([ z.lazy(() => DecimalNullableWithAggregatesFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
   maxPrice: z.union([ z.lazy(() => DecimalNullableWithAggregatesFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
+  currentPrice: z.union([ z.lazy(() => DecimalNullableWithAggregatesFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
+  annualUnits: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema), z.number() ]).optional().nullable(),
   sampleSize: z.union([ z.lazy(() => IntNullableWithAggregatesFilterSchema), z.number() ]).optional().nullable(),
   dataDate: z.union([ z.lazy(() => DateTimeNullableWithAggregatesFilterSchema), z.coerce.date() ]).optional().nullable(),
   source: z.union([ z.lazy(() => StringWithAggregatesFilterSchema), z.string() ]).optional(),
@@ -24826,6 +24854,8 @@ export const ProductBenchmarkCreateInputSchema: z.ZodType<Prisma.ProductBenchmar
   percentile75: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   minPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   maxPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  currentPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  annualUnits: z.number().optional().nullable(),
   sampleSize: z.number().optional().nullable(),
   dataDate: z.coerce.date().optional().nullable(),
   source: z.string().optional(),
@@ -24845,6 +24875,8 @@ export const ProductBenchmarkUncheckedCreateInputSchema: z.ZodType<Prisma.Produc
   percentile75: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   minPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   maxPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  currentPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  annualUnits: z.number().optional().nullable(),
   sampleSize: z.number().optional().nullable(),
   dataDate: z.coerce.date().optional().nullable(),
   source: z.string().optional(),
@@ -24862,6 +24894,8 @@ export const ProductBenchmarkUpdateInputSchema: z.ZodType<Prisma.ProductBenchmar
   percentile75: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   minPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   maxPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  currentPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  annualUnits: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sampleSize: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   dataDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   source: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -24881,6 +24915,8 @@ export const ProductBenchmarkUncheckedUpdateInputSchema: z.ZodType<Prisma.Produc
   percentile75: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   minPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   maxPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  currentPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  annualUnits: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sampleSize: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   dataDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   source: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -24899,6 +24935,8 @@ export const ProductBenchmarkCreateManyInputSchema: z.ZodType<Prisma.ProductBenc
   percentile75: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   minPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   maxPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  currentPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  annualUnits: z.number().optional().nullable(),
   sampleSize: z.number().optional().nullable(),
   dataDate: z.coerce.date().optional().nullable(),
   source: z.string().optional(),
@@ -24916,6 +24954,8 @@ export const ProductBenchmarkUpdateManyMutationInputSchema: z.ZodType<Prisma.Pro
   percentile75: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   minPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   maxPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  currentPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  annualUnits: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sampleSize: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   dataDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   source: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -24934,6 +24974,8 @@ export const ProductBenchmarkUncheckedUpdateManyInputSchema: z.ZodType<Prisma.Pr
   percentile75: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   minPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   maxPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  currentPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  annualUnits: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sampleSize: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   dataDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   source: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -31250,6 +31292,8 @@ export const ProductBenchmarkCountOrderByAggregateInputSchema: z.ZodType<Prisma.
   percentile75: z.lazy(() => SortOrderSchema).optional(),
   minPrice: z.lazy(() => SortOrderSchema).optional(),
   maxPrice: z.lazy(() => SortOrderSchema).optional(),
+  currentPrice: z.lazy(() => SortOrderSchema).optional(),
+  annualUnits: z.lazy(() => SortOrderSchema).optional(),
   sampleSize: z.lazy(() => SortOrderSchema).optional(),
   dataDate: z.lazy(() => SortOrderSchema).optional(),
   source: z.lazy(() => SortOrderSchema).optional(),
@@ -31263,6 +31307,8 @@ export const ProductBenchmarkAvgOrderByAggregateInputSchema: z.ZodType<Prisma.Pr
   percentile75: z.lazy(() => SortOrderSchema).optional(),
   minPrice: z.lazy(() => SortOrderSchema).optional(),
   maxPrice: z.lazy(() => SortOrderSchema).optional(),
+  currentPrice: z.lazy(() => SortOrderSchema).optional(),
+  annualUnits: z.lazy(() => SortOrderSchema).optional(),
   sampleSize: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -31278,6 +31324,8 @@ export const ProductBenchmarkMaxOrderByAggregateInputSchema: z.ZodType<Prisma.Pr
   percentile75: z.lazy(() => SortOrderSchema).optional(),
   minPrice: z.lazy(() => SortOrderSchema).optional(),
   maxPrice: z.lazy(() => SortOrderSchema).optional(),
+  currentPrice: z.lazy(() => SortOrderSchema).optional(),
+  annualUnits: z.lazy(() => SortOrderSchema).optional(),
   sampleSize: z.lazy(() => SortOrderSchema).optional(),
   dataDate: z.lazy(() => SortOrderSchema).optional(),
   source: z.lazy(() => SortOrderSchema).optional(),
@@ -31296,6 +31344,8 @@ export const ProductBenchmarkMinOrderByAggregateInputSchema: z.ZodType<Prisma.Pr
   percentile75: z.lazy(() => SortOrderSchema).optional(),
   minPrice: z.lazy(() => SortOrderSchema).optional(),
   maxPrice: z.lazy(() => SortOrderSchema).optional(),
+  currentPrice: z.lazy(() => SortOrderSchema).optional(),
+  annualUnits: z.lazy(() => SortOrderSchema).optional(),
   sampleSize: z.lazy(() => SortOrderSchema).optional(),
   dataDate: z.lazy(() => SortOrderSchema).optional(),
   source: z.lazy(() => SortOrderSchema).optional(),
@@ -31309,6 +31359,8 @@ export const ProductBenchmarkSumOrderByAggregateInputSchema: z.ZodType<Prisma.Pr
   percentile75: z.lazy(() => SortOrderSchema).optional(),
   minPrice: z.lazy(() => SortOrderSchema).optional(),
   maxPrice: z.lazy(() => SortOrderSchema).optional(),
+  currentPrice: z.lazy(() => SortOrderSchema).optional(),
+  annualUnits: z.lazy(() => SortOrderSchema).optional(),
   sampleSize: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -45137,6 +45189,8 @@ export const ProductBenchmarkCreateWithoutVendorInputSchema: z.ZodType<Prisma.Pr
   percentile75: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   minPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   maxPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  currentPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  annualUnits: z.number().optional().nullable(),
   sampleSize: z.number().optional().nullable(),
   dataDate: z.coerce.date().optional().nullable(),
   source: z.string().optional(),
@@ -45154,6 +45208,8 @@ export const ProductBenchmarkUncheckedCreateWithoutVendorInputSchema: z.ZodType<
   percentile75: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   minPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   maxPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  currentPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  annualUnits: z.number().optional().nullable(),
   sampleSize: z.number().optional().nullable(),
   dataDate: z.coerce.date().optional().nullable(),
   source: z.string().optional(),
@@ -45693,6 +45749,8 @@ export const ProductBenchmarkScalarWhereInputSchema: z.ZodType<Prisma.ProductBen
   percentile75: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
   minPrice: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
   maxPrice: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
+  currentPrice: z.union([ z.lazy(() => DecimalNullableFilterSchema), z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }) ]).optional().nullable(),
+  annualUnits: z.union([ z.lazy(() => IntNullableFilterSchema), z.number() ]).optional().nullable(),
   sampleSize: z.union([ z.lazy(() => IntNullableFilterSchema), z.number() ]).optional().nullable(),
   dataDate: z.union([ z.lazy(() => DateTimeNullableFilterSchema), z.coerce.date() ]).optional().nullable(),
   source: z.union([ z.lazy(() => StringFilterSchema), z.string() ]).optional(),
@@ -69013,6 +69071,8 @@ export const ProductBenchmarkCreateManyVendorInputSchema: z.ZodType<Prisma.Produ
   percentile75: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   minPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
   maxPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  currentPrice: z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }).optional().nullable(),
+  annualUnits: z.number().optional().nullable(),
   sampleSize: z.number().optional().nullable(),
   dataDate: z.coerce.date().optional().nullable(),
   source: z.string().optional(),
@@ -69998,6 +70058,8 @@ export const ProductBenchmarkUpdateWithoutVendorInputSchema: z.ZodType<Prisma.Pr
   percentile75: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   minPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   maxPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  currentPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  annualUnits: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sampleSize: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   dataDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   source: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -70015,6 +70077,8 @@ export const ProductBenchmarkUncheckedUpdateWithoutVendorInputSchema: z.ZodType<
   percentile75: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   minPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   maxPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  currentPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  annualUnits: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sampleSize: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   dataDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   source: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),
@@ -70032,6 +70096,8 @@ export const ProductBenchmarkUncheckedUpdateManyWithoutVendorInputSchema: z.ZodT
   percentile75: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   minPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   maxPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  currentPrice: z.union([ z.union([z.number(),z.string(),z.instanceof(Decimal),z.instanceof(Prisma.Decimal),DecimalJsLikeSchema,]).refine((v) => isValidDecimalInput(v), { message: 'Must be a Decimal' }),z.lazy(() => NullableDecimalFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  annualUnits: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   sampleSize: z.union([ z.number(),z.lazy(() => NullableIntFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   dataDate: z.union([ z.coerce.date(),z.lazy(() => NullableDateTimeFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   source: z.union([ z.string(),z.lazy(() => StringFieldUpdateOperationsInputSchema) ]).optional(),

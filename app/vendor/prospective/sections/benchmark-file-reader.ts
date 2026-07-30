@@ -13,11 +13,18 @@
  * every row. Benchmark-only columns (percentiles, min/max, sample size, data
  * date) get their own lists below because no other surface reads them.
  *
- * The mapping itself has been complete since 2026-07-07 — what was missing is
- * TELLING the vendor which columns his file didn't carry, so this module also
- * owns the per-field `coverage` counts (`benchmarkCoverageGaps`) and the
- * spec-derived CSV template (`buildBenchmarkTemplateCsv`) the Benchmarks
- * surface renders (Charles 2026-07-27).
+ * This module also owns the per-field `coverage` counts
+ * (`benchmarkCoverageGaps`) and the spec-derived CSV template
+ * (`buildBenchmarkTemplateCsv`) the Benchmarks surface renders, so the vendor
+ * is TOLD which columns his file didn't carry (Charles 2026-07-27).
+ *
+ * 2026-07-29: the "complete mapping" claim was wrong for the real workbook.
+ * Charles's file is nine columns, and three of the four cells he expected the
+ * Deal Scorer to fill had no field at all to land in — "Current Pricing" and
+ * "TRL 12 Units" were parsed and thrown away. Both now map
+ * (`currentPrice` / `annualUnits`) and persist. Target and Ask stay MANUAL by
+ * his instruction — they are his negotiating position, so no file column
+ * (including that workbook's "TRG") seeds them.
  */
 
 import {
@@ -91,6 +98,34 @@ const MAX_PRICE_ALIASES = [
   "hard_ceiling", "hardceiling", "ceiling", "price_ceiling",
 ]
 
+// What the facility pays TODAY — the deal BASELINE, not a market
+// distribution point. Charles's real workbook (2026-07-29) carries it as
+// "Current Pricing" alongside the market columns; before this list the whole
+// column was dropped at import, so the Deal Scorer's Current cell stayed blank
+// on every benchmark-picked construct ("these should fill in from the loaded
+// benchmark file"). Kept SEPARATE from NATIONAL_AVG_ALIASES on purpose:
+// the two are different numbers and a file routinely carries both.
+// Deliberately NOT including bare "price"/"cost" — in a benchmark file those
+// mean the market average (NATIONAL_AVG_ALIASES owns them).
+const CURRENT_PRICE_ALIASES = [
+  "current_price", "currentprice", "current_pricing", "currentpricing",
+  "current_unit_price", "currentunitprice", "current_cost", "currentcost",
+  "today_price", "todaysprice", "existing_price", "existingprice",
+  "paid_price", "pricepaid", "current_contract_price",
+]
+
+// Trailing-12-month units. Charles's workbook names it "TRL 12 Units";
+// the generic volume/units headers cover everyone else's. Feeds the Deal
+// Scorer's Volume when the separately-uploaded usage file has no row for
+// the item.
+const ANNUAL_UNITS_ALIASES = [
+  "trl_12_units", "trl12units", "trl12", "trl_units",
+  "trailing_12_units", "trailing12units", "ttm_units", "ttmunits",
+  "annual_units", "annualunits", "annual_volume", "annualvolume",
+  "units", "unit_volume", "volume", "quantity", "qty",
+  "12_month_units", "12monthunits", "usage_units", "usageunits",
+]
+
 const SAMPLE_SIZE_ALIASES = [
   "sample_size", "samplesize", "n", "samples",
   "sample_count", "samplecount", "observations",
@@ -128,6 +163,13 @@ export const BENCHMARK_UPLOAD_SPECS: UploadFieldSpec[] = (
     { key: "itemNumber", label: "Item number", aliases: BENCHMARK_ITEM_NUMBER_ALIASES, required: true, kind: "text" },
     { key: "description", label: "Description", aliases: DESCRIPTION_ALIASES, kind: "text" },
     { key: "category", label: "Category", aliases: CATEGORY_ALIASES, kind: "text" },
+    // Order matters: currentPrice resolves BEFORE nationalAvgPrice so
+    // resolveMapping's claimed-header exclusion keeps the broad price
+    // aliases (NATIONAL_AVG_ALIASES ends in UNIT_PRICE_ALIASES) from
+    // claiming a "Current Price" column as the market average — the same
+    // convention as ANALYZER_PRICE_FILE_SPECS / the builder's specs.
+    { key: "currentPrice", label: "Current price (what the facility pays today)", aliases: CURRENT_PRICE_ALIASES, kind: "number" },
+    { key: "annualUnits", label: "Annual units (trailing 12 months)", aliases: ANNUAL_UNITS_ALIASES, kind: "number" },
     { key: "nationalAvgPrice", label: "National average price", aliases: NATIONAL_AVG_ALIASES, kind: "number" },
     { key: "percentile25", label: "25th percentile price", aliases: P25_ALIASES, kind: "number" },
     { key: "percentile50", label: "Median price (P50)", aliases: P50_ALIASES, kind: "number" },
@@ -157,6 +199,44 @@ function parseNum(v: string): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
+// ─── Column storage bounds (2026-07-29) ──────────────────────────
+// A single unstorable cell used to fail the WHOLE upload: Postgres rejects it
+// ("Value out of range for the type"), the createMany is inside one
+// transaction, and the vendor gets "Benchmark import failed" with all 500 rows
+// lost — over one junk cell. The realistic trigger is a mis-mapped column: the
+// generic units aliases ("Units", "Volume", "Quantity") match headers that in
+// some real exports hold dollar SPEND, which overflows INTEGER instantly.
+// Out-of-range values are treated as NOT SUPPLIED, and counted so the import
+// copy can say so rather than implying the column was missing from the file.
+const INT_COLUMN_MAX = 2_147_483_647 // Postgres INTEGER
+const DECIMAL_COLUMN_MAX = 9_999_999_999.99 // Decimal(12, 2)
+
+/** A money value the Decimal(12,2) columns can actually hold. */
+function parseMoneyBounded(v: string, onDrop: () => void): number | undefined {
+  const n = parseNum(v)
+  if (n === undefined) return undefined
+  if (Math.abs(n) > DECIMAL_COLUMN_MAX) {
+    onDrop()
+    return undefined
+  }
+  return n
+}
+
+/** A whole-number count an INTEGER column can hold. Rounds like sampleSize
+ *  always has — "240.7 units" is a count, not a fraction. Negatives are junk
+ *  for both counts this serves (units, sample size), so they drop too rather
+ *  than seeding a construct with a volume no surface can use. */
+function parseCountBounded(v: string, onDrop: () => void): number | undefined {
+  const n = parseNum(v)
+  if (n === undefined) return undefined
+  const rounded = Math.round(n)
+  if (rounded < 0 || rounded > INT_COLUMN_MAX) {
+    onDrop()
+    return undefined
+  }
+  return rounded
+}
+
 function parseDateISO(v: string): string | undefined {
   const trimmed = v.trim()
   if (!trimmed) return undefined
@@ -176,6 +256,8 @@ function parseDateISO(v: string): string | undefined {
 // him to infer it from dashes.
 const COVERAGE_FIELD_KEYS = [
   "category",
+  "currentPrice",
+  "annualUnits",
   "nationalAvgPrice",
   "percentile25",
   "percentile50",
@@ -198,6 +280,13 @@ export interface ParsedBenchmarkRows {
   withNationalAvg: number
   /** per-field value counts across the KEPT rows (`items`) */
   coverage: BenchmarkFieldCoverage
+  /**
+   * Cells dropped for being too large to store (see the column bounds above).
+   * Counted so the import copy can distinguish "your file has no Units column"
+   * from "your Units column holds numbers this field can't be" — without it,
+   * a mis-mapped column reads as a missing one.
+   */
+  outOfRange: number
 }
 
 export interface BenchmarkCoverageGap {
@@ -237,7 +326,8 @@ export function buildBenchmarkTemplateCsv(): string {
  * Map parsed `{ headers, rows }` to benchmark import items.
  *
  * Row rules: rows without an item number are dropped; a kept row must carry
- * at least ONE price-ish field (national avg, any percentile, min or max).
+ * at least ONE price-ish field (national avg, any percentile, min, max, or
+ * the facility's current price).
  */
 export function mapBenchmarkRows(
   headers: string[],
@@ -265,6 +355,8 @@ export function mapBenchmarkRows(
   const idxItem = idx("itemNumber")
   const idxDesc = idx("description")
   const idxCat = idx("category")
+  const idxCurrent = idx("currentPrice")
+  const idxUnits = idx("annualUnits")
   const idxAvg = idx("nationalAvgPrice")
   const idxP25 = idx("percentile25")
   const idxP50 = idx("percentile50")
@@ -279,6 +371,8 @@ export function mapBenchmarkRows(
   let withNationalAvg = 0
   const coverage: BenchmarkFieldCoverage = {
     category: 0,
+    currentPrice: 0,
+    annualUnits: 0,
     nationalAvgPrice: 0,
     percentile25: 0,
     percentile50: 0,
@@ -288,21 +382,32 @@ export function mapBenchmarkRows(
     sampleSize: 0,
   }
 
+  let outOfRange = 0
+  const dropped = () => {
+    outOfRange++
+  }
+
   for (const row of rows) {
     const get = (idx: number) => (idx >= 0 ? (row[headers[idx]!] ?? "") : "")
     const vendorItemNo = get(idxItem).trim()
     if (!vendorItemNo) continue
 
-    const nationalAvgPrice = parseNum(get(idxAvg))
-    const percentile25 = parseNum(get(idxP25))
-    const percentile50 = parseNum(get(idxP50))
-    const percentile75 = parseNum(get(idxP75))
-    const minPrice = parseNum(get(idxMin))
-    const maxPrice = parseNum(get(idxMax))
+    const nationalAvgPrice = parseMoneyBounded(get(idxAvg), dropped)
+    const percentile25 = parseMoneyBounded(get(idxP25), dropped)
+    const percentile50 = parseMoneyBounded(get(idxP50), dropped)
+    const percentile75 = parseMoneyBounded(get(idxP75), dropped)
+    const minPrice = parseMoneyBounded(get(idxMin), dropped)
+    const maxPrice = parseMoneyBounded(get(idxMax), dropped)
+    const currentPrice = parseMoneyBounded(get(idxCurrent), dropped)
 
+    // `currentPrice` counts as price-ish: a file whose only money column is
+    // what the facility pays today still produces a usable construct row
+    // (Current + volume), so dropping it would be the same silent loss this
+    // whole module exists to prevent. `annualUnits` alone does NOT qualify —
+    // a units-only row carries no price for any surface to show.
     const hasPrice = [
       nationalAvgPrice, percentile25, percentile50,
-      percentile75, minPrice, maxPrice,
+      percentile75, minPrice, maxPrice, currentPrice,
     ].some((v) => v !== undefined)
     if (!hasPrice) {
       droppedNoPrice++
@@ -310,13 +415,16 @@ export function mapBenchmarkRows(
     }
     if (nationalAvgPrice !== undefined) withNationalAvg++
 
-    const sampleRaw = parseNum(get(idxN))
+    const sampleRaw = parseCountBounded(get(idxN), dropped)
+    const unitsRaw = parseCountBounded(get(idxUnits), dropped)
     const description = get(idxDesc).trim()
     const category = get(idxCat).trim()
 
     // Coverage counts only KEPT rows — a dropped row tells the vendor
     // nothing about which columns his file carries.
     if (category) coverage.category++
+    if (currentPrice !== undefined) coverage.currentPrice++
+    if (unitsRaw !== undefined) coverage.annualUnits++
     if (nationalAvgPrice !== undefined) coverage.nationalAvgPrice++
     if (percentile25 !== undefined) coverage.percentile25++
     if (percentile50 !== undefined) coverage.percentile50++
@@ -329,16 +437,18 @@ export function mapBenchmarkRows(
       vendorItemNo,
       description: description || undefined,
       category: category || undefined,
+      currentPrice,
+      annualUnits: unitsRaw,
       nationalAvgPrice,
       percentile25,
       percentile50,
       percentile75,
       minPrice,
       maxPrice,
-      sampleSize: sampleRaw !== undefined ? Math.round(sampleRaw) : undefined,
+      sampleSize: sampleRaw,
       dataDate: parseDateISO(get(idxDate)),
     })
   }
 
-  return { items, droppedNoPrice, withNationalAvg, coverage }
+  return { items, droppedNoPrice, withNationalAvg, coverage, outOfRange }
 }

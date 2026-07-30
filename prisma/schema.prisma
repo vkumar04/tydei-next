@@ -1988,6 +1988,20 @@ model ProductBenchmark {
   percentile75     Decimal?  @db.Decimal(12, 2)
   minPrice         Decimal?  @db.Decimal(12, 2)
   maxPrice         Decimal?  @db.Decimal(12, 2)
+  /**
+   * What the facility pays TODAY for this construct, when the benchmark file
+   * carries it ("Current Pricing" in Charles's real workbook, 2026-07-29).
+   * Distinct from the market columns above: it is the deal's BASELINE, not a
+   * distribution point. Seeds the Deal Scorer's Current cell — before this
+   * column the whole column was dropped at import and every construct row
+   * rendered blank ("these should fill in from the loaded benchmark file").
+   */
+  currentPrice     Decimal?  @db.Decimal(12, 2)
+  /**
+   * Trailing-12-month units for this construct ("TRL 12 Units"). Seeds the
+   * Deal Scorer's Volume cell when the usage file doesn't cover the item.
+   */
+  annualUnits      Int?
   sampleSize       Int?
   dataDate         DateTime? @db.Date
   source           String    @default("national_benchmark")

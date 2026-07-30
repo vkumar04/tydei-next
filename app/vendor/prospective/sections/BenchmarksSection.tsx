@@ -49,6 +49,8 @@ interface Props {
 interface DistributionColumn {
   key: keyof Pick<
     VendorBenchmarkRow,
+    | "currentPrice"
+    | "annualUnits"
     | "percentile25"
     | "percentile50"
     | "percentile75"
@@ -62,6 +64,17 @@ interface DistributionColumn {
 }
 
 const DISTRIBUTION_COLUMNS: DistributionColumn[] = [
+  // Current + Units aren't distribution points — they're the deal baseline
+  // the Deal Scorer seeds Current/Volume from (Charles 2026-07-29). They ride
+  // this list because the show-only-when-populated rule and the
+  // omitted-column footnote are exactly what they need too.
+  { key: "currentPrice", label: "Current", format: formatCurrency },
+  {
+    key: "annualUnits",
+    label: "TRL units",
+    format: (n) => n.toLocaleString(),
+    cellClassName: "text-muted-foreground",
+  },
   { key: "percentile25", label: "P25", format: formatCurrency },
   { key: "percentile50", label: "Median", format: formatCurrency },
   { key: "percentile75", label: "P75", format: formatCurrency },
@@ -110,7 +123,7 @@ export function BenchmarksSection({ vendorId }: Props) {
         // dropped for missing price data (the dialog already enforces
         // the item-number column itself).
         toast.error(
-          "Benchmark import: no usable rows — every row is missing price data (national avg, percentile, min or max).",
+          "Benchmark import: no usable rows — every row is missing price data (national avg, percentile, min, max or current price).",
         )
         return
       }
@@ -164,6 +177,12 @@ export function BenchmarksSection({ vendorId }: Props) {
         `${parsed.withNationalAvg} with a national average price.` +
         (parsed.droppedNoPrice > 0
           ? ` ${parsed.droppedNoPrice} row${parsed.droppedNoPrice === 1 ? " will be" : "s will be"} skipped (no price data).`
+          : "") +
+        // Distinguishes a mis-mapped column from a missing one: without this,
+        // a "Units" column that actually holds dollar spend would import as
+        // blank and the gap sentence below would claim the file never had it.
+        (parsed.outOfRange > 0
+          ? ` ${parsed.outOfRange} value${parsed.outOfRange === 1 ? "" : "s"} too large to store will be left blank — check that each column is mapped to the right field.`
           : "") +
         (gaps.length > 0
           ? ` No values found for ${andList(gaps.map((g) => g.label))} — ${

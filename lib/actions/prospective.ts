@@ -692,6 +692,10 @@ export interface VendorBenchmarkRow {
   percentile75: number
   minPrice: number
   maxPrice: number
+  /** What the facility pays today, when the benchmark file carried it. 0 = absent. */
+  currentPrice: number
+  /** Trailing-12-month units from the benchmark file. 0 = absent. */
+  annualUnits: number
   sampleSize: number
   source: string
   dataDate: string | null
@@ -756,6 +760,8 @@ export async function getVendorBenchmarks(): Promise<VendorBenchmarkRow[]> {
       percentile75: Number(b.percentile75 ?? 0),
       minPrice: Number(b.minPrice ?? 0),
       maxPrice: Number(b.maxPrice ?? 0),
+      currentPrice: Number(b.currentPrice ?? 0),
+      annualUnits: Number(b.annualUnits ?? 0),
       sampleSize: Number(b.sampleSize ?? 0),
       source: b.source,
       dataDate: b.dataDate ? b.dataDate.toISOString().slice(0, 10) : null,

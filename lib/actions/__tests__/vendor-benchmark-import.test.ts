@@ -94,6 +94,29 @@ describe("importVendorBenchmarks — vendor scoping", () => {
     expect(rows[0]!.source).toBe("vendor_upload")
   })
 
+  it("carries the workbook's Current price + Annual units through to the insert", async () => {
+    // Vick 2026-07-29: these two columns exist in the real benchmark
+    // workbook and were dropped for want of a field to land in, which is
+    // what left the Deal Scorer's Current and Volume cells blank. The
+    // schema must accept them, not strip them on the way to createMany.
+    await importVendorBenchmarks([
+      {
+        vendorItemNo: "Cemented Knee",
+        nationalAvgPrice: 3300,
+        minPrice: 2850,
+        currentPrice: 3800,
+        annualUnits: 240,
+      },
+    ])
+
+    const rows = mocks.benchmarkCreateMany.mock.calls[0]![0].data as Array<{
+      currentPrice?: number
+      annualUnits?: number
+    }>
+    expect(rows[0]!.currentPrice).toBe(3800)
+    expect(rows[0]!.annualUnits).toBe(240)
+  })
+
   it("only ever reads/deletes within the session vendor's vendor_upload rows", async () => {
     await importVendorBenchmarks([{ vendorItemNo: "AR-1", minPrice: 2 }])
     expect(mocks.benchmarkFindMany).toHaveBeenCalledWith(

@@ -34,6 +34,7 @@ import {
 } from "@/components/vendor/prospective/builder/file-handlers"
 import type { ResolvedMapping } from "@/components/shared/uploads/field-spec"
 import { normalizeSku } from "@/lib/contracts/normalize-sku"
+import { seedConstructFromBenchmark } from "./construct-seed"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { cn } from "@/lib/utils"
 import {
@@ -849,21 +850,24 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
       // benchFloor = minPrice || percentile25 — both absent in a national-avg-
       // only file, which is the shape the import dialog now warns about too.
       reasons.push(
-        "Floor needs a Min or 25th-percentile column, which your benchmark file does not have",
+        "Floor needs a Min / Hard Floor or 25th-percentile column, which your benchmark file does not have",
       )
     }
+    // Current and Volume each have TWO sources since 2026-07-29 — the
+    // benchmark row's own column first, then the side file — so name both,
+    // or the note sends the vendor to fix the wrong file.
     if (fromBenchmark.some((c) => !c.current)) {
       reasons.push(
         priceLoadedCount > 0
-          ? "Current is filled from the price file by item number — these products did not match one"
-          : "Current comes from a price file, which is not loaded",
+          ? "Current needs a Current price column on the benchmark file, or a price-file row matching the item number — these products have neither"
+          : "Current needs a Current price column on the benchmark file, or a price file (none loaded)",
       )
     }
     if (fromBenchmark.some((c) => !c.annualVolume)) {
       reasons.push(
         usageLoadedCount > 0
-          ? "Volume is filled from the usage file by item number — these products did not match one"
-          : "Volume comes from a usage file, which is not loaded",
+          ? "Volume needs an Annual units column on the benchmark file, or a usage-file row matching the item number — these products have neither"
+          : "Volume needs an Annual units column on the benchmark file, or a usage file (none loaded)",
       )
     }
     return reasons
@@ -873,17 +877,16 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
     const b = benchmarkById.get(benchmarkId)
     if (!b) return
     const productName = `${b.itemNumber} — ${b.productName}`.slice(0, 90)
-    // Auto-fill Current (price file) + Volume (usage) by matching the
-    // benchmark's SKU, and seed Floor/Target FROM THE BENCHMARK itself
-    // (floor = min/"floor" price, else P25; target = median, else national
-    // avg) — the vendor refines instead of typing from scratch. Ask stays
-    // manual (it's the vendor's opening position, not a market number).
+    // Every cell the benchmark ROW can answer — Current ("Current Pricing"),
+    // Volume ("TRL 12 Units"), Floor and Target — with the separately-uploaded
+    // price / usage files as SKU-matched fallbacks. The rule itself lives in
+    // construct-seed.ts so it stays pinned by tests and can't drift from the
+    // blank-cell copy below, which derives from the same precedence.
     const sku = normalizeSku(b.itemNumber)
-    const current = currentPriceBySku.get(sku)
-    const volume = usageVolumeBySku.get(sku)
-    const benchFloor = b.minPrice > 0 ? b.minPrice : b.percentile25
-    const benchTarget =
-      b.percentile50 > 0 ? b.percentile50 : b.nationalAvgPrice
+    const seeded = seedConstructFromBenchmark(b, {
+      price: currentPriceBySku.get(sku),
+      volume: usageVolumeBySku.get(sku),
+    })
     // Seed the category from the benchmark's own Category column when present,
     // else the FIRST category the vendor picked in the builder above (live) or
     // on the attached proposal; blank (and editable) only when nothing is
@@ -907,10 +910,7 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
         benchmarkId: b.id,
         productName,
         category: seededCat,
-        current: current != null ? String(current) : "",
-        floor: benchFloor > 0 ? String(benchFloor) : "",
-        target: benchTarget > 0 ? String(benchTarget) : "",
-        annualVolume: volume != null ? String(volume) : "",
+        ...seeded,
       })
       if (blankIdx >= 0) {
         return prev.map((c, i) =>
@@ -1157,20 +1157,19 @@ export function DealScorerSection({ facilities, proposals, vendorId, onDealAnaly
               <div>
                 <Label>Constructs</Label>
                 <p className="text-xs text-muted-foreground">
-                  Pick products from your benchmark list — usage fills Volume and
-                  the price file fills Current; you enter Floor / Target / Ask.
-                  The score blends every construct.
+                  Pick products from your benchmark list — the benchmark file
+                  fills Current, Floor, Target and Volume where it carries those
+                  columns, with the price and usage files as fallbacks. You
+                  enter Ask. The score blends every construct.
                 </p>
-                {/* Charles 2026-07-28: "these should fill in from the loaded
-                    benchmark file". They can't, and the table gave no hint why —
-                    the same silent-gap complaint he raised about the Benchmarks
-                    tab, resurfacing at the point of USE. His benchmark file is
-                    two columns (Construct | National Avg Price), so Target seeds
-                    from nationalAvgPrice while Floor needs a Min or P25 column
-                    the file never had; Current and Volume come from the price
-                    and usage files, which are separate uploads. Name whichever
-                    of those is actually missing, rather than leaving blank cells
-                    to be read as a bug. */}
+                {/* Charles 2026-07-28 → 2026-07-29: "these should fill in from
+                    the loaded benchmark file". The first pass answered it with
+                    an explanation, on the belief his file was two columns
+                    (Construct | National Avg Price). The real workbook is nine,
+                    and Current Pricing / TRL 12 Units were parsed and dropped
+                    for want of a field to land in — so Current and Volume now
+                    import and seed here. What's left genuinely can't be filled:
+                    name it rather than leaving blank cells to read as a bug. */}
                 {constructBlankReasons.length > 0 && (
                   <p className="mt-1 text-xs text-amber-600">
                     Some columns stayed blank: {constructBlankReasons.join("; ")}.
