@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import type { Column } from "@tanstack/react-table"
+import type { RowData } from "@tanstack/react-table"
+import type { TableColumn } from "@/components/shared/tables/table-features"
 import { Check, Filter, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -26,35 +27,29 @@ import { cn } from "@/lib/utils"
  * filtering, 2026-06-19). Driven by each column's
  * `meta.filterVariant` — `text` (case-insensitive contains), `select`
  * (faceted multi-select from the column's actual values), or `range`
- * (numeric min/max). Built on TanStack Table v8's column filter +
+ * (numeric min/max). Built on TanStack Table v9's column filter +
  * faceted row-model APIs (`getFacetedUniqueValues` /
- * `getFacetedMinMaxValues`), verified against v8.21.3 docs.
+ * `getFacetedMinMaxValues`), migrated per the v9 React migration guide.
  *
  * The DataTable auto-assigns the matching built-in `filterFn`
  * (`includesString` / `arrIncludesSome` / `inNumberRange`) from the
  * variant, so a column only needs `meta: { filterVariant: "select" }`.
+ *
+ * Meta typing comes from the v9 `columnMeta` slot on the shared feature set
+ * (`AppColumnMeta` in table-features.ts) — the v8-era global `declare
+ * module` ColumnMeta augmentation is gone.
  */
-
-// Augment TanStack's ColumnMeta so column defs can declare a filter
-// variant + optional label in a type-safe way.
-declare module "@tanstack/react-table" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  interface ColumnMeta<TData extends import("@tanstack/react-table").RowData, TValue> {
-    filterVariant?: "text" | "select" | "range" | "none"
-    filterLabel?: string
-  }
-}
 
 export type FilterVariant = "text" | "select" | "range" | "none"
 
-export function columnFilterVariant<TData>(column: Column<TData, unknown>): FilterVariant {
+export function columnFilterVariant<TData extends RowData>(column: TableColumn<TData>): FilterVariant {
   const declared = column.columnDef.meta?.filterVariant
   if (declared) return declared
   // Display/action columns (no accessor) can't be filtered.
   return column.getCanFilter() ? "text" : "none"
 }
 
-export function ColumnFilter<TData>({ column }: { column: Column<TData, unknown> }) {
+export function ColumnFilter<TData extends RowData>({ column }: { column: TableColumn<TData> }) {
   const variant = columnFilterVariant(column)
   if (variant === "none" || !column.getCanFilter()) return null
   if (variant === "range") return <RangeFilter column={column} />
@@ -62,7 +57,7 @@ export function ColumnFilter<TData>({ column }: { column: Column<TData, unknown>
   return <TextFilter column={column} />
 }
 
-function TextFilter<TData>({ column }: { column: Column<TData, unknown> }) {
+function TextFilter<TData extends RowData>({ column }: { column: TableColumn<TData> }) {
   const value = (column.getFilterValue() as string) ?? ""
   return (
     <div className="relative">
@@ -87,7 +82,7 @@ function TextFilter<TData>({ column }: { column: Column<TData, unknown> }) {
   )
 }
 
-function RangeFilter<TData>({ column }: { column: Column<TData, unknown> }) {
+function RangeFilter<TData extends RowData>({ column }: { column: TableColumn<TData> }) {
   const [min, max] = (column.getFilterValue() as [number | "", number | ""]) ?? ["", ""]
   const setRange = (next: [number | "", number | ""]) => {
     column.setFilterValue(next[0] === "" && next[1] === "" ? undefined : next)
@@ -121,7 +116,7 @@ function RangeFilter<TData>({ column }: { column: Column<TData, unknown> }) {
   )
 }
 
-function SelectFilter<TData>({ column }: { column: Column<TData, unknown> }) {
+function SelectFilter<TData extends RowData>({ column }: { column: TableColumn<TData> }) {
   const [open, setOpen] = useState(false)
   const selected = (column.getFilterValue() as string[]) ?? []
   // Faceted unique values: Map<value, count>. Empty/nullish values dropped.
@@ -178,7 +173,7 @@ function SelectFilter<TData>({ column }: { column: Column<TData, unknown> }) {
   )
 }
 
-function columnLabel<TData>(column: Column<TData, unknown>): string {
+function columnLabel<TData extends RowData>(column: TableColumn<TData>): string {
   const meta = column.columnDef.meta
   if (meta?.filterLabel) return meta.filterLabel
   const header = column.columnDef.header

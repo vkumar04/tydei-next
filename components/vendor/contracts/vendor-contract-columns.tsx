@@ -1,6 +1,6 @@
 "use client"
 
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import type { Contract, Facility, ProductCategory } from "@/lib/generated/prisma/client"
 import { Eye, FileText, Building2, Trash2 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"

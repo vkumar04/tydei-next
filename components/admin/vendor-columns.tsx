@@ -1,6 +1,6 @@
 "use client"
 
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import { Badge } from "@/components/ui/badge"
 import { Building2, CheckCircle, XCircle } from "lucide-react"
 import { TableActionMenu } from "@/components/shared/tables/table-action-menu"

@@ -8,7 +8,7 @@
  * Compliance % use `range` projecting a NUMBER via `accessorFn`.
  */
 
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import { Badge } from "@/components/ui/badge"
 
 export interface RebateContributionRow {

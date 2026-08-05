@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Building2, CheckCircle, AlertCircle } from "lucide-react"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { formatCurrency, formatDate } from "@/lib/formatting"
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import type { StripeInvoiceRow } from "@/lib/actions/admin/billing"
 
 const statusVariant: Record<string, "default" | "secondary" | "destructive" | "outline"> = {

@@ -1,5 +1,5 @@
 import { useMemo } from "react"
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {

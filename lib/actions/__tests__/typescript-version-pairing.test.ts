@@ -56,14 +56,15 @@ import { join } from "node:path"
  *     one-line import swap each, and they fail at RUNTIME not typecheck,
  *     which makes this the easiest step to miss:
  *       - scripts/lint-ai-action-error-paths.ts  (backs `bun run lint:ai`)
- *       - scripts/build-v0-feature-ledger.ts     (backs `bun run qa:v0-ledger`)
+ *       (build-v0-feature-ledger.ts was the second such script until its
+ *       removal on 2026-08-05 — the v0 ledger is gone)
  *     Then: bun add -d @typescript/typescript6
  *  4. Editor: TS 7 has no tsserver and no language-service plugins, so
  *     tsconfig's `plugins: [{ name: "next" }]` stops working in-editor.
  *     Either keep VS Code on TS 6, or use the TypeScriptTeam.native-preview
  *     extension and lose the Next plugin's route/link hints. Build unaffected.
- *  5. Verify: `bunx tsc --noEmit` → 0; full vitest → green; `bun run lint:ai`
- *     and `bun run qa:v0-ledger` still run; then `rm -rf .next && bun run
+ *  5. Verify: `bunx tsc --noEmit` → 0; full vitest → green; `bun run
+ *     lint:ai` still runs; then `rm -rf .next && bun run
  *     build` MUST complete — a silent non-zero exit means the flag didn't take.
  */
 

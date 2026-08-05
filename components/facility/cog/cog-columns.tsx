@@ -1,6 +1,6 @@
 "use client"
 
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import type { COGRecord, COGMatchStatus } from "@/lib/generated/prisma/client"
 import { Badge } from "@/components/ui/badge"
 import {

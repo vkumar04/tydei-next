@@ -9,7 +9,7 @@
  * badge/cell markup stays in `cell`. Payor mix is text-only (no filter).
  */
 
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { formatCurrency, formatPercent } from "@/lib/formatting"

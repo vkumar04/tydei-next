@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
