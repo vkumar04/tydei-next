@@ -1,6 +1,6 @@
 "use client"
 
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import type { UnifiedPricingRow } from "@/lib/actions/pricing-files"
 import { Loader2, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"

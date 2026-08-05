@@ -82,6 +82,12 @@ const config: NextConfig = {
   // PR. Worth a design doc when prioritised.
   // cacheComponents: true,
   experimental: {
+    // TypeScript 7 (Go-native) removed the JS compiler API Next's default
+    // typecheck path requires; this flag shells out to the local `tsc` CLI
+    // instead. REQUIRED while typescript >= 7 — without it `next build`
+    // dies with a silent SIGSEGV. Paired with the typescript/next pins by
+    // typescript-version-pairing.test.ts (upgrade steps in its header).
+    useTypeScriptCli: true,
     // Bug 2026-05-18 (Vick "XLS not working for loading COGS"):
     // proxy.ts intercepts every /dashboard/* request for auth-gating.
     // Next.js buffers the request body so middleware can access it,

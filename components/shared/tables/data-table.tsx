@@ -2,22 +2,20 @@
 
 import { useMemo, useState } from "react"
 import {
-  type ColumnDef,
+  type RowData,
   type SortingState,
   type ColumnFiltersState,
   type RowSelectionState,
   type OnChangeFn,
   type FilterFnOption,
   flexRender,
-  getCoreRowModel,
-  getFacetedRowModel,
-  getFacetedMinMaxValues,
-  getFacetedUniqueValues,
-  getFilteredRowModel,
-  getPaginationRowModel,
-  getSortedRowModel,
-  useReactTable,
+  useTable,
 } from "@tanstack/react-table"
+import {
+  dataTableFeatures,
+  type DataTableFeatures,
+  type ColumnDef,
+} from "@/components/shared/tables/table-features"
 import { motion } from "motion/react"
 import { Search, ArrowDown, ArrowUp, ChevronsUpDown, FilterX } from "lucide-react"
 import { ColumnFilter, columnFilterVariant } from "@/components/shared/tables/column-filter"
@@ -36,8 +34,8 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { ReactNode } from "react"
 
-interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[]
+interface DataTableProps<TData extends RowData> {
+  columns: ColumnDef<TData>[]
   data: TData[]
   searchKey?: string
   searchPlaceholder?: string
@@ -61,7 +59,7 @@ interface DataTableProps<TData, TValue> {
   getRowId?: (row: TData) => string
 }
 
-export function DataTable<TData, TValue>({
+export function DataTable<TData extends RowData>({
   columns,
   data,
   searchKey,
@@ -75,7 +73,7 @@ export function DataTable<TData, TValue>({
   onRowSelectionChange,
   getRowId,
   enableColumnFilters = false,
-}: DataTableProps<TData, TValue>) {
+}: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
@@ -88,7 +86,7 @@ export function DataTable<TData, TValue>({
       const variant = col.meta?.filterVariant
       if (variant === "none") return { ...col, enableColumnFilter: false }
       if (col.filterFn) return col
-      const filterFn: FilterFnOption<TData> =
+      const filterFn: FilterFnOption<DataTableFeatures, TData> =
         variant === "select"
           ? "arrIncludesSome"
           : variant === "range"
@@ -98,16 +96,18 @@ export function DataTable<TData, TValue>({
     })
   }, [columns, enableColumnFilters])
 
-  const table = useReactTable({
+  // v9 registers row models on the shared `features` object, so pagination
+  // is always registered. A `pagination={false}` table instead pins a single
+  // page sized to the data (controlled pagination state), which reproduces
+  // the v8 "no pagination row model" behavior — every row renders.
+  const table = useTable({
+    features: dataTableFeatures,
     data,
     columns: resolvedColumns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    getFacetedRowModel: enableColumnFilters ? getFacetedRowModel() : undefined,
-    getFacetedUniqueValues: enableColumnFilters ? getFacetedUniqueValues() : undefined,
-    getFacetedMinMaxValues: enableColumnFilters ? getFacetedMinMaxValues() : undefined,
-    getPaginationRowModel: pagination ? getPaginationRowModel() : undefined,
+    // v8 handlers pass through unchanged; the range-select behavior v9
+    // turned on by default is disabled to keep selection semantics
+    // byte-identical to the v8 tables.
+    enableRowRangeSelection: false,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange,
@@ -116,8 +116,16 @@ export function DataTable<TData, TValue>({
       sorting,
       columnFilters,
       ...(rowSelection !== undefined ? { rowSelection } : {}),
+      ...(pagination
+        ? {}
+        : {
+            pagination: {
+              pageIndex: 0,
+              pageSize: Math.max(1, data.length),
+            },
+          }),
     },
-    initialState: { pagination: { pageSize } },
+    initialState: { pagination: { pageIndex: 0, pageSize } },
   })
 
   return (
@@ -264,7 +272,7 @@ export function DataTable<TData, TValue>({
       {pagination && table.getPageCount() > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Page {table.getState().pagination.pageIndex + 1} of{" "}
+            Page {table.state.pagination.pageIndex + 1} of{" "}
             {table.getPageCount()}
           </p>
           <div className="flex items-center gap-2">

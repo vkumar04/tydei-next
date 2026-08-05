@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
 import { QueryClient } from "@tanstack/react-query"
-import type { CellContext, ColumnDef } from "@tanstack/react-table"
+import type { RowData } from "@tanstack/react-table"
+import type {
+  TableCellContext,
+  ColumnDef,
+} from "@/components/shared/tables/table-features"
 
 import {
   describeAdminTablePage,
@@ -249,19 +253,19 @@ describe("describeAdminTableControlScope", () => {
  * filter list that disagrees with the rows beside it — so for every select
  * column, accessor output and cell text have to be the same string.
  */
-function cellText<T>(column: ColumnDef<T>, row: T, value: unknown): string {
+function cellText<T extends RowData>(column: ColumnDef<T>, row: T, value: unknown): string {
   const { cell } = column
   if (typeof cell !== "function") throw new Error("column has no cell renderer")
   const context = {
     getValue: () => value,
     row: { original: row },
-  } as unknown as CellContext<T, unknown>
+  } as unknown as TableCellContext<T, unknown>
   return renderToStaticMarkup(<>{cell(context)}</>)
     .replace(/<[^>]*>/g, "")
     .trim()
 }
 
-function accessorValue<T>(column: ColumnDef<T>, row: T): unknown {
+function accessorValue<T extends RowData>(column: ColumnDef<T>, row: T): unknown {
   const accessor = "accessorFn" in column ? column.accessorFn : undefined
   if (typeof accessor !== "function") {
     throw new Error("column has no accessorFn")

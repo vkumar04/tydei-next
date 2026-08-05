@@ -1,6 +1,6 @@
 "use client"
 
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 
 export interface ContractPeriodRow {

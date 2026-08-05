@@ -23,7 +23,10 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative, resolve } from "node:path"
-import ts from "typescript"
+// TS 7 deleted the JS compiler API; @typescript/typescript6 is
+// Microsoft's compat package exporting the full classic API. This
+// script only uses the syntax/AST layer, which it ships unchanged.
+import ts from "@typescript/typescript6"
 
 const REPO_ROOT = resolve(__dirname, "..")
 const ACTIONS_DIR = join(REPO_ROOT, "lib", "actions")

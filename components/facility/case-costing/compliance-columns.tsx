@@ -10,7 +10,7 @@
  * pre-sorted by compliance ascending so the worst cases surface first.
  */
 
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import { Badge } from "@/components/ui/badge"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
 import type { CaseComplianceWithNumber } from "@/lib/actions/case-costing/compliance"

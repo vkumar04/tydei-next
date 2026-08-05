@@ -1,5 +1,6 @@
 "use client"
 
+import type { RowSelectionState } from "@tanstack/react-table"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import Link from "next/link"
@@ -136,7 +137,7 @@ export function ContractsListClient({
     name: string
   } | null>(null)
   const [compareOpen, setCompareOpen] = useState(false)
-  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({})
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [isExporting, setIsExporting] = useState(false)
 
   // Push the search box at the server on a debounce (same shape as

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import type { Contract, Vendor, ProductCategory, Facility } from "@/lib/generated/prisma/client"
 import {
   ArrowUpDown,

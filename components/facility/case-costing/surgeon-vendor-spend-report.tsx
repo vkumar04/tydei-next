@@ -9,7 +9,7 @@
  */
 
 import { useMemo } from "react"
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { DataTable } from "@/components/shared/tables/data-table"

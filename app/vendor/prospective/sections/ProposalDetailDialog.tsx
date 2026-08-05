@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import {
   Dialog,
   DialogContent,

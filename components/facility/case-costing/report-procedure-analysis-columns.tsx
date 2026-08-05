@@ -8,7 +8,7 @@
  * `range` projecting a NUMBER via `accessorFn`.
  */
 
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 
 export interface ProcedureAnalysisRow {
   code: string

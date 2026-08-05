@@ -24,7 +24,10 @@
 
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync } from "fs"
 import { join, relative } from "path"
-import ts from "typescript"
+// TS 7 deleted the JS compiler API; @typescript/typescript6 is
+// Microsoft's compat package exporting the full classic API. This
+// script only uses the syntax/AST layer, which it ships unchanged.
+import ts from "@typescript/typescript6"
 
 // ─── Config ─────────────────────────────────────────────────────
 

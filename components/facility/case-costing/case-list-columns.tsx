@@ -10,7 +10,7 @@
  * filter buttons are removed in favor of these column filters.
  */
 
-import type { ColumnDef } from "@tanstack/react-table"
+import type { ColumnDef } from "@/components/shared/tables/table-features"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { formatCurrency, formatDate, formatPercent } from "@/lib/formatting"
