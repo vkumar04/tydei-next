@@ -245,7 +245,7 @@ ${text.trim()}`,
     let s3Key: string | undefined
     const timestamp = Date.now()
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-    const candidateKey = `contracts/${userId}/${timestamp}-${safeName}`
+    const candidateKey = `contracts/${userId}/${timestamp}-${crypto.randomUUID().slice(0, 8)}-${safeName}`
     try {
       await uploadFile(candidateKey, fileData, file.type || "application/octet-stream")
       s3Key = candidateKey

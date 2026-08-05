@@ -16,6 +16,7 @@ import {
   type UpdatePendingContractInput,
 } from "@/lib/validators/pending-contracts"
 import { serialize } from "@/lib/serialize"
+import { keyBelongsToTenant } from "@/lib/uploads/key-policy"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { resolveCategoryIdsToNames } from "@/lib/contracts/resolve-category-names"
 import { normalizeScopedItemNumbers } from "@/lib/contracts/normalize-scoped-item-numbers"
@@ -964,6 +965,30 @@ export async function getVendorPendingContract(id: string) {
 
 // ─── Vendor: Create ─────────────────────────────────────────────
 
+/**
+ * Every attached document key must have been minted by THIS caller
+ * (tenant-provenance prefix, see lib/uploads/key-policy.ts). Without this,
+ * a submitter could write any guessable storage key into their own
+ * documents JSON and `assertKeyVisibleToUser` would later presign it for
+ * them — cross-tenant file read via self-authorization (review 2026-08-05).
+ * `carryOver` allows keys already stored on the row being updated, so
+ * pre-provenance submissions stay editable.
+ */
+function assertDocumentKeysOwned(
+  docs: readonly { url: string }[] | undefined,
+  allowedTenantIds: readonly (string | null | undefined)[],
+  carryOver?: ReadonlySet<string>,
+): void {
+  for (const doc of docs ?? []) {
+    if (carryOver?.has(doc.url)) continue
+    if (!keyBelongsToTenant(doc.url, allowedTenantIds)) {
+      throw new Error(
+        `Attached document key "${doc.url.slice(0, 80)}" was not uploaded by this account — re-upload the file and attach it again.`,
+      )
+    }
+  }
+}
+
 export async function createPendingContract(input: CreatePendingContractInput) {
   // Charles audit round-6 BLOCKER (same class as round-5 fix in
   // createChangeProposal): authoritative vendor identity must come
@@ -1010,6 +1035,9 @@ export async function createPendingContract(input: CreatePendingContractInput) {
 
   // Resolve facility name from the Facility row so a vendor can't
   // forge a facilityName independent of facilityId.
+  // New submissions may only attach keys this caller minted.
+  assertDocumentKeysOwned(data.documents, [vendor.id, user.id])
+
   let resolvedFacilityName: string | null | undefined = data.facilityName
   if (data.facilityId) {
     const facility = await prisma.facility.findUnique({
@@ -1167,9 +1195,27 @@ export async function createPendingContract(input: CreatePendingContractInput) {
 // ─── Vendor: Update ─────────────────────────────────────────────
 
 export async function updatePendingContract(id: string, input: UpdatePendingContractInput) {
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
   await requireCanMutate()
   const data = updatePendingContractSchema.parse(input)
+
+  // Newly attached keys must be caller-minted; keys already stored on this
+  // row (pre-provenance uploads) carry over so old drafts stay editable.
+  if (data.documents !== undefined) {
+    const existing = await prisma.pendingContract.findFirst({
+      where: { id, vendorId: vendor.id },
+      select: { documents: true },
+    })
+    const carryOver = new Set<string>()
+    if (Array.isArray(existing?.documents)) {
+      for (const d of existing.documents) {
+        if (d && typeof d === "object" && typeof (d as { url?: unknown }).url === "string") {
+          carryOver.add((d as { url: string }).url)
+        }
+      }
+    }
+    assertDocumentKeysOwned(data.documents, [vendor.id, user.id], carryOver)
+  }
 
   const contract = await prisma.pendingContract.update({
     where: { id, vendorId: vendor.id },

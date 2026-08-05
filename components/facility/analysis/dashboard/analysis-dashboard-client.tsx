@@ -126,10 +126,15 @@ export function seedRevenue(
   const cases = sample
     ? DEFAULT_FACILITY_ASSUMPTIONS.annualCaseVolume
     : data.annualCaseVolume
+  // Per-case average comes from the loader's RAW window ratio —
+  // `measuredReimbursement` is annualized on scoped windows, so dividing it
+  // by the raw covered-case count would inflate the rate. `??` guards older
+  // fixtures that predate the field.
   const coveredAvg =
-    data.reimbursementCoverage.withRate > 0
+    data.avgCoveredCaseReimbursement ??
+    (data.reimbursementCoverage.withRate > 0
       ? data.measuredReimbursement / data.reimbursementCoverage.withRate
-      : 0
+      : 0)
   const fallbackPerCase = cases > 0 ? data.netRevenue / cases : 0
   return {
     mode: data.revenueIsImplied ? "manual" : "actuals",

@@ -104,3 +104,15 @@ export function bucketByCanonical<T extends { name: string }>(
   }
   return out
 }
+
+/**
+ * Bucket name for COG rows with no category (Analysis dashboard). A
+ * first-class category row — without it the headline spend included
+ * uncategorized rows while the Category table's shares didn't, so the
+ * table never reconciled to the card (review 2026-08-05). Chosen so
+ * `canonicalizeCategoryName` cannot produce it from real data
+ * (parentheses are stripped by canonicalization). Lives here, not in the
+ * "use server" loader, because every export there must be an async
+ * function (use-server-async-export-scanner).
+ */
+export const UNCATEGORIZED_CATEGORY = "(uncategorized)"

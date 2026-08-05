@@ -177,7 +177,7 @@ export async function POST(req: Request) {
 
   let s3Key: string | undefined
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-  const candidateKey = `contracts/${userId}/${Date.now()}-${safeName}`
+  const candidateKey = `contracts/${userId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${safeName}`
   try {
     await uploadFile(candidateKey, fileData, file.type || "application/pdf")
     s3Key = candidateKey
