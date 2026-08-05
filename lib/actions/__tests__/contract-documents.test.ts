@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-const { findUniqueOrThrowMock, createMock } = vi.hoisted(() => ({
+const { findUniqueOrThrowMock, createMock, docFindFirstMock } = vi.hoisted(() => ({
   findUniqueOrThrowMock: vi.fn(),
   createMock: vi.fn(),
+  docFindFirstMock: vi.fn(),
 }))
 
 vi.mock("@/lib/db", () => ({
   prisma: {
     contract: { findUniqueOrThrow: findUniqueOrThrowMock },
-    contractDocument: { create: createMock },
+    contractDocument: { create: createMock, findFirst: docFindFirstMock },
   },
 }))
 vi.mock("@/lib/actions/auth", () => ({
@@ -25,11 +26,12 @@ import { createContractDocument } from "@/lib/actions/contracts/documents"
 beforeEach(() => {
   vi.clearAllMocks()
   findUniqueOrThrowMock.mockResolvedValue({ id: "c-1" })
+  docFindFirstMock.mockResolvedValue(null)
   createMock.mockResolvedValue({
     id: "doc-1",
     contractId: "c-1",
     name: "Amendment A.pdf",
-    url: "contracts/1785145274790-amendment-a.pdf",
+    url: "contracts/fac-1/1785145274790-ab12cd34-amendment-a.pdf",
     type: "amendment",
     uploadDate: new Date("2026-04-19"),
   })
@@ -40,7 +42,7 @@ describe("createContractDocument", () => {
     const result = await createContractDocument({
       contractId: "c-1",
       name: "Amendment A.pdf",
-      url: "contracts/1785145274790-amendment-a.pdf",
+      url: "contracts/fac-1/1785145274790-ab12cd34-amendment-a.pdf",
       type: "amendment",
     })
     expect(findUniqueOrThrowMock).toHaveBeenCalledWith(
@@ -53,7 +55,7 @@ describe("createContractDocument", () => {
         data: expect.objectContaining({
           contractId: "c-1",
           name: "Amendment A.pdf",
-          url: "contracts/1785145274790-amendment-a.pdf",
+          url: "contracts/fac-1/1785145274790-ab12cd34-amendment-a.pdf",
           type: "amendment",
         }),
       }),
@@ -75,13 +77,37 @@ describe("createContractDocument", () => {
     expect(createMock).not.toHaveBeenCalled()
   })
 
+  it("rejects a key another tenant minted — no self-authorization via ContractDocument", async () => {
+    await expect(
+      createContractDocument({
+        contractId: "c-1",
+        name: "stolen.pdf",
+        url: "contracts/other-tenant/1785145274790-ab12cd34-stolen.pdf",
+        type: "main",
+      }),
+    ).rejects.toThrow(/not uploaded by this account/)
+    expect(createMock).not.toHaveBeenCalled()
+  })
+
+  it("allows a key already stored on the same contract (carry-over)", async () => {
+    docFindFirstMock.mockResolvedValue({ id: "doc-existing" })
+    await expect(
+      createContractDocument({
+        contractId: "c-1",
+        name: "legacy.pdf",
+        url: "contracts/1775265753375-legacy.pdf",
+        type: "main",
+      }),
+    ).resolves.toBeTruthy()
+  })
+
   it("rejects when contract belongs to a different facility", async () => {
     findUniqueOrThrowMock.mockRejectedValue(new Error("No Contract found"))
     await expect(
       createContractDocument({
         contractId: "c-other",
         name: "x.pdf",
-        url: "contracts/1785145274790-x.pdf",
+        url: "contracts/fac-1/1785145274790-ab12cd34-x.pdf",
         type: "amendment",
       }),
     ).rejects.toThrow()

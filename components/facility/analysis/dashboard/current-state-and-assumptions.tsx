@@ -151,8 +151,12 @@ function RevenueField({ revenue }: { revenue: RevenueControl }) {
           <div className="text-lg font-bold tabular-nums">
             {usdCompact(revenue.measuredReimbursement)}
           </div>
+          {/* Wording must hold for BOTH callers: the facility dashboard
+              (window-scoped, annualized) and the vendor-side Facility
+              Current State panel (lifetime figures) — say "annual", not
+              "annualized from the selected window". */}
           <p className="text-xs text-muted-foreground">
-            Case-costing reimbursement, annualized from the selected window ·{" "}
+            Annual case-costing reimbursement ·{" "}
             {revenue.coverage.withRate.toLocaleString("en-US")} of{" "}
             {revenue.coverage.totalCases.toLocaleString("en-US")} cases have a
             payor CPT rate.

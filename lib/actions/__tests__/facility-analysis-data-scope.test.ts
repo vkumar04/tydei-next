@@ -122,6 +122,39 @@ describe("getFacilityAnalysisData — scope", () => {
     expect(shareSum).toBeCloseTo(1, 6)
   })
 
+  it("categories that canonicalize to nothing join the bucket, never a blank '' row", async () => {
+    cogFindManyMock.mockResolvedValue([
+      cogRow({ category: "Spine", extendedPrice: 600 }),
+      cogRow({ category: "-", extendedPrice: 50 }),
+      cogRow({ category: "The", extendedPrice: 25 }),
+      cogRow({ category: null, extendedPrice: 100 }),
+    ])
+    const d = await getFacilityAnalysisData()
+    expect(d.availableCategories).not.toContain("")
+    const bucket = d.categories.find(
+      (c) => c.category === UNCATEGORIZED_CATEGORY,
+    )
+    expect(bucket?.spendShare).toBeCloseTo(175 / 775, 6)
+  })
+
+  it("real cases never annualize down to zero on long windows", async () => {
+    caseFindManyMock.mockResolvedValue([
+      {
+        totalSpend: 500,
+        totalReimbursement: 300,
+        primaryCptCode: null,
+        dateOfSurgery: new Date("2025-06-01"),
+        procedures: [],
+      },
+    ])
+    // 36-month window: 1 case × 12/36 = 0.33 → would round to 0.
+    const d = await getFacilityAnalysisData({
+      start: "2023-08-05T00:00:00.000Z",
+      end: "2026-08-05T00:00:00.000Z",
+    })
+    expect(d.annualCaseVolume).toBe(1)
+  })
+
   it("the '(uncategorized)' bucket is selectable like any category", async () => {
     const d = await getFacilityAnalysisData({
       categories: [UNCATEGORIZED_CATEGORY],

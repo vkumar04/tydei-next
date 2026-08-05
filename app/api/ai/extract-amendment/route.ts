@@ -122,7 +122,7 @@ export async function POST(request: Request) {
     const userId = session.user.id
     const timestamp = Date.now()
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-    const s3Key = `amendments/${userId}/${timestamp}-${safeName}`
+    const s3Key = `amendments/${userId}/${timestamp}-${crypto.randomUUID().slice(0, 8)}-${safeName}`
     await uploadFile(s3Key, fileData, file.type || "application/octet-stream")
 
     const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { keyBelongsToTenant } from "@/lib/uploads/key-policy"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import type { Prisma, DocumentType } from "@/lib/generated/prisma/client"
@@ -45,7 +46,6 @@ export async function createContractDocument(
   if (/^[a-z][a-z0-9+.-]*:/i.test(input.url)) {
     throw new Error("Document url must be a storage key, not a URL")
   }
-
   // Ownership gate — throws if the contract isn't on this facility (primary
   // or via join table). `facilityId` is kept as a top-level predicate so
   // Prisma can narrow on the primary owner in addition to the OR fallback.
@@ -57,6 +57,24 @@ export async function createContractDocument(
     where: ownershipWhere,
     select: { id: true },
   })
+
+  // The key must be caller-minted (tenant-provenance prefix) — otherwise a
+  // ContractDocument row is a self-authorization vector: attach any key you
+  // once saw and assertKeyVisibleToUser presigns it forever (review
+  // 2026-08-05). Keys already on THIS (ownership-verified) contract carry
+  // over for re-attach flows and pre-provenance rows.
+  const alreadyOnContract = await prisma.contractDocument.findFirst({
+    where: { contractId: input.contractId, url: input.url },
+    select: { id: true },
+  })
+  if (
+    !alreadyOnContract &&
+    !keyBelongsToTenant(input.url, [facility.id, user.id])
+  ) {
+    throw new Error(
+      "Attached document key was not uploaded by this account — re-upload the file and try again.",
+    )
+  }
 
   const docType = coerceDocType(input.type)
 

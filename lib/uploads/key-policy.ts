@@ -19,16 +19,21 @@
 
 export const STORAGE_FOLDERS = ["contracts", "pricing", "cog", "invoices"] as const
 
-const KEY_TENANT_RE = /^(contracts|pricing|cog|invoices)\/([^/]+)\/./
+// Folder-AGNOSTIC on purpose: the AI extract routes mint under their own
+// folders (`amendments/`, `payor-contracts/`) with the same
+// `<folder>/<tenant>/…` shape, and the security property comes from the
+// TENANT segment matching the caller — not from a folder whitelist. A
+// crafted foreign-folder key still only passes when its tenant segment is
+// the caller's own, in which case the object is theirs (or absent).
+const KEY_TENANT_RE = /^[a-z][a-z0-9_-]*\/([^/]+)\/./
 
 /** The tenant segment of a provenance-format key, or null for legacy keys. */
 export function keyTenantSegment(key: string): string | null {
   const match = KEY_TENANT_RE.exec(key)
   if (!match) return null
-  // Legacy keys had `<folder>/<timestamp>-<name>` — a purely numeric-prefix
-  // second segment that contains "-" is not a cuid/userId. A real tenant
-  // segment is a bare id (no dots, produced by our own minting).
-  return match[2]
+  // Legacy keys (`<folder>/<timestamp>-<name>`) have no second path level,
+  // so they never match — they belong to no tenant.
+  return match[1]
 }
 
 /**

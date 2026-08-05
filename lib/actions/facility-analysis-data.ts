@@ -216,10 +216,13 @@ export async function getFacilityAnalysisData(
   for (const r of cogRows) {
     const spend = Number(r.extendedPrice ?? 0)
     // Rows without a category land in the first-class `(uncategorized)`
-    // bucket, so shares always sum to the headline spend.
-    const bucket = r.category
-      ? canonicalizeCategoryName(r.category)
-      : UNCATEGORIZED_CATEGORY
+    // bucket, so shares always sum to the headline spend. The `||` also
+    // routes categories that CANONICALIZE to nothing ("-", "&", "The") into
+    // the bucket — a bare "" bucket would render a blank picker row whose
+    // selection the server then silently drops (review 2026-08-05).
+    const bucket =
+      (r.category ? canonicalizeCategoryName(r.category) : "") ||
+      UNCATEGORIZED_CATEGORY
 
     availableAgg.set(bucket, (availableAgg.get(bucket) ?? 0) + spend)
     unfilteredWindowSpend += spend
@@ -358,7 +361,12 @@ export async function getFacilityAnalysisData(
     reimbursementCoverage: { withRate: casesWithRate, totalCases: cases.length },
     avgCoveredCaseReimbursement:
       casesWithRate > 0 ? sumReimbursement / casesWithRate : 0,
-    annualCaseVolume: Math.round(cases.length * annualizeFactor),
+    // Never round REAL cases down to zero: on a >24-month window one case
+    // would round to 0 and collapse manual-mode revenue (rate × 0).
+    annualCaseVolume:
+      cases.length > 0
+        ? Math.max(1, Math.round(cases.length * annualizeFactor))
+        : 0,
     avgMarginPct,
     categories,
     vendors,

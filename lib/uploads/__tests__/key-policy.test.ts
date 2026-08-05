@@ -23,9 +23,17 @@ describe("keyTenantSegment / keyBelongsToTenant", () => {
   it("returns null for legacy keys (no tenant segment) and junk", () => {
     // Legacy: <folder>/<timestamp>-<name> — one path level only.
     expect(keyTenantSegment("contracts/1775265753375-CogsART.pdf")).toBeNull()
-    expect(keyTenantSegment("not-a-folder/fac-1/x.pdf")).toBeNull()
     expect(keyTenantSegment("contracts/")).toBeNull()
     expect(keyTenantSegment("")).toBeNull()
+  })
+
+  it("is folder-agnostic — the AI extract routes mint their own folders", () => {
+    expect(keyTenantSegment("amendments/user-7/1785-ab12cd34-amend.pdf")).toBe(
+      "user-7",
+    )
+    expect(
+      keyTenantSegment("payor-contracts/user-7/1785-ab12cd34-payor.pdf"),
+    ).toBe("user-7")
   })
 
   it("matches only the caller's own tenant ids", () => {
