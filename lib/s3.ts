@@ -15,8 +15,8 @@ export async function generatePresignedUploadUrl(key: string, contentType: strin
 }
 
 /** Returns just the URL string (legacy interface). */
-export async function generatePresignedDownloadUrl(key: string) {
-  return getSignedUrl(key)
+export async function generatePresignedDownloadUrl(key: string, downloadName?: string) {
+  return getSignedUrl(key, undefined, downloadName)
 }
 
 export { deleteFile as deleteObject }

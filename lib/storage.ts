@@ -38,9 +38,29 @@ export async function uploadFile(
 
 /**
  * Generate a pre-signed download URL.
+ *
+ * With `downloadName`, the URL signs a `Content-Disposition: attachment`
+ * response header, so navigating to it saves the file under that name
+ * instead of rendering inline — and the browser stays on the current page,
+ * which sidesteps popup blockers entirely (no `window.open` needed).
+ * Without it, the object renders inline (the "View" behavior).
  */
-export async function getSignedUrl(key: string, expiresIn = 900) {
-  const command = new GetObjectCommand({ Bucket: BUCKET, Key: key })
+export async function getSignedUrl(
+  key: string,
+  expiresIn = 900,
+  downloadName?: string,
+) {
+  const command = new GetObjectCommand({
+    Bucket: BUCKET,
+    Key: key,
+    ...(downloadName
+      ? {
+          ResponseContentDisposition: `attachment; filename="${downloadName
+            .replace(/[^\x20-\x7e]/g, "_")
+            .replace(/["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
+        }
+      : {}),
+  })
   return awsGetSignedUrl(s3, command, { expiresIn })
 }
 

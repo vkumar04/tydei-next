@@ -29,7 +29,7 @@ beforeEach(() => {
     id: "doc-1",
     contractId: "c-1",
     name: "Amendment A.pdf",
-    url: "https://example.com/doc-1",
+    url: "contracts/1785145274790-amendment-a.pdf",
     type: "amendment",
     uploadDate: new Date("2026-04-19"),
   })
@@ -40,7 +40,7 @@ describe("createContractDocument", () => {
     const result = await createContractDocument({
       contractId: "c-1",
       name: "Amendment A.pdf",
-      url: "https://example.com/doc-1",
+      url: "contracts/1785145274790-amendment-a.pdf",
       type: "amendment",
     })
     expect(findUniqueOrThrowMock).toHaveBeenCalledWith(
@@ -53,12 +53,26 @@ describe("createContractDocument", () => {
         data: expect.objectContaining({
           contractId: "c-1",
           name: "Amendment A.pdf",
-          url: "https://example.com/doc-1",
+          url: "contracts/1785145274790-amendment-a.pdf",
           type: "amendment",
         }),
       }),
     )
     expect(result.id).toBe("doc-1")
+  })
+
+  it("rejects an absolute URL in url — storage keys only", async () => {
+    // The Documents tab turns `url` into a navigation target; a stored
+    // absolute URL would be a planted-phishing vector (see review 2026-08-05).
+    await expect(
+      createContractDocument({
+        contractId: "c-1",
+        name: "evil.pdf",
+        url: "https://evil.example/login",
+        type: "main",
+      }),
+    ).rejects.toThrow(/storage key/)
+    expect(createMock).not.toHaveBeenCalled()
   })
 
   it("rejects when contract belongs to a different facility", async () => {
@@ -67,7 +81,7 @@ describe("createContractDocument", () => {
       createContractDocument({
         contractId: "c-other",
         name: "x.pdf",
-        url: "https://example.com/x",
+        url: "contracts/1785145274790-x.pdf",
         type: "amendment",
       }),
     ).rejects.toThrow()

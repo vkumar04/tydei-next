@@ -1748,6 +1748,11 @@ export async function createContractDocument(input: {
   // there to copy).
   const { facility } = await requireFacility()
   await requireCanMutate()
+  // Storage keys only — a stored absolute URL would become a navigation
+  // target on the Documents tab (planted-phishing vector).
+  if (input.url && /^[a-z][a-z0-9+.-]*:/i.test(input.url)) {
+    throw new Error("Document url must be a storage key, not a URL")
+  }
   await prisma.contract.findUniqueOrThrow({
     where: contractOwnershipWhere(input.contractId, facility.id),
     select: { id: true },

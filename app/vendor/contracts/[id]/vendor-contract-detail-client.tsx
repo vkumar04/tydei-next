@@ -213,6 +213,7 @@ export function VendorContractDetailClient({
         <ContractDocumentsList
           documents={contract.documents}
           contractId={contract.id}
+          canManage={false}
         />
       ),
     },

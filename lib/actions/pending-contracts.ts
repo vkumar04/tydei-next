@@ -740,7 +740,12 @@ async function materializePending(
             (d): d is { name: string; url: string; type?: string } =>
               d != null &&
               typeof d === "object" &&
-              typeof (d as AttachedDoc).url === "string",
+              typeof (d as AttachedDoc).url === "string" &&
+              // Storage keys only. The JSON is counterparty-supplied, and a
+              // copied absolute URL would surface on the facility's Documents
+              // tab as a clickable "contract PDF" pointing wherever the
+              // submitter chose (stored-phishing vector).
+              !/^[a-z][a-z0-9+.-]*:/i.test((d as { url: string }).url),
           )
           .map((d) => {
             const allowed = ["main", "amendment", "addendum", "exhibit", "pricing"] as const

@@ -3,7 +3,10 @@
 import { requireAuth } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { prisma } from "@/lib/db"
+import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
+import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
 import { uploadRequestSchema, type UploadRequest } from "@/lib/validators/uploads"
+import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 import { generatePresignedUploadUrl, generatePresignedDownloadUrl, deleteObject } from "@/lib/s3"
 
 /**
@@ -23,14 +26,17 @@ async function assertKeyVisibleToUser(key: string): Promise<void> {
   const facilityId = member?.organization?.facility?.id
   const vendorId = member?.organization?.vendor?.id
 
-  // Direct attachment via ContractDocument scoped by contract owner.
+  // Direct attachment via ContractDocument scoped by contract owner. Uses the
+  // canonical ownership predicates: a bare `{ facilityId }` / `{ vendorId }`
+  // check drops multi-facility (contractFacilities join) and grouped-vendor
+  // (additionalVendorIds) contracts, denying downloads to rightful owners.
   const doc = await prisma.contractDocument.findFirst({
     where: {
       url: key,
       ...(facilityId
-        ? { contract: { facilityId } }
+        ? { contract: contractsOwnedByFacility(facilityId) }
         : vendorId
-          ? { contract: { vendorId } }
+          ? { contract: contractsOwnedByVendor(vendorId) }
           : { id: "__none__" }),
     },
     select: { id: true },
@@ -39,7 +45,10 @@ async function assertKeyVisibleToUser(key: string): Promise<void> {
 
   // Pending-contract documents JSON blob — fetch the row's documents
   // and exact-match the key against `url`/`key` fields. Avoids the
-  // substring-collision risk with predictable filenames.
+  // substring-collision risk with predictable filenames. The display
+  // `name` field deliberately does NOT authorize: it is free text a
+  // counterparty controls, so matching it would let a forged name claim
+  // another tenant's object key.
   const pendingRows = await prisma.pendingContract.findMany({
     where: facilityId
       ? { facilityId }
@@ -53,8 +62,8 @@ async function assertKeyVisibleToUser(key: string): Promise<void> {
     if (!Array.isArray(docs)) continue
     for (const d of docs) {
       if (d === null || typeof d !== "object") continue
-      const r = d as { url?: unknown; key?: unknown; name?: unknown }
-      if (r.url === key || r.key === key || r.name === key) return
+      const r = d as { url?: unknown; key?: unknown }
+      if (r.url === key || r.key === key) return
     }
   }
 
@@ -89,9 +98,23 @@ export async function getUploadUrl(input: UploadRequest) {
   return { uploadUrl, key, publicUrl }
 }
 
-export async function getDownloadUrl(key: string) {
+export async function getDownloadUrl(key: string, downloadName?: string) {
   await assertKeyVisibleToUser(key)
-  return generatePresignedDownloadUrl(key)
+  return generatePresignedDownloadUrl(key, downloadName)
+}
+
+/**
+ * Error-as-value variant of getDownloadUrl — Next 16 prod builds redact
+ * thrown Server Action errors, so the toast would otherwise show a useless
+ * digest message (see lib/actions/safe-result.ts).
+ */
+export async function getDownloadUrlSafe(
+  key: string,
+  downloadName?: string,
+): Promise<SafeResult<string>> {
+  return toSafeResult("getDownloadUrl", { key }, () =>
+    getDownloadUrl(key, downloadName),
+  )
 }
 
 export async function deleteFile(key: string) {

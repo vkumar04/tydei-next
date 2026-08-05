@@ -39,6 +39,13 @@ export async function createContractDocument(
   const { facility, user } = await requireFacility()
   await requireCanMutate()
 
+  // `url` must be a storage object key, never an absolute URL — the
+  // Documents tab turns it into a navigation target, so a stored URL would
+  // be an open door for planted phishing links dressed as contract PDFs.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(input.url)) {
+    throw new Error("Document url must be a storage key, not a URL")
+  }
+
   // Ownership gate — throws if the contract isn't on this facility (primary
   // or via join table). `facilityId` is kept as a top-level predicate so
   // Prisma can narrow on the primary owner in addition to the OR fallback.
