@@ -13,6 +13,7 @@ import {
 } from "@tanstack/react-table"
 import {
   dataTableFeatures,
+  filterFnForVariant,
   type DataTableFeatures,
   type ColumnDef,
 } from "@/components/shared/tables/table-features"
@@ -87,11 +88,7 @@ export function DataTable<TData extends RowData>({
       if (variant === "none") return { ...col, enableColumnFilter: false }
       if (col.filterFn) return col
       const filterFn: FilterFnOption<DataTableFeatures, TData> =
-        variant === "select"
-          ? "arrIncludesSome"
-          : variant === "range"
-            ? "inNumberRange"
-            : "includesString"
+        filterFnForVariant(variant)
       return { ...col, filterFn }
     })
   }, [columns, enableColumnFilters])
