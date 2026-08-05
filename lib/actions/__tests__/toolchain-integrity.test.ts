@@ -53,9 +53,8 @@ describe("toolchain integrity", () => {
     expect(
       existsSync(pkgPath),
       "@typescript/typescript6 is missing. scripts/lint-ai-action-error-paths.ts " +
-        "and scripts/build-v0-feature-ledger.ts import its classic compiler API " +
-        "(removed from typescript@7) and fail at RUNTIME only — do not remove " +
-        "this devDependency.",
+        "imports its classic compiler API (removed from typescript@7) and fails " +
+        "at RUNTIME only — do not remove this devDependency.",
     ).toBe(true)
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version: string }
     expect(pkg.version).toMatch(/^6\./)
