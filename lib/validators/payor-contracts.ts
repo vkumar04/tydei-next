@@ -40,6 +40,18 @@ export const createPayorContractSchema = z.object({
   implantPassthrough: z.boolean().default(true),
   implantMarkup: z.number().default(0),
   notes: z.string().optional(),
+  fileName: z.string().max(300).optional(),
+  // Storage KEY of the archived source document (from the extract route),
+  // never an absolute URL. Ownership (caller minted it) is enforced in the
+  // create action via keyBelongsToTenant.
+  s3Key: z
+    .string()
+    .min(1)
+    .max(500)
+    .refine((v) => !/^[a-z][a-z0-9+.-]*:/i.test(v) && !v.startsWith("//"), {
+      message: "s3Key must be a storage key, not a URL",
+    })
+    .optional(),
 })
 
 export const updatePayorContractSchema = createPayorContractSchema.partial()

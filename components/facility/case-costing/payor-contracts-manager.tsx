@@ -125,6 +125,9 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
   const [extractedRates, setExtractedRates] = useState<{ cptCode: string; description?: string; rate: number; effectiveDate?: string }[]>([])
   const [extractedGroupers, setExtractedGroupers] = useState<{ grouperName: string; rate: number; cptCodes: string[] }[]>([])
   const [extractionDone, setExtractionDone] = useState(false)
+  // Storage key the extract route archived the source PDF under — persisted
+  // on save so the object stays referenced (storage audit 2026-08-05).
+  const [archivedS3Key, setArchivedS3Key] = useState<string | null>(null)
 
   // Manual text entry
   const [rateText, setRateText] = useState("")
@@ -147,6 +150,7 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
     setExtractedRates([])
     setExtractedGroupers([])
     setExtractionDone(false)
+    setArchivedS3Key(null)
     setRateText("")
     setSelectedContractId("")
   }, [])
@@ -187,7 +191,10 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
         throw new Error(err.error || "Extraction failed")
       }
 
-      const { extracted } = await res.json()
+      const { extracted, s3Key } = await res.json()
+      // Keep the archive key the route minted — it's persisted on save so
+      // the source document stays referenced instead of orphaning.
+      if (typeof s3Key === "string" && s3Key) setArchivedS3Key(s3Key)
 
       // Auto-fill form fields from extraction
       if (extracted.payorName) setPayorName(extracted.payorName)
@@ -256,6 +263,8 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
       implantPassthrough: true,
       implantMarkup: 0,
       notes: notes || undefined,
+      fileName: selectedFile?.name,
+      s3Key: archivedS3Key ?? undefined,
     }
 
     await createMutation.mutateAsync(payload)

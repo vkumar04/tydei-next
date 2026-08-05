@@ -2139,6 +2139,10 @@ model PayorContract {
   uploadedAt         DateTime  @default(now())
   uploadedBy         String?
   fileName           String?
+  /// Storage key of the archived source document. The extract route uploads
+  /// the original file; without persisting the key here every payor upload
+  /// orphaned its object immediately (storage audit 2026-08-05).
+  s3Key              String?
   notes              String?
 
   facility Facility @relation(fields: [facilityId], references: [id])
