@@ -23,7 +23,10 @@ import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
-import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import {
+  canonicalizeCategoryName,
+  UNCATEGORIZED_CATEGORY,
+} from "@/lib/contracts/category-canonical"
 import {
   buildCptRateSchedule,
   resolveCaseReimbursement,
@@ -48,9 +51,9 @@ export interface AnalysisVendorRow {
 }
 
 /**
- * Optional scope for the analysis window. Everything COG-derived (spend,
- * category/vendor breakdowns) honors it; case/reimbursement figures stay
- * facility-lifetime, as before.
+ * Optional scope for the analysis window. COG spend AND case/reimbursement
+ * figures honor it — one time base for the whole page — with summed case
+ * figures annualized before feeding the annual model.
  */
 export interface AnalysisDataScope {
   /** ISO date. Omitted → 12 months before `end`. */
@@ -59,11 +62,12 @@ export interface AnalysisDataScope {
   end?: string
   /**
    * Category names to include (canonicalized before matching). Omitted or
-   * empty → every category. Rows with no category only count when the
-   * filter is off.
+   * empty → every category. Rows with no category are the
+   * `(uncategorized)` bucket, selectable like any other category.
    */
   categories?: string[]
 }
+
 
 export interface FacilityAnalysisData {
   currentVendorSpend: number
@@ -86,14 +90,18 @@ export interface FacilityAnalysisData {
   /** True when netRevenue was implied from spend (no case reimbursement). */
   revenueIsImplied: boolean
   /**
-   * Summed case-costing reimbursement across ALL cases (the "Actuals"
-   * revenue figure). Reported raw — even when implausibly low — so the
-   * Net Revenue control can offer it transparently with a coverage caveat
-   * rather than silently substituting the spend-based proxy.
+   * Case-costing reimbursement summed over the WINDOW and annualized (the
+   * "Actuals" annual revenue candidate). Reported even when implausibly
+   * low — the Net Revenue control offers it transparently with a coverage
+   * caveat rather than silently substituting the spend-based proxy.
    */
   measuredReimbursement: number
-  /** Reimbursement coverage: cases with a non-zero payor rate vs total. */
+  /** Reimbursement coverage: cases with a non-zero payor rate vs total,
+   *  RAW window counts (not annualized). */
   reimbursementCoverage: { withRate: number; totalCases: number }
+  /** Mean reimbursement per covered case — raw window ratio, immune to the
+   *  annualization applied to the summed figures. */
+  avgCoveredCaseReimbursement: number
   annualCaseVolume: number
   /** Facility average contribution-margin %, fraction. */
   avgMarginPct: number
@@ -147,8 +155,12 @@ export async function getFacilityAnalysisData(
   }
 
   // Category filter — canonicalized on both sides (never raw equality).
+  // The uncategorized sentinel passes through untouched — canonicalization
+  // would strip its parentheses and it must round-trip picker → filter.
   const selectedCategories = (scope?.categories ?? [])
-    .map((c) => canonicalizeCategoryName(c))
+    .map((c) =>
+      c === UNCATEGORIZED_CATEGORY ? c : canonicalizeCategoryName(c),
+    )
     .filter(Boolean)
   const selectedSet =
     selectedCategories.length > 0 ? new Set(selectedCategories) : null
@@ -168,7 +180,13 @@ export async function getFacilityAnalysisData(
       },
     }),
     prisma.case.findMany({
-      where: { facilityId: facility.id },
+      // Cases honor the SAME window as COG spend (review 2026-08-05: they
+      // were facility-lifetime, so a 3-month window mixed time bases —
+      // 3 months of spend against all-time reimbursement and volume).
+      where: {
+        facilityId: facility.id,
+        dateOfSurgery: { gte: windowStart, lte: windowEnd },
+      },
       select: {
         totalSpend: true,
         totalReimbursement: true,
@@ -197,33 +215,28 @@ export async function getFacilityAnalysisData(
 
   for (const r of cogRows) {
     const spend = Number(r.extendedPrice ?? 0)
-    const canonicalCategory = r.category
+    // Rows without a category land in the first-class `(uncategorized)`
+    // bucket, so shares always sum to the headline spend.
+    const bucket = r.category
       ? canonicalizeCategoryName(r.category)
-      : null
+      : UNCATEGORIZED_CATEGORY
 
-    if (canonicalCategory) {
-      availableAgg.set(
-        canonicalCategory,
-        (availableAgg.get(canonicalCategory) ?? 0) + spend,
-      )
-    }
+    availableAgg.set(bucket, (availableAgg.get(bucket) ?? 0) + spend)
     unfilteredWindowSpend += spend
 
     // With a category filter active, only rows in the selected categories
     // count — including toward the spend total, so the headline figure is
     // the spend of exactly what the user chose.
-    if (selectedSet && (!canonicalCategory || !selectedSet.has(canonicalCategory))) {
+    if (selectedSet && !selectedSet.has(bucket)) {
       continue
     }
 
     totalSpend += spend
 
-    if (canonicalCategory) {
-      const cur = categoryAgg.get(canonicalCategory) ?? { spend: 0, qty: 0 }
-      cur.spend += spend
-      cur.qty += r.quantity ?? 0
-      categoryAgg.set(canonicalCategory, cur)
-    }
+    const cur = categoryAgg.get(bucket) ?? { spend: 0, qty: 0 }
+    cur.spend += spend
+    cur.qty += r.quantity ?? 0
+    categoryAgg.set(bucket, cur)
 
     if (r.vendorId) {
       const name = r.vendor?.displayName ?? r.vendor?.name ?? "Unknown vendor"
@@ -283,20 +296,28 @@ export async function getFacilityAnalysisData(
   // missing OR implausibly low (≤ supply spend), falling back to the
   // spend-based proxy (spend ÷ supply-cost-%) so EBITDA/DCF stay coherent.
   //
+  // Cases are window-scoped now, so the summed reimbursement is annualized
+  // by the same factor as spend before feeding the annual model — both
+  // sides of every comparison share one time base. The factor is exactly 1
+  // on the default trailing-12 window.
+  const annualizeFactor = 12 / windowMonths
+  const annualizedReimbursement = sumReimbursement * annualizeFactor
+
   // Both the gate and the proxy compare against the ANNUALIZED, UNFILTERED
   // window spend (review 2026-08-05): net revenue is the facility's annual
-  // top line, and the model is annual. Comparing lifetime reimbursement to a
-  // 3-month or single-category spend slice flipped the gate to "actuals" and
-  // rendered spend > revenue — the exact incoherence this gate exists to
-  // prevent. On the default window with no filter this is byte-identical to
-  // the old `totalSpend` comparison.
-  const revenueIsImplied = sumReimbursement <= annualizedUnfilteredSpend
+  // top line, and the model is annual. Comparing an unlike-based
+  // reimbursement figure to a 3-month or single-category spend slice
+  // flipped the gate to "actuals" and rendered spend > revenue — the exact
+  // incoherence this gate exists to prevent. On the default window with no
+  // filter this is byte-identical to the old `totalSpend` comparison.
+  const revenueIsImplied = annualizedReimbursement <= annualizedUnfilteredSpend
   const netRevenue = revenueIsImplied
     ? annualizedUnfilteredSpend / IMPLIED_SUPPLY_COST_PCT
-    : sumReimbursement
+    : annualizedReimbursement
 
   // Only trust a measured margin when revenue is coherent (not implied) — a
   // partial reimbursement total would otherwise yield a garbage margin.
+  // (A ratio of same-window sums — no annualization needed.)
   const avgMarginPct = !revenueIsImplied
     ? Math.max(0, (sumReimbursement - sumCaseSpend) / sumReimbursement)
     : DEFAULT_MARGIN_PCT
@@ -332,9 +353,12 @@ export async function getFacilityAnalysisData(
     availableCategories,
     netRevenue,
     revenueIsImplied,
-    measuredReimbursement: sumReimbursement,
+    // Annualized — this figure IS the "Actuals" annual revenue candidate.
+    measuredReimbursement: annualizedReimbursement,
     reimbursementCoverage: { withRate: casesWithRate, totalCases: cases.length },
-    annualCaseVolume: cases.length,
+    avgCoveredCaseReimbursement:
+      casesWithRate > 0 ? sumReimbursement / casesWithRate : 0,
+    annualCaseVolume: Math.round(cases.length * annualizeFactor),
     avgMarginPct,
     categories,
     vendors,

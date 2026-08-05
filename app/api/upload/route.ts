@@ -64,7 +64,9 @@ export async function POST(request: Request) {
     const userId = session.user.id
     const timestamp = Date.now()
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-    const key = `${folder}/${userId}/${timestamp}-${safeName}`
+    // Random segment: keys must not be enumerable from a timestamp + a
+    // guessed filename (security review 2026-08-05).
+    const key = `${folder}/${userId}/${timestamp}-${crypto.randomUUID().slice(0, 8)}-${safeName}`
 
     await uploadFile(key, buffer, file.type || "application/octet-stream")
 

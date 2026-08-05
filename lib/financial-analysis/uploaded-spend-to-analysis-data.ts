@@ -105,6 +105,7 @@ export function aggregateUploadedSpend(
     // so the Net Revenue control opens in Manual mode.
     measuredReimbursement: 0,
     reimbursementCoverage: { withRate: 0, totalCases: 0 },
+    avgCoveredCaseReimbursement: 0,
     annualCaseVolume: 0,
     avgMarginPct: DEFAULT_MARGIN_PCT,
     categories,

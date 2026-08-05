@@ -129,7 +129,29 @@ export const createPendingContractSchema = z.object({
       }),
     )
     .optional(),
-  documents: z.any().optional(),
+  // Attached documents. `url` is a STORAGE KEY, never an absolute URL —
+  // these rows copy verbatim into ContractDocument on approval, where they
+  // become download targets on the counterparty's Documents tab. The
+  // scheme ban kills the stored-phishing vector at write time; key
+  // OWNERSHIP (the caller minted it) is enforced in the actions, which
+  // know the caller's tenant. Replaces the old `z.any()` (review 2026-08-05).
+  documents: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(300),
+        url: z
+          .string()
+          .min(1)
+          .max(500)
+          .refine(
+            (v) => !/^[a-z][a-z0-9+.-]*:/i.test(v) && !v.startsWith("//"),
+            { message: "Document url must be a storage key, not a URL" },
+          ),
+        type: z.string().max(40).optional(),
+        size: z.number().int().nonnegative().optional(),
+      }),
+    )
+    .optional(),
   pricingData: z.any().optional(),
   notes: z.string().optional(),
   division: z.string().optional(),

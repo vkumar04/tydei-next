@@ -152,7 +152,7 @@ function RevenueField({ revenue }: { revenue: RevenueControl }) {
             {usdCompact(revenue.measuredReimbursement)}
           </div>
           <p className="text-xs text-muted-foreground">
-            Summed case-costing reimbursement ·{" "}
+            Case-costing reimbursement, annualized from the selected window ·{" "}
             {revenue.coverage.withRate.toLocaleString("en-US")} of{" "}
             {revenue.coverage.totalCases.toLocaleString("en-US")} cases have a
             payor CPT rate.

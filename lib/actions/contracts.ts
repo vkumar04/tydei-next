@@ -22,6 +22,7 @@ import {
 } from "@/lib/actions/analytics/_cache"
 import { idempotencyGet, idempotencyPut } from "@/lib/idempotency"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
+import { deleteFile as deleteObjectFromStorage } from "@/lib/storage"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { recomputeCaseSupplyContractStatus } from "@/lib/case-costing/recompute-supply"
 import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
@@ -1800,6 +1801,7 @@ export async function deleteContractDocument(id: string) {
     select: {
       id: true,
       contractId: true,
+      url: true,
       contract: {
         select: {
           facilityId: true,
@@ -1818,6 +1820,26 @@ export async function deleteContractDocument(id: string) {
   // auth-scope-scanner-skip: unreachable unless the `owned` check above passed,
   // which proves the document's contract belongs to this facility.
   await prisma.contractDocument.delete({ where: { id } })
+
+  // Best-effort S3 cleanup (review 2026-08-05: deleting the row used to
+  // orphan the object, which stayed fetchable forever). Only when no OTHER
+  // document row still references the same key — duplicate uploads sharing
+  // one key exist in prod — and never blocking the user-facing delete.
+  if (doc.url && !/^[a-z][a-z0-9+.-]*:/i.test(doc.url)) {
+    try {
+      const otherRefs = await prisma.contractDocument.count({
+        where: { url: doc.url },
+      })
+      if (otherRefs === 0) {
+        await deleteObjectFromStorage(doc.url)
+      }
+    } catch (err) {
+      console.error("[deleteContractDocument] S3 cleanup failed", err, {
+        contractId: doc.contractId,
+        key: doc.url,
+      })
+    }
+  }
 
   await logAudit({
     userId: session.user.id,

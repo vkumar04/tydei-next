@@ -32,6 +32,7 @@ vi.mock("@/lib/actions/auth", () => ({
 }))
 
 import { getFacilityAnalysisData } from "@/lib/actions/facility-analysis-data"
+import { UNCATEGORIZED_CATEGORY } from "@/lib/contracts/category-canonical"
 
 function cogRow(over: {
   category?: string | null
@@ -106,25 +107,37 @@ describe("getFacilityAnalysisData — scope", () => {
     // Vendor breakdown follows the same subset (Beta only sold trauma).
     expect(d.vendors).toHaveLength(1)
     expect(d.vendors[0].vendor).toBe("Alpha")
-    // The picker still sees everything in the window.
-    expect(d.availableCategories.length).toBe(2)
+    // The picker still sees everything in the window, incl. the bucket.
+    expect(d.availableCategories.length).toBe(3)
   })
 
-  it("no filter: uncategorized spend still counts toward the total", async () => {
+  it("no filter: uncategorized spend joins the '(uncategorized)' bucket", async () => {
     const d = await getFacilityAnalysisData()
     expect(d.currentVendorSpend).toBe(1400)
-    expect(d.availableCategories.length).toBe(2)
+    expect(d.availableCategories).toContain(UNCATEGORIZED_CATEGORY)
+    const bucket = d.categories.find((c) => c.category === UNCATEGORIZED_CATEGORY)
+    expect(bucket?.spendShare).toBeCloseTo(100 / 1400, 6)
+    // Shares reconcile to the headline: they sum to exactly 1.
+    const shareSum = d.categories.reduce((s2, c) => s2 + c.spendShare, 0)
+    expect(shareSum).toBeCloseTo(1, 6)
   })
 
-  it("revenue gate compares against ANNUALIZED UNFILTERED spend, not the scoped slice", async () => {
-    // Lifetime measured reimbursement $2,000: more than a 3-month window's
-    // $1,400 of spend, but far less than the ~$5,600 annualized run rate —
-    // still implausibly low, so revenue must stay IMPLIED. Pre-fix this
-    // flipped to "actuals" and rendered spend > revenue (review 2026-08-05).
+  it("the '(uncategorized)' bucket is selectable like any category", async () => {
+    const d = await getFacilityAnalysisData({
+      categories: [UNCATEGORIZED_CATEGORY],
+    })
+    expect(d.currentVendorSpend).toBe(100)
+    expect(d.categories).toHaveLength(1)
+    expect(d.categories[0].category).toBe(UNCATEGORIZED_CATEGORY)
+  })
+
+  it("revenue gate and case figures share the window's time base", async () => {
+    // Window reimbursement $300 over ~3 months annualizes to ~$1.2K — still
+    // below the ~$5.6K annualized spend run rate, so revenue stays IMPLIED.
     caseFindManyMock.mockResolvedValue([
       {
         totalSpend: 500,
-        totalReimbursement: 2000,
+        totalReimbursement: 300,
         primaryCptCode: null,
         dateOfSurgery: new Date("2026-06-01"),
         procedures: [],
@@ -134,11 +147,24 @@ describe("getFacilityAnalysisData — scope", () => {
       start: "2026-05-05T00:00:00.000Z",
       end: "2026-08-05T00:00:00.000Z",
     })
+    // Cases honor the same window as spend.
+    const caseWhere = caseFindManyMock.mock.calls[0][0].where
+    expect(caseWhere.dateOfSurgery.gte.toISOString()).toBe(
+      "2026-05-05T00:00:00.000Z",
+    )
+    expect(caseWhere.dateOfSurgery.lte.toISOString()).toBe(
+      "2026-08-05T00:00:00.000Z",
+    )
     expect(d.revenueIsImplied).toBe(true)
     // The implied proxy is annual too: annualized-unfiltered spend ÷ 0.3.
     const annualizedUnfiltered = (1400 / d.windowMonths) * 12
     expect(d.netRevenue).toBeCloseTo(annualizedUnfiltered / 0.3, 6)
     expect(d.netRevenue).toBeGreaterThan(d.annualizedVendorSpend)
+    // Summed figures annualize; per-case and coverage stay raw.
+    expect(d.measuredReimbursement).toBeCloseTo(300 * (12 / d.windowMonths), 4)
+    expect(d.annualCaseVolume).toBe(Math.round(1 * (12 / d.windowMonths)))
+    expect(d.reimbursementCoverage).toEqual({ withRate: 1, totalCases: 1 })
+    expect(d.avgCoveredCaseReimbursement).toBe(300)
   })
 
   it("category filter never redefines the facility top line", async () => {

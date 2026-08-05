@@ -17,14 +17,23 @@ import { generatePresignedUploadUrl, generatePresignedDownloadUrl, deleteObject 
  * Now: a key must appear in ContractDocument or PendingContract.documents
  * for the user's facility/vendor scope.
  */
-async function assertKeyVisibleToUser(key: string): Promise<void> {
-  const session = await requireAuth()
+/** Resolve the caller's tenant (facility or vendor) from their membership. */
+async function resolveCallerTenant(
+  userId: string,
+): Promise<{ facilityId?: string; vendorId?: string }> {
   const member = await prisma.member.findFirst({
-    where: { userId: session.user.id },
+    where: { userId },
     include: { organization: { include: { facility: true, vendor: true } } },
   })
-  const facilityId = member?.organization?.facility?.id
-  const vendorId = member?.organization?.vendor?.id
+  return {
+    facilityId: member?.organization?.facility?.id,
+    vendorId: member?.organization?.vendor?.id,
+  }
+}
+
+async function assertKeyVisibleToUser(key: string): Promise<void> {
+  const session = await requireAuth()
+  const { facilityId, vendorId } = await resolveCallerTenant(session.user.id)
 
   // Direct attachment via ContractDocument scoped by contract owner. Uses the
   // canonical ownership predicates: a bare `{ facilityId }` / `{ vendorId }`
@@ -84,14 +93,25 @@ const ALLOWED_CONTENT_TYPES = [
 ]
 
 export async function getUploadUrl(input: UploadRequest) {
-  await requireAuth()
+  const session = await requireAuth()
   const data = uploadRequestSchema.parse(input)
 
   if (!ALLOWED_CONTENT_TYPES.includes(data.contentType)) {
     throw new Error("File type not allowed")
   }
 
-  const key = `${data.folder}/${Date.now()}-${data.fileName}`
+  // Keys carry TENANT PROVENANCE and ENTROPY (security review 2026-08-05):
+  //   <folder>/<facilityId|vendorId|userId>/<ts>-<rand8>-<safeName>
+  // The tenant segment lets write paths verify a submitted key was minted
+  // by its submitter (see assertDocumentKeysAllowed in pending-contracts),
+  // and the random segment makes keys unguessable — the old
+  // `<folder>/<timestamp>-<name>` form was enumerable.
+  const { facilityId, vendorId } = await resolveCallerTenant(session.user.id)
+  const tenantSegment = facilityId ?? vendorId ?? session.user.id
+  const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]/g, "_")
+  const key = `${data.folder}/${tenantSegment}/${Date.now()}-${crypto
+    .randomUUID()
+    .slice(0, 8)}-${safeName}`
   const uploadUrl = await generatePresignedUploadUrl(key, data.contentType)
   const publicUrl = key
 
