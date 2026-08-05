@@ -12,6 +12,8 @@ import {
 } from "@/lib/validators/payor-contracts"
 import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
+import { keyBelongsToTenant } from "@/lib/uploads/key-policy"
+import { deleteFile as deleteObjectFromStorage } from "@/lib/storage"
 
 export async function createFacilityPayorContract(input: CreatePayorContractInput) {
   const session = await requireFacility()
@@ -34,6 +36,18 @@ export async function createFacilityPayorContract(input: CreatePayorContractInpu
   const cptRates = z.array(payorContractRateSchema).parse(parsed.cptRates)
   const grouperRates = parsed.grouperRates
 
+  // The archived-source key must be caller-minted (tenant-provenance
+  // prefix) — same rule as contract documents: a client-supplied key that
+  // isn't verified is a self-authorization vector (review 2026-08-05).
+  if (
+    parsed.s3Key &&
+    !keyBelongsToTenant(parsed.s3Key, [session.facility.id, session.user.id])
+  ) {
+    throw new Error(
+      "Archived document key was not uploaded by this account — re-upload the file and try again.",
+    )
+  }
+
   const contract = await prisma.payorContract.create({
     data: {
       payorName: parsed.payorName,
@@ -49,6 +63,8 @@ export async function createFacilityPayorContract(input: CreatePayorContractInpu
       implantPassthrough: parsed.implantPassthrough,
       implantMarkup: parsed.implantMarkup,
       notes: parsed.notes,
+      fileName: parsed.fileName,
+      s3Key: parsed.s3Key,
       uploadedBy: session.user.id,
     },
   })
@@ -109,9 +125,33 @@ export async function deleteFacilityPayorContract(id: string) {
   const session = await requireFacility()
   await requireCanMutate()
 
+  const existing = await prisma.payorContract.findUniqueOrThrow({
+    where: { id, facilityId: session.facility.id },
+    select: { s3Key: true },
+  })
+
   await prisma.payorContract.delete({
     where: { id, facilityId: session.facility.id },
   })
+
+  // Best-effort archive cleanup — the row is the only reference home for
+  // payor keys, but guard against duplicates sharing one key, and never
+  // block the user-facing delete (same posture as deleteContractDocument).
+  if (existing.s3Key) {
+    try {
+      const otherRefs = await prisma.payorContract.count({
+        where: { s3Key: existing.s3Key },
+      })
+      if (otherRefs === 0) {
+        await deleteObjectFromStorage(existing.s3Key)
+      }
+    } catch (err) {
+      console.error("[deleteFacilityPayorContract] S3 cleanup failed", err, {
+        payorContractId: id,
+        key: existing.s3Key,
+      })
+    }
+  }
 
   await logAudit({
     userId: session.user.id,

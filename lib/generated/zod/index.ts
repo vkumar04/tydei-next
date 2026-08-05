@@ -203,7 +203,7 @@ export const CaseCostingFileScalarFieldEnumSchema = z.enum(['id','fileType','fil
 
 export const SurgeonUsageScalarFieldEnumSchema = z.enum(['id','surgeonId','surgeonName','contractId','facilityId','periodStart','periodEnd','usageAmount','caseCount','complianceRate','createdAt']);
 
-export const PayorContractScalarFieldEnumSchema = z.enum(['id','payorName','payorType','facilityId','contractNumber','effectiveDate','expirationDate','status','cptRates','grouperRates','multiProcedureRule','implantPassthrough','implantMarkup','uploadedAt','uploadedBy','fileName','notes']);
+export const PayorContractScalarFieldEnumSchema = z.enum(['id','payorName','payorType','facilityId','contractNumber','effectiveDate','expirationDate','status','cptRates','grouperRates','multiProcedureRule','implantPassthrough','implantMarkup','uploadedAt','uploadedBy','fileName','s3Key','notes']);
 
 export const ConnectionScalarFieldEnumSchema = z.enum(['id','facilityId','facilityName','vendorId','vendorName','status','inviteType','invitedBy','invitedByEmail','invitedAt','respondedAt','respondedBy','expiresAt','message','mode','autoActivateContracts','vendorDivisionId']);
 
@@ -7368,6 +7368,12 @@ export const PayorContractSchema = z.object({
   uploadedAt: z.coerce.date(),
   uploadedBy: z.string().nullable(),
   fileName: z.string().nullable(),
+  /**
+   * Storage key of the archived source document. The extract route uploads
+   * the original file; without persisting the key here every payor upload
+   * orphaned its object immediately (storage audit 2026-08-05).
+   */
+  s3Key: z.string().nullable(),
   notes: z.string().nullable(),
 })
 
@@ -10762,6 +10768,7 @@ export const PayorContractSelectSchema: z.ZodType<Prisma.PayorContractSelect> = 
   uploadedAt: z.boolean().optional(),
   uploadedBy: z.boolean().optional(),
   fileName: z.boolean().optional(),
+  s3Key: z.boolean().optional(),
   notes: z.boolean().optional(),
   facility: z.union([z.boolean(),z.lazy(() => FacilityArgsSchema)]).optional(),
 }).strict()
@@ -17583,6 +17590,7 @@ export const PayorContractWhereInputSchema: z.ZodType<Prisma.PayorContractWhereI
   uploadedAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   uploadedBy: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   fileName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  s3Key: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   notes: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   facility: z.union([ z.lazy(() => FacilityScalarRelationFilterSchema), z.lazy(() => FacilityWhereInputSchema) ]).optional(),
 });
@@ -17604,6 +17612,7 @@ export const PayorContractOrderByWithRelationInputSchema: z.ZodType<Prisma.Payor
   uploadedAt: z.lazy(() => SortOrderSchema).optional(),
   uploadedBy: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   fileName: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  s3Key: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   notes: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   facility: z.lazy(() => FacilityOrderByWithRelationInputSchema).optional(),
 });
@@ -17641,6 +17650,7 @@ export const PayorContractWhereUniqueInputSchema: z.ZodType<Prisma.PayorContract
   uploadedAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   uploadedBy: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   fileName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  s3Key: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   notes: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   facility: z.union([ z.lazy(() => FacilityScalarRelationFilterSchema), z.lazy(() => FacilityWhereInputSchema) ]).optional(),
 }));
@@ -17662,6 +17672,7 @@ export const PayorContractOrderByWithAggregationInputSchema: z.ZodType<Prisma.Pa
   uploadedAt: z.lazy(() => SortOrderSchema).optional(),
   uploadedBy: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   fileName: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
+  s3Key: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   notes: z.union([ z.lazy(() => SortOrderSchema), z.lazy(() => SortOrderInputSchema) ]).optional(),
   _count: z.lazy(() => PayorContractCountOrderByAggregateInputSchema).optional(),
   _avg: z.lazy(() => PayorContractAvgOrderByAggregateInputSchema).optional(),
@@ -17690,6 +17701,7 @@ export const PayorContractScalarWhereWithAggregatesInputSchema: z.ZodType<Prisma
   uploadedAt: z.union([ z.lazy(() => DateTimeWithAggregatesFilterSchema), z.coerce.date() ]).optional(),
   uploadedBy: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
   fileName: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
+  s3Key: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
   notes: z.union([ z.lazy(() => StringNullableWithAggregatesFilterSchema), z.string() ]).optional().nullable(),
 });
 
@@ -25456,6 +25468,7 @@ export const PayorContractCreateInputSchema: z.ZodType<Prisma.PayorContractCreat
   uploadedAt: z.coerce.date().optional(),
   uploadedBy: z.string().optional().nullable(),
   fileName: z.string().optional().nullable(),
+  s3Key: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
   facility: z.lazy(() => FacilityCreateNestedOneWithoutPayorContractsInputSchema),
 });
@@ -25477,6 +25490,7 @@ export const PayorContractUncheckedCreateInputSchema: z.ZodType<Prisma.PayorCont
   uploadedAt: z.coerce.date().optional(),
   uploadedBy: z.string().optional().nullable(),
   fileName: z.string().optional().nullable(),
+  s3Key: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -25496,6 +25510,7 @@ export const PayorContractUpdateInputSchema: z.ZodType<Prisma.PayorContractUpdat
   uploadedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   uploadedBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  s3Key: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   facility: z.lazy(() => FacilityUpdateOneRequiredWithoutPayorContractsNestedInputSchema).optional(),
 });
@@ -25517,6 +25532,7 @@ export const PayorContractUncheckedUpdateInputSchema: z.ZodType<Prisma.PayorCont
   uploadedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   uploadedBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  s3Key: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -25537,6 +25553,7 @@ export const PayorContractCreateManyInputSchema: z.ZodType<Prisma.PayorContractC
   uploadedAt: z.coerce.date().optional(),
   uploadedBy: z.string().optional().nullable(),
   fileName: z.string().optional().nullable(),
+  s3Key: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -25556,6 +25573,7 @@ export const PayorContractUpdateManyMutationInputSchema: z.ZodType<Prisma.PayorC
   uploadedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   uploadedBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  s3Key: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -25576,6 +25594,7 @@ export const PayorContractUncheckedUpdateManyInputSchema: z.ZodType<Prisma.Payor
   uploadedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   uploadedBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  s3Key: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -31680,6 +31699,7 @@ export const PayorContractCountOrderByAggregateInputSchema: z.ZodType<Prisma.Pay
   uploadedAt: z.lazy(() => SortOrderSchema).optional(),
   uploadedBy: z.lazy(() => SortOrderSchema).optional(),
   fileName: z.lazy(() => SortOrderSchema).optional(),
+  s3Key: z.lazy(() => SortOrderSchema).optional(),
   notes: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -31701,6 +31721,7 @@ export const PayorContractMaxOrderByAggregateInputSchema: z.ZodType<Prisma.Payor
   uploadedAt: z.lazy(() => SortOrderSchema).optional(),
   uploadedBy: z.lazy(() => SortOrderSchema).optional(),
   fileName: z.lazy(() => SortOrderSchema).optional(),
+  s3Key: z.lazy(() => SortOrderSchema).optional(),
   notes: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -31718,6 +31739,7 @@ export const PayorContractMinOrderByAggregateInputSchema: z.ZodType<Prisma.Payor
   uploadedAt: z.lazy(() => SortOrderSchema).optional(),
   uploadedBy: z.lazy(() => SortOrderSchema).optional(),
   fileName: z.lazy(() => SortOrderSchema).optional(),
+  s3Key: z.lazy(() => SortOrderSchema).optional(),
   notes: z.lazy(() => SortOrderSchema).optional(),
 });
 
@@ -42968,6 +42990,7 @@ export const PayorContractCreateWithoutFacilityInputSchema: z.ZodType<Prisma.Pay
   uploadedAt: z.coerce.date().optional(),
   uploadedBy: z.string().optional().nullable(),
   fileName: z.string().optional().nullable(),
+  s3Key: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -42987,6 +43010,7 @@ export const PayorContractUncheckedCreateWithoutFacilityInputSchema: z.ZodType<P
   uploadedAt: z.coerce.date().optional(),
   uploadedBy: z.string().optional().nullable(),
   fileName: z.string().optional().nullable(),
+  s3Key: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -43946,6 +43970,7 @@ export const PayorContractScalarWhereInputSchema: z.ZodType<Prisma.PayorContract
   uploadedAt: z.union([ z.lazy(() => DateTimeFilterSchema), z.coerce.date() ]).optional(),
   uploadedBy: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   fileName: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
+  s3Key: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
   notes: z.union([ z.lazy(() => StringNullableFilterSchema), z.string() ]).optional().nullable(),
 });
 
@@ -67377,6 +67402,7 @@ export const PayorContractCreateManyFacilityInputSchema: z.ZodType<Prisma.PayorC
   uploadedAt: z.coerce.date().optional(),
   uploadedBy: z.string().optional().nullable(),
   fileName: z.string().optional().nullable(),
+  s3Key: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
 });
 
@@ -68566,6 +68592,7 @@ export const PayorContractUpdateWithoutFacilityInputSchema: z.ZodType<Prisma.Pay
   uploadedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   uploadedBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  s3Key: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -68585,6 +68612,7 @@ export const PayorContractUncheckedUpdateWithoutFacilityInputSchema: z.ZodType<P
   uploadedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   uploadedBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  s3Key: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 
@@ -68604,6 +68632,7 @@ export const PayorContractUncheckedUpdateManyWithoutFacilityInputSchema: z.ZodTy
   uploadedAt: z.union([ z.coerce.date(),z.lazy(() => DateTimeFieldUpdateOperationsInputSchema) ]).optional(),
   uploadedBy: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   fileName: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
+  s3Key: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
   notes: z.union([ z.string(),z.lazy(() => NullableStringFieldUpdateOperationsInputSchema) ]).optional().nullable(),
 });
 

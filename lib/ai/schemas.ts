@@ -521,16 +521,22 @@ export const extractedPayorContractSchema = z.object({
       rate: z.number().describe("Grouper rate in dollars"),
     })
   ).describe("Case rate / grouper rates if present"),
+  // `.nullish()`, not `.nullable()`: the model OMITS these objects as often
+  // as it emits an explicit null, and a bare `.nullable()` rejects the
+  // omission — which failed the whole extraction with
+  // AI_NoObjectGeneratedError on contracts that extracted fine otherwise
+  // (2 of 3 live runs, 2026-08-05). No consumer reads them yet, so
+  // undefined and null are equivalent downstream.
   implantPolicy: z.object({
     passthrough: z.boolean().describe("Whether implants are passed through at cost"),
     discountPercent: z.number().nullable().describe("Discount percentage if not passthrough"),
     maxAmount: z.number().nullable().describe("Maximum implant reimbursement amount"),
-  }).nullable().describe("Implant reimbursement policy"),
+  }).nullish().describe("Implant reimbursement policy"),
   multiProcedureRules: z.object({
     primaryPercent: z.number().describe("Primary procedure reimbursement percentage (usually 100)"),
     secondaryPercent: z.number().describe("Secondary procedure percentage (usually 50)"),
     additionalPercent: z.number().nullable().describe("Additional procedures percentage"),
-  }).nullable().describe("Multi-procedure payment reduction rules"),
+  }).nullish().describe("Multi-procedure payment reduction rules"),
   otherTerms: z.array(z.string()).describe("Other notable contract terms as text"),
 })
 
