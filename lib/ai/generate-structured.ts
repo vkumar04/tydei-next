@@ -95,6 +95,46 @@ const ANTHROPIC_TOOL_MODE_OPTIONS = {
   },
 }
 
+/**
+ * Repair a schema-validation failure caused by the model WRAPPING the
+ * payload in a single envelope key — `{"input": {...}}` — a known jsonTool
+ * artifact (live prod failure 2026-08-05: a payor extraction whose content
+ * was perfect failed top-level validation because everything sat under
+ * `input`). Only unwraps when the raw text parses to a single-key object
+ * with a known envelope name AND the inner value validates against the
+ * caller's schema — anything else stays a failure.
+ */
+export function tryUnwrapEnvelope<T>(
+  schema: z.ZodSchema<T>,
+  err: unknown,
+): T | null {
+  const text = (err as { text?: unknown } | null)?.text
+  if (typeof text !== "string" || !text) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null
+  }
+  const entries = Object.entries(parsed as Record<string, unknown>)
+  if (entries.length !== 1) return null
+  const [key, value] = entries[0]
+  if (!/^(input|data|response|result|output|payload)$/i.test(key)) return null
+  const res = schema.safeParse(value)
+  return res.success ? res.data : null
+}
+
+function isSchemaMismatch(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err.name === "AI_NoObjectGeneratedError" ||
+      /did not match schema/i.test(err.message))
+  )
+}
+
 export async function generateStructured<T>(
   input: GenerateStructuredInput<T>,
 ): Promise<GenerateStructuredResult<T>> {
@@ -116,18 +156,52 @@ export async function generateStructured<T>(
       modelUsed: "primary",
     }
   } catch (primaryErr: unknown) {
-    if (!isTransientError(primaryErr)) throw primaryErr
+    // Envelope repair first — cheaper than any retry, and the content is
+    // often perfect underneath.
+    const repaired = tryUnwrapEnvelope(input.schema, primaryErr)
+    if (repaired !== null) {
+      console.warn(
+        `[${input.actionName}] repaired single-key envelope from primary output`,
+      )
+      return {
+        output: repaired,
+        text: String((primaryErr as { text?: unknown }).text ?? ""),
+        modelUsed: "primary",
+      }
+    }
+    // Schema mismatches are model-behavior flakes, not caller bugs — one
+    // fallback attempt is warranted alongside the transient failures.
+    if (!isTransientError(primaryErr) && !isSchemaMismatch(primaryErr)) {
+      throw primaryErr
+    }
     const msg =
       primaryErr instanceof Error ? primaryErr.message : String(primaryErr)
     console.warn(
-      `[${input.actionName}] primary model failed transiently — falling back:`,
+      `[${input.actionName}] primary model failed (${
+        isSchemaMismatch(primaryErr) ? "schema mismatch" : "transient"
+      }) — falling back:`,
       msg,
     )
-    const result = await generateText({ model: fallback, ...callOpts })
-    return {
-      output: result.output,
-      text: result.text ?? "",
-      modelUsed: "fallback",
+    try {
+      const result = await generateText({ model: fallback, ...callOpts })
+      return {
+        output: result.output,
+        text: result.text ?? "",
+        modelUsed: "fallback",
+      }
+    } catch (fallbackErr: unknown) {
+      const repairedFallback = tryUnwrapEnvelope(input.schema, fallbackErr)
+      if (repairedFallback !== null) {
+        console.warn(
+          `[${input.actionName}] repaired single-key envelope from fallback output`,
+        )
+        return {
+          output: repairedFallback,
+          text: String((fallbackErr as { text?: unknown }).text ?? ""),
+          modelUsed: "fallback",
+        }
+      }
+      throw fallbackErr
     }
   }
 }
