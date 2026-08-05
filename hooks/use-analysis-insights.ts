@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { generateFacilityAnalysisInsights } from "@/lib/actions/ai/facility-analysis-insights"
+import type { AnalysisDataScope } from "@/lib/actions/facility-analysis-data"
 import { generateVendorOpportunityInsights } from "@/lib/actions/ai/vendor-opportunity-insights"
 import { getVendorOpportunityData } from "@/lib/actions/vendor-opportunity-data"
 import type {
@@ -18,8 +19,13 @@ import type {
  * `retry: false`: AI errors aren't transient/user-fixable.
  */
 export function useFacilityAnalysisInsights() {
-  return useMutation<FacilityAnalysisInsights, Error, FacilityInsightSnapshot>({
-    mutationFn: (snapshot) => generateFacilityAnalysisInsights(snapshot),
+  return useMutation<
+    FacilityAnalysisInsights,
+    Error,
+    { snapshot: FacilityInsightSnapshot; scope?: AnalysisDataScope }
+  >({
+    mutationFn: ({ snapshot, scope }) =>
+      generateFacilityAnalysisInsights(snapshot, scope),
     retry: false,
   })
 }

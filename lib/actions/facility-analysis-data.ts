@@ -22,6 +22,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
+import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import {
   buildCptRateSchedule,
@@ -46,8 +47,41 @@ export interface AnalysisVendorRow {
   spendShare: number
 }
 
+/**
+ * Optional scope for the analysis window. Everything COG-derived (spend,
+ * category/vendor breakdowns) honors it; case/reimbursement figures stay
+ * facility-lifetime, as before.
+ */
+export interface AnalysisDataScope {
+  /** ISO date. Omitted → 12 months before `end`. */
+  start?: string
+  /** ISO date. Omitted → now. */
+  end?: string
+  /**
+   * Category names to include (canonicalized before matching). Omitted or
+   * empty → every category. Rows with no category only count when the
+   * filter is off.
+   */
+  categories?: string[]
+}
+
 export interface FacilityAnalysisData {
   currentVendorSpend: number
+  /** Selected COG window (ISO strings) and its length in months. */
+  windowStart: string
+  windowEnd: string
+  windowMonths: number
+  /** Mean spend per month across the window. */
+  avgMonthlySpend: number
+  /**
+   * Window spend scaled to a 12-month run rate — what the annual financial
+   * model (EBITDA / DCF / impact) seeds from. Equals `currentVendorSpend`
+   * on the default trailing-12-month window.
+   */
+  annualizedVendorSpend: number
+  /** Every category with spend in the window, BEFORE the category filter —
+   *  sorted by spend desc. Feeds the category picker. */
+  availableCategories: string[]
   netRevenue: number
   /** True when netRevenue was implied from spend (no case reimbursement). */
   revenueIsImplied: boolean
@@ -75,10 +109,49 @@ export interface FacilityAnalysisData {
 const IMPLIED_SUPPLY_COST_PCT = 0.3
 const DEFAULT_MARGIN_PCT = 0.7
 
-export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
+const MS_PER_MONTH = (365.25 / 12) * 24 * 60 * 60 * 1000
+
+function parseScopeDate(value: string | undefined, label: string): Date | null {
+  if (!value) return null
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(`Invalid ${label} date for analysis window`)
+  }
+  return d
+}
+
+export async function getFacilityAnalysisData(
+  scope?: AnalysisDataScope,
+): Promise<FacilityAnalysisData> {
   const { facility } = await requireFacility()
 
-  const { start: windowStart, end: windowEnd } = getTrailing12MonthWindow()
+  // Resolve the window: explicit bounds when given, else the canonical
+  // trailing-12. A lone bound gets the other defaulted relative to it.
+  const scopeEnd = parseScopeDate(scope?.end, "end")
+  const scopeStart = parseScopeDate(scope?.start, "start")
+  let windowStart: Date
+  let windowEnd: Date
+  if (scopeStart || scopeEnd) {
+    windowEnd = scopeEnd ?? new Date()
+    if (scopeStart) {
+      windowStart = scopeStart
+    } else {
+      windowStart = new Date(windowEnd)
+      windowStart.setMonth(windowStart.getMonth() - 12)
+    }
+    if (windowStart.getTime() > windowEnd.getTime()) {
+      throw new Error("Analysis window start must be before its end")
+    }
+  } else {
+    ;({ start: windowStart, end: windowEnd } = getTrailing12MonthWindow())
+  }
+
+  // Category filter — canonicalized on both sides (never raw equality).
+  const selectedCategories = (scope?.categories ?? [])
+    .map((c) => canonicalizeCategoryName(c))
+    .filter(Boolean)
+  const selectedSet =
+    selectedCategories.length > 0 ? new Set(selectedCategories) : null
 
   const [cogRows, cases, payorContracts] = await Promise.all([
     prisma.cOGRecord.findMany({
@@ -112,19 +185,44 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
 
   // ── Spend totals + category / vendor breakdowns ────────────────
   let totalSpend = 0
+  // Window spend BEFORE the category filter — the facility-wide base the
+  // revenue proxy and its plausibility gate compare against, so narrowing
+  // the category selection never redefines the facility's top line.
+  let unfilteredWindowSpend = 0
   const categoryAgg = new Map<string, { spend: number; qty: number }>()
   const vendorAgg = new Map<string, { name: string; spend: number }>()
+  // Pre-filter spend per category, so the picker can list every category in
+  // the window even while a subset is selected.
+  const availableAgg = new Map<string, number>()
 
   for (const r of cogRows) {
     const spend = Number(r.extendedPrice ?? 0)
+    const canonicalCategory = r.category
+      ? canonicalizeCategoryName(r.category)
+      : null
+
+    if (canonicalCategory) {
+      availableAgg.set(
+        canonicalCategory,
+        (availableAgg.get(canonicalCategory) ?? 0) + spend,
+      )
+    }
+    unfilteredWindowSpend += spend
+
+    // With a category filter active, only rows in the selected categories
+    // count — including toward the spend total, so the headline figure is
+    // the spend of exactly what the user chose.
+    if (selectedSet && (!canonicalCategory || !selectedSet.has(canonicalCategory))) {
+      continue
+    }
+
     totalSpend += spend
 
-    if (r.category) {
-      const key = canonicalizeCategoryName(r.category)
-      const cur = categoryAgg.get(key) ?? { spend: 0, qty: 0 }
+    if (canonicalCategory) {
+      const cur = categoryAgg.get(canonicalCategory) ?? { spend: 0, qty: 0 }
       cur.spend += spend
       cur.qty += r.quantity ?? 0
-      categoryAgg.set(key, cur)
+      categoryAgg.set(canonicalCategory, cur)
     }
 
     if (r.vendorId) {
@@ -141,6 +239,21 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
     [...categoryAgg.values()].reduce((s, c) => s + c.qty, 0) || 1
   const totalVendorSpend =
     [...vendorAgg.values()].reduce((s, v) => s + v.spend, 0) || 1
+
+  // ── Window length + annualization ──────────────────────────────
+  // The canonical trailing-12 window is exactly 12 months by construction —
+  // snap it so `annualizedVendorSpend === currentVendorSpend` there instead of
+  // drifting ~0.1% off through the ms→month conversion.
+  const isDefaultWindow = !scopeStart && !scopeEnd
+  const windowMonths = isDefaultWindow
+    ? 12
+    : Math.max(
+        1 / 30, // never divide by zero on a degenerate same-day window
+        (windowEnd.getTime() - windowStart.getTime()) / MS_PER_MONTH,
+      )
+  const avgMonthlySpend = totalSpend / windowMonths
+  const annualizedVendorSpend = avgMonthlySpend * 12
+  const annualizedUnfilteredSpend = (unfilteredWindowSpend / windowMonths) * 12
 
   // ── Net revenue + case volume + margin (all cases) ─────────────
   const cptRateSchedule = buildCptRateSchedule(payorContracts)
@@ -169,9 +282,17 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
   // 2026-06-21). Treat revenue as IMPLIED whenever the measured figure is
   // missing OR implausibly low (≤ supply spend), falling back to the
   // spend-based proxy (spend ÷ supply-cost-%) so EBITDA/DCF stay coherent.
-  const revenueIsImplied = sumReimbursement <= totalSpend
+  //
+  // Both the gate and the proxy compare against the ANNUALIZED, UNFILTERED
+  // window spend (review 2026-08-05): net revenue is the facility's annual
+  // top line, and the model is annual. Comparing lifetime reimbursement to a
+  // 3-month or single-category spend slice flipped the gate to "actuals" and
+  // rendered spend > revenue — the exact incoherence this gate exists to
+  // prevent. On the default window with no filter this is byte-identical to
+  // the old `totalSpend` comparison.
+  const revenueIsImplied = sumReimbursement <= annualizedUnfilteredSpend
   const netRevenue = revenueIsImplied
-    ? totalSpend / IMPLIED_SUPPLY_COST_PCT
+    ? annualizedUnfilteredSpend / IMPLIED_SUPPLY_COST_PCT
     : sumReimbursement
 
   // Only trust a measured margin when revenue is coherent (not implied) — a
@@ -197,8 +318,18 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
 
   const topVendorConcentrationPct = vendors[0]?.spendShare ?? 0
 
+  const availableCategories = [...availableAgg.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([category]) => category)
+
   return serialize({
     currentVendorSpend: totalSpend,
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+    windowMonths,
+    avgMonthlySpend,
+    annualizedVendorSpend,
+    availableCategories,
     netRevenue,
     revenueIsImplied,
     measuredReimbursement: sumReimbursement,
@@ -210,4 +341,17 @@ export async function getFacilityAnalysisData(): Promise<FacilityAnalysisData> {
     topVendorConcentrationPct,
     hasData: cogRows.length > 0,
   })
+}
+
+/**
+ * Error-as-value variant for client-triggered scope refetches — Next 16 prod
+ * builds redact thrown Server Action errors, so the range-picker toast would
+ * otherwise show a useless digest message (see lib/actions/safe-result.ts).
+ */
+export async function getFacilityAnalysisDataSafe(
+  scope?: AnalysisDataScope,
+): Promise<SafeResult<FacilityAnalysisData>> {
+  return toSafeResult("getFacilityAnalysisData", { scope }, () =>
+    getFacilityAnalysisData(scope),
+  )
 }

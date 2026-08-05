@@ -19,7 +19,10 @@ import { rateLimit } from "@/lib/rate-limit"
 import { serialize } from "@/lib/serialize"
 import { claudeModel } from "@/lib/ai/config"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
-import { getFacilityAnalysisData } from "@/lib/actions/facility-analysis-data"
+import {
+  getFacilityAnalysisData,
+  type AnalysisDataScope,
+} from "@/lib/actions/facility-analysis-data"
 import {
   facilityAnalysisInsightsSchema,
   type FacilityAnalysisInsights,
@@ -43,6 +46,7 @@ Rules:
 
 export async function generateFacilityAnalysisInsights(
   snapshot: FacilityInsightSnapshot,
+  scope?: AnalysisDataScope,
 ): Promise<FacilityAnalysisInsights> {
   const session = await requireFacility()
 
@@ -55,8 +59,10 @@ export async function generateFacilityAnalysisInsights(
     throw new Error("Too many requests, try again shortly.")
   }
 
-  // Re-derive the real DB breakdown for grounding (category + vendor names).
-  const data = await getFacilityAnalysisData()
+  // Re-derive the real DB breakdown for grounding (category + vendor names) —
+  // under the SAME scope the dashboard snapshot was built from, so the
+  // grounding names match the numbers the model is explaining.
+  const data = await getFacilityAnalysisData(scope)
 
   const userMessage = `NOW: ${new Date().toISOString()}
 FACILITY_HAS_DATA: ${data.hasData}

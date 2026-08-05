@@ -11,12 +11,18 @@
  * growth) stay as sliders. Claude adds the narrative layer on demand.
  */
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import {
   DEFAULT_FACILITY_ASSUMPTIONS,
   type FacilityModelAssumptions,
 } from "@/lib/financial-analysis/prospective-impact-model"
-import type { FacilityAnalysisData } from "@/lib/actions/facility-analysis-data"
+import {
+  getFacilityAnalysisDataSafe,
+  type AnalysisDataScope,
+  type FacilityAnalysisData,
+} from "@/lib/actions/facility-analysis-data"
+import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
+import { toast } from "sonner"
 import type { FacilityInsightSnapshot } from "@/lib/ai/analysis-insight-schemas"
 import { useFacilityAnalysisInsights } from "@/hooks/use-analysis-insights"
 import { buildDashboardModel, DEFAULT_AI_INPUTS, type DashboardModel } from "./model"
@@ -43,6 +49,14 @@ import {
 import { GrowthSimulatorCard } from "./growth-simulator-card"
 import { AiInsightsPanel } from "./ai-insights-panel"
 import { UploadedDataControl } from "./uploaded-data-control"
+import {
+  AnalysisScopeControl,
+  DEFAULT_ANALYSIS_SCOPE,
+  describeScopeRange,
+  resolveScopeDates,
+  type AnalysisScope,
+} from "./analysis-scope-control"
+import { usdCompact } from "./format"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -80,7 +94,10 @@ export function seedAssumptions(
     // facility data.
     ...DEFAULT_FACILITY_ASSUMPTIONS,
     netRevenue: data.netRevenue,
-    currentVendorSpend: data.currentVendorSpend,
+    // The model is annual — seed from the window's 12-month run rate (equal
+    // to the raw total on the default trailing-12 window). `??` guards older
+    // fixtures that predate the windowing fields.
+    currentVendorSpend: data.annualizedVendorSpend ?? data.currentVendorSpend,
     annualCaseVolume: data.annualCaseVolume,
   }
 }
@@ -194,25 +211,42 @@ export function AnalysisDashboardClient({
   // data they upload instead of live COG (Vick 2026-06-21). null = live COG.
   const [override, setOverride] = useState<FacilityAnalysisData | null>(null)
   const [overrideFileName, setOverrideFileName] = useState<string | null>(null)
-  const effectiveData = override ?? data
+
+  // Data scope: the COG window (date range) + category filter feeding the
+  // model. Non-default scopes reload via getFacilityAnalysisData and land in
+  // `scopeData`; the server-rendered `data` stays the default-scope source.
+  const [scope, setScope] = useState<AnalysisScope>(DEFAULT_ANALYSIS_SCOPE)
+  const [scopeData, setScopeData] = useState<FacilityAnalysisData | null>(null)
+  const [scopeLoading, setScopeLoading] = useState(false)
+  // User-added categories with no COG rows — rendered as zero-spend rows.
+  const [customCategories, setCustomCategories] = useState<string[]>([])
+  const scopeRequestSeq = useRef(0)
+  // Last successfully-applied scope (+ its loader input): the rollback target
+  // when a scoped fetch fails, and the scope the AI grounding refetch reuses.
+  const appliedScopeRef = useRef<{
+    scope: AnalysisScope
+    input: AnalysisDataScope | undefined
+  }>({ scope: DEFAULT_ANALYSIS_SCOPE, input: undefined })
+
+  const effectiveData = override ?? scopeData ?? data
 
   // Explicit opt-in to the illustrative mid-size-ASC model. Off by default:
   // with no COG data the page must not invent a facility (Charles 2026-07-27).
   const [sampleMode, setSampleMode] = useState(false)
   // No live COG, no uploaded file, and no opt-in → there is nothing to model.
-  // Keys off effectiveData (the override when one is installed), NOT `data`.
-  // The two gates disagreed: this one read the LIVE-COG `data.hasData` while
-  // model.ts:190 reads `effectiveData.hasData` for the breakdown source. An
-  // uploaded file whose rows all parse non-positive aggregates to
-  // `hasData: false` (uploaded-spend-to-analysis-data.ts:105 `totalSpend > 0`)
-  // but is still installed as the override — so the empty state was suppressed
-  // by `!override` while the breakdown fell through to the fabricated
-  // CATEGORY_SEED / VENDOR_SEED ortho mix (Medtronic 35.56%, Zimmer Biomet
-  // 22.99%, …), rendered under the subtitle "Modeled from uploaded file X."
-  // with Export enabled. Fabricated vendors under an explicit provenance claim
-  // is the exact defect the empty-COG work removed. One source of truth now.
-  // 2026-07-28 sweep.
-  const showEmptyState = !effectiveData.hasData && !sampleMode
+  // Keys off the SOURCE data (the override when one is installed, else the
+  // default-scope server payload), NOT the scoped refetch. The two gates
+  // disagreed once before (2026-07-28 sweep: an all-non-positive uploaded file
+  // fell through to the fabricated seed mix under a provenance claim) — and a
+  // scoped window with zero COG rows must NOT trigger the full-page "No COG
+  // spend data yet" state either: that message is false (the facility has
+  // data, the WINDOW is empty) and it disabled the very control needed to
+  // widen the window back out (review 2026-08-05). Scoped emptiness renders
+  // as an inline notice instead, with the scope control still active.
+  const sourceData = override ?? data
+  const showEmptyState = !sourceData.hasData && !sampleMode
+  const scopeIsEmpty =
+    !showEmptyState && !override && scopeData !== null && !scopeData.hasData
 
   const [assumptions, setAssumptions] = useState<FacilityModelAssumptions>(() =>
     seedAssumptions(data),
@@ -242,17 +276,112 @@ export function AnalysisDashboardClient({
     [],
   )
 
+  // Scope changes update only the DATA-DRIVEN fields; the unknowable knobs a
+  // user may have tuned (EBITDA margin, discount rate, growth, DCF settings)
+  // survive a window/category change — unlike a source switch (upload/sample/
+  // reset), which replaces the whole model and uses reseedFrom.
+  const applyScopeData = useCallback((d: FacilityAnalysisData) => {
+    const seeded = seedAssumptions(d)
+    setAssumptions((prev) => ({
+      ...prev,
+      netRevenue: seeded.netRevenue,
+      currentVendorSpend: seeded.currentVendorSpend,
+      annualCaseVolume: seeded.annualCaseVolume,
+    }))
+    setSavings(seeded.currentVendorSpend * 0.05)
+    const rev = seedRevenue(d)
+    setRevenueMode(rev.mode)
+    setAvgReimbursementPerCase(rev.avgReimbursementPerCase)
+  }, [])
+
   const handleShowSampleModel = useCallback(() => {
     setSampleMode(true)
     reseedFrom(data, true)
   }, [data, reseedFrom])
 
+  const handleScopeChange = useCallback(
+    (next: AnalysisScope) => {
+      setScope(next)
+      const dates = resolveScopeDates(next)
+      if (next.preset === "custom" && dates === null) {
+        // Custom range with an incomplete pair of dates — keep showing the
+        // currently-applied data until both dates are picked.
+        return
+      }
+      const isDefault = dates === null && next.categories === null
+      if (isDefault) {
+        // Back to the server-rendered default scope — no fetch needed, but an
+        // in-flight scoped fetch must not land afterwards: bump the seq.
+        scopeRequestSeq.current++
+        setScopeLoading(false)
+        setScopeData(null)
+        applyScopeData(data)
+        appliedScopeRef.current = { scope: next, input: undefined }
+        return
+      }
+      const input: AnalysisDataScope = {
+        ...dates,
+        categories: next.categories ?? undefined,
+      }
+      const seq = ++scopeRequestSeq.current
+      setScopeLoading(true)
+      getFacilityAnalysisDataSafe(input)
+        .then((res) => {
+          if (seq !== scopeRequestSeq.current) return
+          if (res.ok) {
+            setScopeData(res.data)
+            applyScopeData(res.data)
+            appliedScopeRef.current = { scope: next, input }
+          } else {
+            toast.error(`Could not load the selected range: ${res.error}`)
+            // Roll the control back to the scope whose data is on screen.
+            setScope(appliedScopeRef.current.scope)
+          }
+        })
+        .catch(() => {
+          if (seq !== scopeRequestSeq.current) return
+          toast.error("Could not load the selected range")
+          setScope(appliedScopeRef.current.scope)
+        })
+        .finally(() => {
+          if (seq === scopeRequestSeq.current) setScopeLoading(false)
+        })
+    },
+    [data, applyScopeData],
+  )
+
+  const handleAddCategory = useCallback(
+    (name: string) => {
+      const canonical = canonicalizeCategoryName(name)
+      if (!canonical) return
+      setCustomCategories((prev) =>
+        prev.includes(canonical) ? prev : [...prev, canonical],
+      )
+      // With a filter active, including the new name changes which COG rows
+      // are in scope (it may be a real in-window category), so route through
+      // handleScopeChange to refetch. With no filter it's already included.
+      if (scope.categories !== null && !scope.categories.includes(canonical)) {
+        handleScopeChange({
+          ...scope,
+          categories: [...scope.categories, canonical],
+        })
+      }
+    },
+    [scope, handleScopeChange],
+  )
+
   const handleApplyUpload = useCallback(
     (d: FacilityAnalysisData, fileName: string) => {
       setOverride(d)
       setOverrideFileName(fileName)
-      // Real uploaded numbers supersede the illustrative model.
+      // Real uploaded numbers supersede the illustrative model — and any
+      // in-flight or applied COG scope (the file has no time dimension).
       setSampleMode(false)
+      scopeRequestSeq.current++
+      setScope(DEFAULT_ANALYSIS_SCOPE)
+      setScopeData(null)
+      setScopeLoading(false)
+      appliedScopeRef.current = { scope: DEFAULT_ANALYSIS_SCOPE, input: undefined }
       reseedFrom(d)
     },
     [reseedFrom],
@@ -262,6 +391,12 @@ export function AnalysisDashboardClient({
     setOverride(null)
     setOverrideFileName(null)
     setSampleMode(false)
+    // Back to the default window/categories alongside the default source.
+    scopeRequestSeq.current++
+    setScope(DEFAULT_ANALYSIS_SCOPE)
+    setScopeData(null)
+    setScopeLoading(false)
+    appliedScopeRef.current = { scope: DEFAULT_ANALYSIS_SCOPE, input: undefined }
     reseedFrom(data)
   }, [data, reseedFrom])
 
@@ -299,16 +434,65 @@ export function AnalysisDashboardClient({
     [assumptions, effectiveNetRevenue],
   )
 
+  // User-added categories without COG rows join the breakdown as zero-spend
+  // planning rows so they show up in every category table.
+  const dataForModel = useMemo<FacilityAnalysisData>(() => {
+    // A scoped-but-empty window must NOT let the model fall back to the
+    // fabricated CATEGORY_SEED/VENDOR_SEED mix (model.ts keys the breakdown
+    // source off hasData): force hasData so it renders honest empty
+    // breakdowns and zeros instead.
+    const base = scopeIsEmpty
+      ? { ...effectiveData, hasData: true }
+      : effectiveData
+    if (customCategories.length === 0) return base
+    const existing = new Set(base.categories.map((c) => c.category))
+    const extras = customCategories
+      .filter((name) => !existing.has(name))
+      .map((category) => ({
+        category,
+        spendShare: 0,
+        asp: 0,
+        volumeShare: 0,
+        marginPct: base.avgMarginPct,
+      }))
+    if (extras.length === 0) return base
+    return { ...base, categories: [...base.categories, ...extras] }
+  }, [effectiveData, customCategories, scopeIsEmpty])
+
   const model = useMemo(
     () =>
       buildDashboardModel(
         effectiveAssumptions,
         savings,
         DEFAULT_AI_INPUTS,
-        effectiveData,
+        dataForModel,
       ),
-    [effectiveAssumptions, savings, effectiveData],
+    [effectiveAssumptions, savings, dataForModel],
   )
+
+  // Vendor-spend card copy: always show the monthly average; on a
+  // non-default window also name the window and its actual (non-annualized)
+  // total, since the headline figure is the annual run rate the model uses.
+  // A category-only filter (window still ≈12 months) names the selection
+  // instead — there the total needs no annualizing.
+  const usingDefaultScope = scopeData === null || override !== null
+  const windowIsAnnual = Math.abs(effectiveData.windowMonths - 12) < 0.2
+  const avgPerMonth = usingDefaultScope
+    ? model.prospective.current.vendorSpend / 12
+    : effectiveData.avgMonthlySpend
+  const spendSublabel = override
+    ? undefined
+    : usingDefaultScope
+      ? `Total annual supply spend · avg ${usdCompact(avgPerMonth)}/mo`
+      : windowIsAnnual
+        ? `${
+            scope.categories === null
+              ? "All categories"
+              : `${scope.categories.length} selected categories`
+          } · avg ${usdCompact(avgPerMonth)}/mo`
+        : `Annualized from ${usdCompact(effectiveData.currentVendorSpend)} over ${describeScopeRange(
+            scope,
+          )} · avg ${usdCompact(avgPerMonth)}/mo`
 
   const insights = useFacilityAnalysisInsights()
 
@@ -322,16 +506,25 @@ export function AnalysisDashboardClient({
             Administrator / CFO view.{" "}
             {override
               ? `Modeled from uploaded file ${overrideFileName}.`
-              : data.hasData
-                ? "Modeled from your facility's live spend and case data."
-                : sampleMode
-                  ? "Sample model — illustrative figures, not this facility's data."
+              : sampleMode
+                ? "Sample model — illustrative figures, not this facility's data."
+                : data.hasData
+                  ? "Modeled from your facility's live spend and case data."
                   : "No COG spend data yet."}{" "}
             {!showEmptyState &&
               "Tune any assumption and every figure recalculates instantly."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <AnalysisScopeControl
+            scope={scope}
+            onScopeChange={handleScopeChange}
+            availableCategories={effectiveData.availableCategories}
+            customCategories={customCategories}
+            onAddCategory={handleAddCategory}
+            disabled={!!override || sampleMode || showEmptyState}
+            isLoading={scopeLoading}
+          />
           <UploadedDataControl
             activeFileName={overrideFileName}
             onApply={handleApplyUpload}
@@ -420,7 +613,21 @@ export function AnalysisDashboardClient({
             </div>
           )}
 
-          <CurrentStateCards current={model.prospective.current} />
+          {scopeIsEmpty && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+              <p className="text-muted-foreground">
+                No COG spend in the selected window
+                {scope.categories !== null ? " and categories" : ""}. Widen the
+                date range or category selection to see your data.
+              </p>
+            </div>
+          )}
+
+          <CurrentStateCards
+            current={model.prospective.current}
+            {...(spendSublabel ? { spendSublabel } : {})}
+          />
 
       {/* `assumptions`, NOT `effectiveAssumptions`. The card's `set` does
           `onChange({ ...assumptions, [key]: value })`, so whatever object it is
@@ -479,7 +686,12 @@ export function AnalysisDashboardClient({
         isPending={insights.isPending}
         error={insights.error}
         onGenerate={() =>
-          insights.mutate(buildSnapshot(model, effectiveData.revenueIsImplied))
+          insights.mutate({
+            snapshot: buildSnapshot(model, effectiveData.revenueIsImplied),
+            // Ground the AI's category/vendor names in the SAME scope the
+            // snapshot numbers came from.
+            scope: appliedScopeRef.current.input,
+          })
         }
       />
 

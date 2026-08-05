@@ -91,6 +91,14 @@ export function aggregateUploadedSpend(
 
   return {
     currentVendorSpend: totalSpend,
+    // An uploaded file has no time dimension — treat it as an annual figure
+    // (12-month semantics), matching how the dashboard always modeled it.
+    windowStart: "",
+    windowEnd: "",
+    windowMonths: 12,
+    avgMonthlySpend: totalSpend / 12,
+    annualizedVendorSpend: totalSpend,
+    availableCategories: [...categoryAgg.keys()],
     netRevenue: totalSpend / IMPLIED_SUPPLY_COST_PCT,
     revenueIsImplied: true,
     // Uploaded spend files carry no case reimbursement — Actuals is empty,
