@@ -23,6 +23,7 @@ import {
   isPercentRebateType,
   toDisplayRebateValue,
 } from "@/lib/contracts/rebate-value-normalize"
+import { NON_PERCENT_TIER_TERM_TYPES } from "./_form/_term-type-config"
 
 interface ContractTierRowProps {
   tier: TierInput
@@ -113,20 +114,10 @@ const rebateTypes = [
 // `rebateType` (percent_of_spend → spend × percent; fixed_rebate →
 // flat $; per-unit/per-procedure → qty × rate).
 //
-// rebate_per_use, capitated_pricing_rebate, compliance_rebate,
-// fixed_fee, payment_rebate, po_rebate stay locked: their engine
-// paths quantify achievement in occurrences or percent points
-// without a per-period dollar base, so a percent rebate has nothing
-// well-defined to apply against until each gets its own COG-records
-// or invoice-records bridge.
-const NON_PERCENT_TERM_TYPES = new Set([
-  "rebate_per_use",
-  "capitated_pricing_rebate",
-  "compliance_rebate",
-  "fixed_fee",
-  "payment_rebate",
-  "po_rebate",
-])
+// The locked membership is the shared NON_PERCENT_TIER_TERM_TYPES
+// (_form/_term-type-config.ts) — also used by the term form's mount
+// self-heal and type-change cascade, so the three consumers can't
+// drift apart.
 const dollarOnlyRebateTypes = rebateTypes.filter(
   (rt) => rt.value !== "percent_of_spend",
 )
@@ -137,7 +128,7 @@ function rebateTypesForTerm(
   if (termType === "price_reduction") {
     return [{ value: "percent_of_spend", label: "% off contract price" }]
   }
-  if (termType && NON_PERCENT_TERM_TYPES.has(termType)) {
+  if (termType && NON_PERCENT_TIER_TERM_TYPES.has(termType)) {
     // Preserve a legacy `percent_of_spend` option in the picker when the
     // tier already carries that value, so the user can SEE the
     // mis-shaped row and re-pick a compatible type. Without this, the
