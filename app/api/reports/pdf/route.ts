@@ -15,6 +15,7 @@ import {
   type AnalysisReportPayload,
   type OpportunityReportPayload,
 } from "@/lib/pdf"
+import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { getReportData } from "@/lib/actions/reports"
 import { getVendorReportData } from "@/lib/actions/vendor-reports/report-data"
 import {
@@ -374,9 +375,12 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           )
         }
-        // Verify contract belongs to user's facility.
+        // Verify contract belongs to user's facility — via the canonical
+        // ownership predicate, so multi-facility (join-table) contracts
+        // export for their rightful owners too (a bare facilityId check
+        // 403'd them).
         const contract = await prisma.contract.findFirst({
-          where: { id, facilityId: userFacilityId },
+          where: contractOwnershipWhere(id, userFacilityId),
           select: { id: true },
         })
         if (!contract) {
