@@ -73,7 +73,7 @@ vi.mock("@/lib/serialize", () => ({
   serialize: <T,>(x: T) => x,
 }))
 
-import { getContract } from "@/lib/actions/contracts"
+import { getContract } from "@/lib/actions/contracts/get-contract"
 
 function makeContract(overrides: Partial<ContractShape> = {}): ContractShape {
   return {

@@ -44,7 +44,7 @@ vi.mock("next/cache", () => ({
 }))
 
 // Import AFTER the mock so createContract picks it up.
-const { createContract } = await import("@/lib/actions/contracts")
+const { createContract } = await import("@/lib/actions/contracts/create")
 
 d("createContract — Mako tie-in carve-out (Bugs.rtfd 2026-05-25)", () => {
   beforeAll(async () => {

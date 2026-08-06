@@ -40,7 +40,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
-import { createContractDocument } from "@/lib/actions/contracts"
+import { createContractDocument } from "@/lib/actions/contracts/document-attach"
 
 type UploadStage = "idle" | "creating" | "indexing" | "done"
 

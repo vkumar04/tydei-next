@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation"
 import { requireFacility } from "@/lib/actions/auth"
-import { getContract } from "@/lib/actions/contracts"
+import { getContract } from "@/lib/actions/contracts/get-contract"
 import { getContractPerformanceBundle } from "@/lib/actions/analytics/contract-performance-bundle"
 import { ContractDetailClient } from "@/components/contracts/contract-detail-client"
 

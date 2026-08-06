@@ -9,7 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import type { getContract } from "@/lib/actions/contracts"
+import type { getContract } from "@/lib/actions/contracts/get-contract"
 import type { TierProgressResult } from "@/lib/contracts/tier-progress"
 import type { ProjectedRebateResult } from "@/lib/contracts/projected-rebate"
 import { formatCurrency, formatCalendarDate, formatPercent } from "@/lib/formatting"

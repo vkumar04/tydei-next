@@ -27,7 +27,7 @@ vi.mock("@/lib/actions/auth", () => ({
   }),
 }))
 
-import { getContracts } from "@/lib/actions/contracts"
+import { getContracts } from "@/lib/actions/contracts/list"
 
 describe("getContracts (no type filter)", () => {
   it("returns active contracts of all types", async () => {

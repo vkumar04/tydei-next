@@ -17,12 +17,22 @@ const { getContractsMock } = vi.hoisted(() => ({
   getContractsMock: vi.fn(),
 }))
 
-vi.mock("@/lib/actions/contracts", () => ({
+vi.mock("@/lib/actions/contracts/list", () => ({
   getContracts: getContractsMock,
+}))
+vi.mock("@/lib/actions/contracts/get-contract", () => ({
   getContract: vi.fn(),
+}))
+vi.mock("@/lib/actions/contracts/stats", () => ({
   getContractStats: vi.fn(),
+}))
+vi.mock("@/lib/actions/contracts/create", () => ({
   createContractSafe: vi.fn(),
+}))
+vi.mock("@/lib/actions/contracts/update", () => ({
   updateContract: vi.fn(),
+}))
+vi.mock("@/lib/actions/contracts/delete", () => ({
   deleteContract: vi.fn(),
 }))
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))

@@ -7,14 +7,12 @@ import {
   useQueryClient,
 } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
-import {
-  getContracts,
-  getContract,
-  getContractStats,
-  createContractSafe,
-  updateContract,
-  deleteContract,
-} from "@/lib/actions/contracts"
+import { getContracts } from "@/lib/actions/contracts/list"
+import { getContract } from "@/lib/actions/contracts/get-contract"
+import { getContractStats } from "@/lib/actions/contracts/stats"
+import { createContractSafe } from "@/lib/actions/contracts/create"
+import { updateContract } from "@/lib/actions/contracts/update"
+import { deleteContract } from "@/lib/actions/contracts/delete"
 import type { ContractFilters } from "@/lib/validators/contracts"
 import type { FacilityScope } from "@/lib/actions/contracts-auth"
 import { toast } from "sonner"

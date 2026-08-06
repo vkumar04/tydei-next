@@ -136,7 +136,7 @@ vi.mock("@/lib/actions/contracts-auth", () => ({
 }))
 vi.mock("next/cache", () => import("@/tests/setup/next-cache-mock"))
 
-import { updateContract } from "@/lib/actions/contracts"
+import { updateContract } from "@/lib/actions/contracts/update"
 import {
   updateContractTerm,
   upsertContractTiers,

@@ -7,7 +7,7 @@
  * up in the fast unit tier.
  */
 import { describe, it, expect } from "vitest"
-import type { MergedContract } from "../contracts"
+import type { MergedContract } from "@/lib/contracts/merged-contract"
 
 // Re-implement the helper under test. Keeping this local avoids having to
 // import the full "use server" file which pulls the whole DB layer.

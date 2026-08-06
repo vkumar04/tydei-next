@@ -28,7 +28,7 @@ import {
   getDashboardCharts,
   type DashboardChartsPayload,
 } from "@/lib/actions/dashboard/lifecycle"
-import { getContractStats } from "@/lib/actions/contracts"
+import { getContractStats } from "@/lib/actions/contracts/stats"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DashboardHero } from "./dashboard-hero"
 import { DashboardLifecyclePie } from "./dashboard-lifecycle-pie"

@@ -24,7 +24,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useContract, useDeleteContract } from "@/hooks/use-contracts"
-import type { getContract } from "@/lib/actions/contracts"
+import type { getContract } from "@/lib/actions/contracts/get-contract"
 import { getContractPeriods } from "@/lib/actions/contract-periods"
 import { formatCurrency, formatCalendarDate, formatPercent } from "@/lib/formatting"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"

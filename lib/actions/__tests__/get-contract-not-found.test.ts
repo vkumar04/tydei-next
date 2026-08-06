@@ -70,7 +70,7 @@ class FakePrismaKnownError extends Error {
   }
 }
 
-import { getContract } from "@/lib/actions/contracts"
+import { getContract } from "@/lib/actions/contracts/get-contract"
 
 describe("getContract — cross-facility contract id (Charles R5.18)", () => {
   beforeEach(() => {

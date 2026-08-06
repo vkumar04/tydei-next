@@ -106,7 +106,11 @@ describe("parity: cross-surface category-filter wiring catalog", () => {
       "lib/contracts/accrual-timeline/build-timeline.ts",
       "lib/contracts/accrual-timeline/overlay-only-path.ts",
       "lib/contracts/accrual-timeline/volume-series.ts",
-      "lib/actions/contracts.ts", // getContracts trailing-12mo cascade
+      // getContracts / getContract spend cascades — lib/actions/contracts.ts
+      // was decomposed into per-action files 2026-08-05; the category-scoped
+      // COG reads live in these two modules now.
+      "lib/actions/contracts/list.ts", // getContracts trailing-12mo cascade
+      "lib/actions/contracts/get-contract.ts", // detail cascade + per-term scoped spend
     ] as const
 
     for (const relative of readSites) {

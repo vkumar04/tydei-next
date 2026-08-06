@@ -17,7 +17,7 @@ vi.mock("@/lib/actions/auth", () => ({
   }),
 }))
 
-import { getContracts } from "@/lib/actions/contracts"
+import { getContracts } from "@/lib/actions/contracts/list"
 
 beforeEach(() => {
   vi.clearAllMocks()

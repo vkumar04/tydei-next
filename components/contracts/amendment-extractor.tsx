@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { updateContract } from "@/lib/actions/contracts"
+import { updateContract } from "@/lib/actions/contracts/update"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { AmendmentChange } from "@/app/api/ai/extract-amendment/route"

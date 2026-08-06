@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { formatCurrency } from "@/lib/formatting"
 import { PieChart } from "lucide-react"
 import { getFacilityCategorySpend } from "@/lib/actions/cog/facility-category-spend"
-import { getContractStats } from "@/lib/actions/contracts"
+import { getContractStats } from "@/lib/actions/contracts/stats"
 
 const UNCATEGORIZED_FOOTNOTE_THRESHOLD = 0.05
 

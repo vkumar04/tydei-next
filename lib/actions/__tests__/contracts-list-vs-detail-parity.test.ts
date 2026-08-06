@@ -151,7 +151,8 @@ vi.mock("@/lib/serialize", () => ({
   serialize: <T,>(x: T) => x,
 }))
 
-import { getContracts, getContract } from "@/lib/actions/contracts"
+import { getContracts } from "@/lib/actions/contracts/list"
+import { getContract } from "@/lib/actions/contracts/get-contract"
 import { getRebateOpportunities } from "@/lib/actions/rebate-optimizer"
 import { pickThresholdMetric } from "@/lib/contracts/tier-metric"
 import { mapRebateRowsToLedger } from "@/components/contracts/contract-transactions-display"

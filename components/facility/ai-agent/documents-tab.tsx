@@ -60,7 +60,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { deleteContractDocument } from "@/lib/actions/contracts"
+import { deleteContractDocument } from "@/lib/actions/contracts/document-attach"
 import { UploadDocumentDialog } from "./upload-document-dialog"
 import type { AiDocumentListItem } from "@/app/api/ai/documents/route"
 
