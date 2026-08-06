@@ -57,7 +57,7 @@ const MANIFEST: EngineWiring[] = [
     fn: "buildTieInAmortizationSchedule",
     source: "lib/rebates/engine/amortization.ts",
     status: "wired",
-    note: "Covered via lib/actions/contracts/tie-in.ts imports; wiring test: contract-term-amortization-shape.test.ts",
+    note: "Covered via lib/contracts/capital-schedule-aggregate.ts (aggregatePerItemSchedules), the pure helper the capital-schedule/projection actions in lib/actions/contracts/tie-in.ts call; wiring test: contract-term-amortization-shape.test.ts",
   },
   {
     fn: "calculateCapitated",
@@ -93,7 +93,7 @@ const MANIFEST: EngineWiring[] = [
     fn: "calculateTieInCapital",
     source: "lib/rebates/engine/tie-in-capital.ts",
     status: "wired",
-    note: "Per-period evaluator reachable via getTieInCapitalForContractPeriod in lib/actions/contracts/tie-in-period.ts. The engine config TieInCapitalConfig is single-asset; multi-line tydei contracts (1:N ContractCapitalLineItem) are handled by wrapper aggregation — the wrapper invokes calculateTieInCapital ONCE PER LINE and sums the per-line scheduledAmortizationDue / shortfall / remainingBalance into totals, exposing per-line breakdown on the response (see TieInCapitalPeriodResult.perLine). Lifetime 'rebate applied to capital' aggregates continue to route through the canonical sumRebateAppliedToCapital helper (CLAUDE.md invariants table) — the engine path is for future per-period dashboards. Schedule side already wired via buildTieInAmortizationSchedule from lib/actions/contracts/tie-in.ts.",
+    note: "Per-period evaluator reachable via getTieInCapitalForContractPeriod in lib/actions/contracts/tie-in-period.ts. The engine config TieInCapitalConfig is single-asset; multi-line tydei contracts (1:N ContractCapitalLineItem) are handled by wrapper aggregation — the wrapper invokes calculateTieInCapital ONCE PER LINE and sums the per-line scheduledAmortizationDue / shortfall / remainingBalance into totals, exposing per-line breakdown on the response (see TieInCapitalPeriodResult.perLine). Lifetime 'rebate applied to capital' aggregates continue to route through the canonical sumRebateAppliedToCapital helper (CLAUDE.md invariants table) — the engine path is for future per-period dashboards. Schedule side already wired via buildTieInAmortizationSchedule through lib/contracts/capital-schedule-aggregate.ts, consumed by the actions in lib/actions/contracts/tie-in.ts.",
   },
   {
     fn: "calculateTierPriceReduction",

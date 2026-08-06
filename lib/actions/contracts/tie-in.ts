@@ -17,7 +17,6 @@ import {
   type TieInMember,
   type MemberPerformance,
 } from "@/lib/contracts/tie-in"
-import { buildTieInAmortizationSchedule } from "@/lib/rebates/engine/amortization"
 import type { AmortizationEntry } from "@/lib/rebates/engine/types"
 import {
   contractOwnershipWhere,
@@ -32,8 +31,20 @@ import {
   sumCapitalCost,
   sumFinancedPrincipal,
   sumInitialSales,
-  type NormalizedCapitalLineItem,
 } from "@/lib/contracts/capital-line-items"
+import {
+  addMonths,
+  aggregatePerItemSchedules,
+  bucketCollectionsByPeriod,
+  monthsPerPeriod,
+  toCadence,
+} from "@/lib/contracts/capital-schedule-aggregate"
+import { emptyCapitalScheduleResult } from "@/lib/contracts/capital-schedule-types"
+import type {
+  ContractCapitalProjection,
+  ContractCapitalScheduleResult,
+  ContractCapitalScheduleRow,
+} from "@/lib/contracts/capital-schedule-types"
 
 export async function getContractTieInBundle(contractId: string) {
   const { facility } = await requireFacility()
@@ -171,244 +182,18 @@ export async function getContractTieInBundle(contractId: string) {
  * so it crosses the server-action boundary cleanly.
  */
 
-export interface ContractCapitalScheduleRow {
-  periodNumber: number
-  periodDate: string
-  openingBalance: number
-  interestCharge: number
-  principalDue: number
-  amortizationDue: number
-  closingBalance: number
-  /**
-   * Charles 2026-04-25 (Bug 23): collected rebate that landed inside this
-   * period's window (collectionDate falls between the previous row's
-   * periodDate and this row's periodDate, inclusive of the upper bound).
-   * Only populated for tie-in contracts where rebate retires capital;
-   * 0 for non-tie-in. Sums across rows equal `rebateAppliedToCapital`.
-   */
-  rebateAppliedThisPeriod: number
-}
-
-export interface ContractCapitalScheduleResult {
-  /** null → this contract does not have a tie-in capital term yet. */
-  hasSchedule: boolean
-  capitalCost: number
-  /** Charles audit pass-4: cash put down at signing. */
-  downPayment: number
-  /** Charles audit pass-4: capitalCost − downPayment, what the schedule actually amortizes. */
-  financedPrincipal: number
-  interestRate: number
-  termMonths: number
-  period: "monthly" | "quarterly" | "semi_annual" | "annual"
-  schedule: ContractCapitalScheduleRow[]
-  /** periodNumber of the last row whose periodDate ≤ today; 0 when none. */
-  elapsedPeriods: number
-  remainingBalance: number
-  /**
-   * Capital paid down to date.
-   *
-   * Charles W1.Y-C (C2): on tie-in contracts, "Paid to Date" is the sum
-   * of collected rebate (`sumRebateAppliedToCapital`) — not the sum of
-   * scheduled `principalDue` across elapsed periods. The schedule is a
-   * forecast, not a ledger; collected rebate is the only actual paydown.
-   * For non-tie-in contracts this is 0.
-   */
-  paidToDate: number
-  /**
-   * Sum of collected rebate that has been applied to the capital balance
-   * (Charles W1.Y-C). Surfaced separately so the UI can label the number
-   * unambiguously (tie-in capital retires via rebate, not cash).
-   */
-  rebateAppliedToCapital: number
-  /**
-   * Sum of user-logged payments/credits applied to the capital balance
-   * (Charles 2026-06-20: "payments and credits are how things are paid
-   * off"). These are the `Log Credit / Payment` entries — on a pure capital
-   * contract (no rebates) this is the ONLY paydown. Part of `paidToDate`.
-   */
-  paymentsAppliedToCapital: number
-  /**
-   * Projected capital balance at the contract's scheduled expiration
-   * given the trailing-rebate paydown velocity. $0 means the paydown is
-   * on track to retire the balance before the term ends. Charles (W1.E
-   * follow-up) — medical tie-in contracts are locked to set term end
-   * dates, so "projected payoff date" isn't meaningful; the useful
-   * question is "will the balance be cleared BY the term end?"
-   */
-  projectedEndOfTermBalance: number | null
-  /** Charles W1.Y-D — contract type, so the card can conditionally render
-   * the tie-in-only Minimum Annual Purchase + retirement block. */
-  contractType: string
-  /** Charles W1.Y-D — minimum annual purchase floor. E4 (Charles
-   * 2026-06-06): now the LOWEST positive `minimumPurchaseCommitment` across
-   * the contract's terms (was largest), falling back to the lowest positive
-   * `spendBaseline`. Null when no term has either. */
-  minAnnualPurchase: number | null
-  /** E4 (Charles 2026-06-06) — where `minAnnualPurchase` came from, so the
-   * card can disclose the choice. Null when there's no floor at all. */
-  minAnnualPurchaseSource: "commitment" | "baseline" | null
-  /** E4 (Charles 2026-06-06) — count of terms carrying a positive
-   * `minimumPurchaseCommitment`; lets the UI say "lowest of N". 0 when the
-   * floor came from a baseline fallback or there's no floor. */
-  minAnnualPurchaseCommitmentCount: number
-  /** E3 (Charles 2026-06-06) — forward-looking pace toward the floor at the
-   * current rolling-12 run rate. Null when there's no floor. */
-  minAnnualPace: {
-    projectedAnnualSpend: number
-    onPaceToMeet: boolean
-    monthlySpendNeeded: number
-  } | null
-  /** Charles W1.Y-D — trailing-12mo spend, computed via the same cascade
-   * as `getContract` (ContractPeriod → COG contract-scoped → COG
-   * vendor-scoped). Feeds `computeMinAnnualShortfall`. */
-  rolling12Spend: number
-  /** Charles W1.Y-D — current tier rate as integer percent (5 = 5%),
-   * derived from the contract's first tiered term at `rolling12Spend`.
-   * Zero when no tiered term / tiers exist. */
-  currentTierPercent: number
-  /** Charles W1.Y-D — remaining periods on the amortization schedule
-   * (total − elapsed) expressed in MONTHS. Feeds
-   * `computeCapitalRetirementNeeded`. */
-  monthsRemaining: number
-  /**
-   * Charles audit suggestion #4 (v0-port): per-asset capital line
-   * items. v0's tie-in card renders one row per leased item. When
-   * there are no real line items, this contains the synthesized
-   * single item from the legacy contract-level fields (isLegacy=true).
-   */
-  capitalLineItems: NormalizedCapitalLineItem[]
-}
-
-function addMonths(date: Date, months: number): Date {
-  const d = new Date(date)
-  d.setMonth(d.getMonth() + months)
-  return d
-}
-
-/**
- * Charles audit suggestion #4 (v0-port): aggregate per-item
- * amortization schedules into a combined view. Each line item
- * amortizes independently (its own financedPrincipal × interestRate
- * × termMonths × cadence) and the rows are summed period-by-period.
- *
- * Items with different cadences are first projected onto the longest
- * cadence's grid (e.g. quarterly + monthly → monthly grid; quarterly
- * payments land on every 3rd month). Items with different term
- * lengths produce zero rows past their own end (the longest term
- * defines schedule length).
- */
-type Cadence = "monthly" | "quarterly" | "semi_annual" | "annual"
-
-const CADENCES: readonly string[] = ["monthly", "quarterly", "semi_annual", "annual"]
-/** Coerce a contract's rebatePayPeriod (PerformancePeriod enum) to a Cadence. */
-function toCadence(s: string | null | undefined): Cadence | undefined {
-  return s && CADENCES.includes(s) ? (s as Cadence) : undefined
-}
-
-function aggregatePerItemSchedules(
-  items: ReadonlyArray<NormalizedCapitalLineItem>,
-  // Bug 3: when set, every item amortizes on this cadence instead of its
-  // own stored paymentCadence — used to make the schedule follow the
-  // contract's rebatePayPeriod.
-  cadenceOverride?: Cadence,
-): { entries: AmortizationEntry[]; period: Cadence } {
-  if (items.length === 0) return { entries: [], period: "monthly" }
-  // Bug #11 defense-in-depth: if every item has zero financed principal
-  // (e.g. user set Initial Sales == Contract Total), there's nothing to
-  // amortize — return empty so the UI surfaces the "no schedule" empty
-  // state instead of N rows full of $0 columns. The parent
-  // `getContractCapitalSchedule` already short-circuits via
-  // `financedPrincipal <= 0` but this guards aggregator-callers too.
-  const totalFinanced = items.reduce(
-    (acc, i) => acc + Math.max(0, i.contractTotal - i.initialSales),
-    0,
-  )
-  if (totalFinanced <= 0) return { entries: [], period: "monthly" }
-
-  // Find the finest cadence (smallest months-per-period) so we render
-  // on the densest possible grid — unless the caller overrides it.
-  const cadences = new Set(items.map((i) => i.paymentCadence))
-  const period: Cadence =
-    cadenceOverride ??
-    (cadences.has("monthly")
-      ? "monthly"
-      : cadences.has("quarterly")
-        ? "quarterly"
-        : cadences.has("semi_annual")
-          ? "semi_annual"
-          : "annual")
-  const stepMonths = monthsPerPeriod(period)
-
-  // Build each item's schedule on its own cadence, then map onto the
-  // combined cadence's period numbers.
-  const totalMonths = Math.max(...items.map((i) => i.termMonths))
-  const totalPeriods = Math.ceil(totalMonths / stepMonths)
-  const combined = Array.from({ length: totalPeriods }, (_, i) => ({
-    periodNumber: i + 1,
-    openingBalance: 0,
-    interestCharge: 0,
-    principalDue: 0,
-    amortizationDue: 0,
-    closingBalance: 0,
-  }))
-
-  for (const item of items) {
-    const itemFinanced = Math.max(0, item.contractTotal - item.initialSales)
-    if (itemFinanced <= 0 || item.termMonths <= 0) continue
-    const itemCadence = cadenceOverride ?? item.paymentCadence
-    const sched = buildTieInAmortizationSchedule({
-      capitalCost: itemFinanced,
-      interestRate: item.interestRate,
-      termMonths: item.termMonths,
-      period: itemCadence,
-    })
-    const itemStep = monthsPerPeriod(itemCadence)
-    // Charles audit final: project the per-item schedule onto the
-    // combined grid, carrying balances forward in non-payment periods
-    // so the running-balance display stays smooth instead of
-    // sawtoothing on quarterly-on-monthly grids. The item's payment
-    // (interest + principal + amortizationDue) only lands in the
-    // period its payment is actually due; openingBalance and
-    // closingBalance carry the item's outstanding principal across
-    // every period.
-    let lastClosing = itemFinanced
-    let scheduleIdx = 0
-    for (let p = 0; p < combined.length; p++) {
-      const monthsAtEndOfPeriod = (p + 1) * stepMonths
-      // Walk the per-item schedule rows whose due-date falls within
-      // this combined period.
-      const target = combined[p]
-      target.openingBalance += lastClosing
-      while (
-        scheduleIdx < sched.length &&
-        sched[scheduleIdx].periodNumber * itemStep <= monthsAtEndOfPeriod
-      ) {
-        const row = sched[scheduleIdx]
-        target.interestCharge += row.interestCharge
-        target.principalDue += row.principalDue
-        target.amortizationDue += row.amortizationDue
-        lastClosing = row.closingBalance
-        scheduleIdx += 1
-      }
-      target.closingBalance += lastClosing
-    }
-  }
-
-  return { entries: combined, period }
-}
-
-function monthsPerPeriod(p: "monthly" | "quarterly" | "semi_annual" | "annual"): number {
-  switch (p) {
-    case "monthly":
-      return 1
-    case "quarterly":
-      return 3
-    case "semi_annual":
-      return 6
-    case "annual":
-      return 12
-  }
-}
+// Result interfaces + the shared empty-result factory live in
+// lib/contracts/capital-schedule-types.ts; the cadence math and per-item
+// schedule aggregation (which wire buildTieInAmortizationSchedule from
+// lib/rebates/engine/amortization.ts into these actions) live in
+// lib/contracts/capital-schedule-aggregate.ts. Re-export the interfaces via
+// the scanner-safe `export type { ... } from` form so importers keep
+// compiling (a LOCAL export-type clause would register as a server action
+// and crash the module in prod — see use-server-async-export-scanner).
+export type {
+  ContractCapitalScheduleRow,
+  ContractCapitalScheduleResult,
+} from "@/lib/contracts/capital-schedule-types"
 
 export async function getContractCapitalSchedule(
   contractId: string,
@@ -483,31 +268,7 @@ export async function getContractCapitalSchedule(
     },
   })
 
-  const empty: ContractCapitalScheduleResult = {
-    hasSchedule: false,
-    capitalCost: 0,
-    downPayment: 0,
-    financedPrincipal: 0,
-    interestRate: 0,
-    termMonths: 0,
-    period: "monthly",
-    schedule: [],
-    elapsedPeriods: 0,
-    remainingBalance: 0,
-    paidToDate: 0,
-    rebateAppliedToCapital: 0,
-    paymentsAppliedToCapital: 0,
-    projectedEndOfTermBalance: null,
-    contractType: contract?.contractType ?? "usage",
-    minAnnualPurchase: null,
-    minAnnualPurchaseSource: null,
-    minAnnualPurchaseCommitmentCount: 0,
-    minAnnualPace: null,
-    rolling12Spend: 0,
-    currentTierPercent: 0,
-    monthsRemaining: 0,
-    capitalLineItems: [],
-  }
+  const empty = emptyCapitalScheduleResult(contract?.contractType ?? "usage")
 
   if (!contract) return empty
 
@@ -625,7 +386,6 @@ export async function getContractCapitalSchedule(
   // capital silently un-paydown.
   const isTieIn = contract.contractType === "tie_in"
   const isCapital = contract.contractType === "capital"
-  const collectionsByPeriod = new Map<number, number>()
   // Aggregate own + sibling rebates so we walk one combined list.
   const allRebates: CollectedRebateLike[] = isTieIn
     ? [...contract.rebates]
@@ -653,25 +413,10 @@ export async function getContractCapitalSchedule(
       allRebates.push(...contract.rebates)
     }
   }
-  if (isTieIn || isCapital) {
-    for (const r of allRebates) {
-      if (!r.collectionDate) continue
-      const collectedMs = new Date(r.collectionDate).getTime()
-      const startMs = start.getTime()
-      if (collectedMs < startMs) continue
-      const monthsSinceStart =
-        (collectedMs - startMs) / (1000 * 60 * 60 * 24 * 30.4375)
-      const periodNumber = Math.max(
-        1,
-        Math.min(entries.length, Math.ceil(monthsSinceStart / monthsStep)),
-      )
-      const prior = collectionsByPeriod.get(periodNumber) ?? 0
-      collectionsByPeriod.set(
-        periodNumber,
-        prior + Number(r.rebateCollected ?? 0),
-      )
-    }
-  }
+  const collectionsByPeriod =
+    isTieIn || isCapital
+      ? bucketCollectionsByPeriod(allRebates, start, entries.length, monthsStep)
+      : new Map<number, number>()
   const schedule: ContractCapitalScheduleRow[] = entries.map((e) => {
     const periodDate = addMonths(start, e.periodNumber * monthsStep)
     return {
@@ -950,31 +695,7 @@ export async function getVendorContractCapitalSchedule(
     },
   })
 
-  const empty: ContractCapitalScheduleResult = {
-    hasSchedule: false,
-    capitalCost: 0,
-    downPayment: 0,
-    financedPrincipal: 0,
-    interestRate: 0,
-    termMonths: 0,
-    period: "monthly",
-    schedule: [],
-    elapsedPeriods: 0,
-    remainingBalance: 0,
-    paidToDate: 0,
-    rebateAppliedToCapital: 0,
-    paymentsAppliedToCapital: 0,
-    projectedEndOfTermBalance: null,
-    contractType: contract?.contractType ?? "usage",
-    minAnnualPurchase: null,
-    minAnnualPurchaseSource: null,
-    minAnnualPurchaseCommitmentCount: 0,
-    minAnnualPace: null,
-    rolling12Spend: 0,
-    currentTierPercent: 0,
-    monthsRemaining: 0,
-    capitalLineItems: [],
-  }
+  const empty = emptyCapitalScheduleResult(contract?.contractType ?? "usage")
 
   if (!contract) return empty
 
@@ -1069,26 +790,10 @@ export async function getVendorContractCapitalSchedule(
     }
   }
 
-  const collectionsByPeriod = new Map<number, number>()
-  if (isTieIn || isCapital) {
-    for (const r of allRebates) {
-      if (!r.collectionDate) continue
-      const collectedMs = new Date(r.collectionDate).getTime()
-      const startMs = start.getTime()
-      if (collectedMs < startMs) continue
-      const monthsSinceStart =
-        (collectedMs - startMs) / (1000 * 60 * 60 * 24 * 30.4375)
-      const periodNumber = Math.max(
-        1,
-        Math.min(entries.length, Math.ceil(monthsSinceStart / monthsStep)),
-      )
-      const prior = collectionsByPeriod.get(periodNumber) ?? 0
-      collectionsByPeriod.set(
-        periodNumber,
-        prior + Number(r.rebateCollected ?? 0),
-      )
-    }
-  }
+  const collectionsByPeriod =
+    isTieIn || isCapital
+      ? bucketCollectionsByPeriod(allRebates, start, entries.length, monthsStep)
+      : new Map<number, number>()
 
   const schedule: ContractCapitalScheduleRow[] = entries.map((e) => {
     const periodDate = addMonths(start, e.periodNumber * monthsStep)
@@ -1151,43 +856,9 @@ export async function getVendorContractCapitalSchedule(
   })
 }
 
-export interface ContractCapitalProjection {
-  /** True when the contract has a tie-in capital term with capitalCost > 0. */
-  hasProjection: boolean
-  /** Dollars per month, from trailing-90-day rebate velocity. */
-  monthlyPaydownRun: number
-  /** null when monthlyPaydownRun ≤ 0. */
-  projectedMonthsToPayoff: number | null
-  /** Capped at 0; see paidOffBeforeTermEnd. */
-  projectedEndOfTermBalance: number
-  /** Months between today and contract.expirationDate, floored at 0. */
-  termMonthsRemaining: number
-  /** True when run-rate retires the balance before term end. */
-  paidOffBeforeTermEnd: boolean
-  /** Capital balance at the moment of projection. */
-  remainingBalance: number
-}
-
-function addMonthsLocal(date: Date, months: number): Date {
-  const d = new Date(date)
-  d.setMonth(d.getMonth() + months)
-  return d
-}
-
-function monthsPerPeriodLocal(
-  p: "monthly" | "quarterly" | "semi_annual" | "annual",
-): number {
-  switch (p) {
-    case "monthly":
-      return 1
-    case "quarterly":
-      return 3
-    case "semi_annual":
-      return 6
-    case "annual":
-      return 12
-  }
-}
+export type {
+  ContractCapitalProjection,
+} from "@/lib/contracts/capital-schedule-types"
 
 // Shared select for the projection read — used by both the facility and
 // vendor entry points so the body sees one shape.
@@ -1284,11 +955,11 @@ async function _projectCapital(
   const entries = agg.entries
   const period = agg.period
   const start = new Date(contract.effectiveDate)
-  const monthsStep = monthsPerPeriodLocal(period)
+  const monthsStep = monthsPerPeriod(period)
   const today = new Date()
   const scheduleDates = entries.map((e) => ({
     principalDue: e.principalDue,
-    periodDate: addMonthsLocal(start, e.periodNumber * monthsStep),
+    periodDate: addMonths(start, e.periodNumber * monthsStep),
   }))
   const elapsedPeriods = scheduleDates.filter(
     (r) => r.periodDate.getTime() <= today.getTime(),
