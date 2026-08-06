@@ -130,7 +130,8 @@ vi.mock("@/lib/actions/facility-assignment", () => ({
   getCallerFacilityIds: callerFacilityIdsMock,
 }))
 
-import { getContracts, getContractStats } from "@/lib/actions/contracts"
+import { getContracts } from "@/lib/actions/contracts/list"
+import { getContractStats } from "@/lib/actions/contracts/stats"
 
 /** Enterprise caller: the whole Lighthouse Health universe. */
 const HS_UNIVERSE = ["fac-home", "fac-sibling", "fac-third"]

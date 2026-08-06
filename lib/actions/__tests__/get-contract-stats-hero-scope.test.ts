@@ -50,7 +50,7 @@ vi.mock("@/lib/actions/auth", () => ({
   }),
 }))
 
-import { getContractStats } from "@/lib/actions/contracts"
+import { getContractStats } from "@/lib/actions/contracts/stats"
 
 /** 45 contracts, 31 of them active — both well past a 20-row page. */
 const BIG_PORTFOLIO = [

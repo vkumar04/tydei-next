@@ -34,13 +34,20 @@ import { periodKey } from "../preserved-collected"
 const DIR = join(__dirname, "..")
 const read = (f: string) => readFileSync(join(DIR, `${f}.ts`), "utf8")
 
-/** Writer -> number of delete/insert pairs it owns. */
+/** Writer -> number of delete/insert pairs it owns.
+ *
+ * 2026-08-05: the volume writer's three paths were decomposed into their
+ * own modules (volume.ts is now a facade). Pinning each path's file
+ * separately is STRICTER than the old single-file count of 3 — one path
+ * can no longer satisfy the count on another's behalf. */
 const WRITERS: ReadonlyArray<readonly [string, number]> = [
   ["carve-out", 1],
   ["threshold", 1],
   ["po", 1],
   ["invoice", 1],
-  ["volume", 3],
+  ["volume-cpt-writer", 1],
+  ["volume-cog-writer", 1],
+  ["volume-po-writer", 1],
 ]
 
 describe("every specialty writer loads the preserved-collected set", () => {

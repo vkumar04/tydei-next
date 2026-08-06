@@ -86,11 +86,9 @@ vi.mock("@/lib/serialize", () => ({
 
 vi.mock("next/cache", () => import("@/tests/setup/next-cache-mock"))
 
-import {
-  createContract,
-  updateContract,
-  deleteContract,
-} from "@/lib/actions/contracts"
+import { createContract } from "@/lib/actions/contracts/create"
+import { updateContract } from "@/lib/actions/contracts/update"
+import { deleteContract } from "@/lib/actions/contracts/delete"
 
 beforeEach(() => {
   vi.clearAllMocks()

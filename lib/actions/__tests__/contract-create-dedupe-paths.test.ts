@@ -66,7 +66,7 @@ vi.mock("@/lib/serialize", () => ({
 }))
 vi.mock("next/cache", () => import("@/tests/setup/next-cache-mock"))
 
-import { createContract } from "@/lib/actions/contracts"
+import { createContract } from "@/lib/actions/contracts/create"
 import { idempotencyResetForTests } from "@/lib/idempotency"
 
 function buildValidCreateInput() {

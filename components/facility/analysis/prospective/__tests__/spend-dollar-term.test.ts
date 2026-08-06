@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
   isSpendDollarTerm,
   priceVsMarketFromAnalysis,
-} from "../upload-proposal-tab"
+} from "../upload-proposal/scoring-helpers"
 import type { PricingFileAnalysis } from "@/lib/prospective-analysis/pricing-file-analysis"
 
 function analysis(

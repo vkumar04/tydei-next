@@ -69,7 +69,7 @@ vi.mock("@/lib/serialize", () => ({
   serialize: <T>(v: T) => v,
 }))
 
-import { getContracts } from "@/lib/actions/contracts"
+import { getContracts } from "@/lib/actions/contracts/list"
 
 describe("getContracts — rebate earned/collected filters (R4.3/R4.4/R5.31)", () => {
   // Pin "today" so tests are deterministic regardless of when they run.

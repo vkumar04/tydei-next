@@ -3,58 +3,26 @@
 import React, { useState, useCallback, useRef } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { ingestExtractedContracts } from "@/lib/actions/imports/contract-import"
 import { toRichExtractedContract } from "@/lib/ai/contract-extract-mapper"
-import { ingestExtractedInvoices } from "@/lib/actions/imports/invoice-import"
-import {
-  ingestCaseDataCSV,
-  ingestCaseProceduresCSV,
-  ingestCaseSuppliesCSV,
-} from "@/lib/actions/imports/case-costing-import"
-import type { RichContractExtractData } from "@/lib/ai/schemas"
 import { queryKeys } from "@/lib/query-keys"
-import { generateId, calculateSimilarity } from "./_mass-upload-helpers"
-import { renderStatusBadge } from "./_mass-upload-status-badge"
+import { generateId } from "./_mass-upload-helpers"
 import {
-  FileTextIcon,
-  UploadIcon,
-  CheckCircle2Icon,
-  XIcon,
-  FileStackIcon,
-  SparklesIcon,
-  HelpCircleIcon,
-  ChevronRightIcon,
-  Loader2Icon,
-  FileQuestionIcon,
-  ReceiptIcon,
-  FileSignatureIcon,
-  PackageIcon,
-  RotateCcwIcon,
-} from "lucide-react"
+  classifyDocument,
+  generateQuestions,
+  extractContract,
+} from "./_mass-upload-classify"
+import { commitCompletedDocuments } from "./_mass-upload-commit"
+import { MassUploadDropZone } from "./_mass-upload-drop-zone"
+import { MassUploadInstructionsPanel } from "./_mass-upload-instructions-panel"
+import { MassUploadQueueList } from "./_mass-upload-queue-list"
+import { MassUploadQuestionDialog } from "./_mass-upload-question-dialog"
+import { MassUploadHeader } from "./_mass-upload-header"
+import { MassUploadProgressSummary } from "./_mass-upload-progress-summary"
+import { MassUploadFooter } from "./_mass-upload-footer"
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 
 // ─── Types (ported from v0) ──────────────────────────────────────
 
@@ -62,106 +30,9 @@ export type { DocumentType, QueuedDocument } from "./_mass-upload-types"
 import type {
   DocumentType,
   DocumentClassification,
-  DocumentQuestion,
   QueuedDocument,
   MassUploadProps,
 } from "./_mass-upload-types"
-
-const DOCUMENT_TYPE_INFO: Record<
-  DocumentType,
-  { label: string; icon: React.ReactNode; color: string }
-> = {
-  contract: {
-    label: "Contract",
-    icon: <FileSignatureIcon className="h-4 w-4" />,
-    color: "bg-blue-500",
-  },
-  amendment: {
-    label: "Amendment",
-    icon: <FileTextIcon className="h-4 w-4" />,
-    color: "bg-purple-500",
-  },
-  invoice: {
-    label: "Invoice",
-    icon: <ReceiptIcon className="h-4 w-4" />,
-    color: "bg-green-500",
-  },
-  purchase_order: {
-    label: "Purchase Order",
-    icon: <PackageIcon className="h-4 w-4" />,
-    color: "bg-orange-500",
-  },
-  pricing_schedule: {
-    label: "Pricing Schedule",
-    icon: <FileTextIcon className="h-4 w-4" />,
-    color: "bg-cyan-500",
-  },
-  cog_report: {
-    label: "COG Report",
-    icon: <FileTextIcon className="h-4 w-4" />,
-    color: "bg-yellow-500",
-  },
-  cog_data: {
-    label: "COG Data",
-    icon: <FileTextIcon className="h-4 w-4" />,
-    color: "bg-yellow-500",
-  },
-  pricing_file: {
-    label: "Pricing File",
-    icon: <FileTextIcon className="h-4 w-4" />,
-    color: "bg-cyan-500",
-  },
-  case_data: {
-    label: "Case Data",
-    icon: <FileTextIcon className="h-4 w-4" />,
-    color: "bg-pink-500",
-  },
-  case_procedures: {
-    label: "Case Procedures",
-    icon: <FileTextIcon className="h-4 w-4" />,
-    color: "bg-rose-500",
-  },
-  case_supplies: {
-    label: "Case Supplies",
-    icon: <FileTextIcon className="h-4 w-4" />,
-    color: "bg-fuchsia-500",
-  },
-  unknown: {
-    label: "Unknown",
-    icon: <FileQuestionIcon className="h-4 w-4" />,
-    color: "bg-gray-500",
-  },
-}
-
-// Map the classify-document API's wider classification enum to our DocumentType.
-function normalizeApiType(t: string | null | undefined): DocumentType {
-  switch (t) {
-    case "contract":
-      return "contract"
-    case "amendment":
-      return "amendment"
-    case "cog_data":
-      return "cog_data"
-    case "cog_report":
-      return "cog_report"
-    case "pricing_file":
-      return "pricing_file"
-    case "pricing_schedule":
-      return "pricing_schedule"
-    case "invoice":
-      return "invoice"
-    case "purchase_order":
-      return "purchase_order"
-    case "case_data":
-      return "case_data"
-    case "case_procedures":
-      return "case_procedures"
-    case "case_supplies":
-      return "case_supplies"
-    default:
-      return "unknown"
-  }
-}
 
 export function MassUpload({
   facilityId: _facilityId,
@@ -265,169 +136,6 @@ export function MassUpload({
     setDocuments((prev) => prev.map((d) => (d.id === id ? { ...d, ...updates } : d)))
   }
 
-  // ── Duplicate detection ────────────────────────────────────────
-  const checkForDuplicates = (
-    doc: QueuedDocument,
-    classification: DocumentClassification
-  ): { isDuplicate: boolean; duplicateOf: string | null } => {
-    for (const other of documentsRef.current) {
-      if (other.id === doc.id) continue
-      const oc = other.classification
-      if (!oc) continue
-      if (
-        oc.vendorName === classification.vendorName &&
-        oc.dataPeriod === classification.dataPeriod &&
-        oc.type === classification.type
-      ) {
-        return { isDuplicate: true, duplicateOf: other.file.name }
-      }
-      if (calculateSimilarity(doc.file.name, other.file.name) > 0.8) {
-        return { isDuplicate: true, duplicateOf: other.file.name }
-      }
-    }
-    return { isDuplicate: false, duplicateOf: null }
-  }
-
-  // ── Classify a single document via the real API ────────────────
-  const classifyDocument = async (
-    doc: QueuedDocument
-  ): Promise<DocumentClassification> => {
-    const form = new FormData()
-    form.append("file", doc.file)
-    form.append("fileName", doc.file.name)
-
-    const res = await fetch("/api/ai/classify-document", {
-      method: "POST",
-      body: form,
-    })
-    if (!res.ok) {
-      throw new Error("Classification request failed")
-    }
-    const data = await res.json()
-
-    const type = normalizeApiType(data.type ?? data.classification)
-    const base: DocumentClassification = {
-      type,
-      confidence: typeof data.confidence === "number" ? data.confidence : 0.5,
-      vendorName: data.vendorName ?? null,
-      documentDate: data.documentDate ?? null,
-      contractName: data.contractName ?? null,
-      invoiceNumber: data.invoiceNumber ?? null,
-      poNumber: data.poNumber ?? null,
-      suggestedCategory: data.suggestedCategory ?? null,
-      extractedData: null,
-      dataPeriod: data.dataPeriod ?? null,
-      year: data.year ?? null,
-      quarter: data.quarter ?? null,
-      month: data.month ?? null,
-      recordCount: data.recordCount ?? null,
-      totalValue: data.totalValue ?? null,
-      isDuplicate: false,
-      duplicateOf: null,
-    }
-
-    const dup = checkForDuplicates(doc, base)
-    return { ...base, ...dup }
-  }
-
-  // ── Generate questions for low-confidence classifications ─────
-  const generateQuestions = (c: DocumentClassification): DocumentQuestion[] => {
-    const questions: DocumentQuestion[] = []
-
-    if (c.confidence < 0.7 || c.type === "unknown") {
-      questions.push({
-        id: "doc_type",
-        question: "What type of document is this?",
-        type: "select",
-        options: acceptedTypes.map((t) => ({
-          value: t,
-          label: DOCUMENT_TYPE_INFO[t].label,
-        })),
-        required: true,
-        field: "type",
-      })
-    }
-
-    if (!c.vendorName) {
-      questions.push({
-        id: "vendor",
-        question: "Which vendor is this document from?",
-        type: "text",
-        required: true,
-        field: "vendorName",
-      })
-    }
-
-    if (c.type === "contract" && !c.contractName) {
-      questions.push({
-        id: "contract_name",
-        question: "What is the contract name?",
-        type: "text",
-        required: true,
-        field: "contractName",
-      })
-    }
-
-    if (c.type === "invoice" && !c.invoiceNumber) {
-      questions.push({
-        id: "invoice_number",
-        question: "What is the invoice number?",
-        type: "text",
-        required: true,
-        field: "invoiceNumber",
-      })
-    }
-
-    if (c.type === "cog_report" && !c.dataPeriod) {
-      questions.push({
-        id: "data_period",
-        question: "What time period does this data cover?",
-        type: "select",
-        options: [
-          { value: "Q1", label: "Q1 (Jan-Mar)" },
-          { value: "Q2", label: "Q2 (Apr-Jun)" },
-          { value: "Q3", label: "Q3 (Jul-Sep)" },
-          { value: "Q4", label: "Q4 (Oct-Dec)" },
-          { value: "annual", label: "Full Year" },
-          { value: "monthly", label: "Single Month" },
-        ],
-        required: true,
-        field: "dataPeriod",
-      })
-    }
-
-    if (c.isDuplicate) {
-      questions.push({
-        id: "duplicate_confirm",
-        question: `This file appears similar to "${c.duplicateOf}". Do you want to continue?`,
-        type: "select",
-        options: [
-          { value: "yes", label: "Yes, import anyway" },
-          { value: "no", label: "No, skip this file" },
-        ],
-        required: true,
-        field: "duplicateAction",
-      })
-    }
-
-    return questions
-  }
-
-  // ── Extract contract data for PDFs classified as contract/amendment ─
-  const extractContract = async (doc: QueuedDocument) => {
-    const form = new FormData()
-    form.append("file", doc.file)
-    if (userInstructions.trim()) {
-      form.append("userInstructions", userInstructions.trim())
-    }
-    const res = await fetch("/api/ai/extract-contract", {
-      method: "POST",
-      body: form,
-    })
-    if (!res.ok) throw new Error("Extraction failed")
-    return await res.json()
-  }
-
   // ── Process the whole queue ────────────────────────────────────
   const processAllDocuments = async () => {
     if (documents.length === 0) return
@@ -446,14 +154,14 @@ export function MassUpload({
 
       updateDocument(doc.id, { status: "classifying", progress: 10 })
       try {
-        const classification = await classifyDocument(doc)
+        const classification = await classifyDocument(doc, () => documentsRef.current)
         updateDocument(doc.id, {
           classification,
           progress: 40,
           status: "needs_input",
         })
 
-        const questions = generateQuestions(classification)
+        const questions = generateQuestions(classification, acceptedTypes)
         if (questions.length > 0) {
           updateDocument(doc.id, { questions, status: "needs_input", progress: 40 })
           setCurrentQuestionDoc({ ...doc, questions, classification })
@@ -486,7 +194,7 @@ export function MassUpload({
         if (isPdf && (cType === "contract" || cType === "amendment")) {
           try {
             updateDocument(doc.id, { status: "extracting", progress: 70 })
-            const result = await extractContract(currentDoc)
+            const result = await extractContract(currentDoc, userInstructions)
             // extract-contract returns the FLAT `extracted` shape
             // (capitalCost/termMonths/…). ingestExtractedContracts reads the
             // RICH `tieInDetails` shape, so lift flat→rich here — otherwise a
@@ -604,226 +312,8 @@ export function MassUpload({
       return
     }
 
-    // Partition completed docs by document type so we can route each group
-    // to the appropriate server action. Each group becomes its own inline
-    // commit — no navigation, no page redirects, no toast-lies.
-    const contractDocs = completed.filter(
-      (d) =>
-        (d.classification?.type === "contract" ||
-          d.classification?.type === "amendment") &&
-        d.extracted !== null
-    )
-    const invoiceDocs = completed.filter(
-      (d) => d.classification?.type === "invoice"
-    )
-    const caseDataDocs = completed.filter(
-      (d) => d.classification?.type === "case_data"
-    )
-    const caseProcedureDocs = completed.filter(
-      (d) => d.classification?.type === "case_procedures"
-    )
-    const caseSupplyDocs = completed.filter(
-      (d) => d.classification?.type === "case_supplies"
-    )
-    const cogDocs = completed.filter(
-      (d) =>
-        d.classification?.type === "cog_data" ||
-        d.classification?.type === "cog_report"
-    )
-    const pricingDocs = completed.filter(
-      (d) =>
-        d.classification?.type === "pricing_file" ||
-        d.classification?.type === "pricing_schedule"
-    )
-
-    let totalCreated = 0
-    let totalFailed = 0
-    const errorMessages: string[] = []
-
-    // ── Contracts ────────────────────────────────────────────────
-    if (contractDocs.length > 0) {
-      try {
-        const result = await ingestExtractedContracts(
-          contractDocs.map((d) => ({
-            extracted: d.extracted as unknown as RichContractExtractData,
-            sourceFilename: d.file.name,
-          }))
-        )
-        totalCreated += result.created
-        totalFailed += result.failed
-        for (const r of result.results) {
-          if (!r.ok) errorMessages.push(`${r.name}: ${r.error}`)
-        }
-      } catch (err) {
-        totalFailed += contractDocs.length
-        errorMessages.push(
-          `Contract ingest failed: ${
-            err instanceof Error ? err.message : String(err)
-          }`
-        )
-      }
-    }
-
-    // ── Invoices ─────────────────────────────────────────────────
-    if (invoiceDocs.length > 0) {
-      try {
-        const result = await ingestExtractedInvoices(
-          invoiceDocs.map((d) => ({
-            invoiceNumber:
-              d.classification?.invoiceNumber ??
-              d.userOverrides?.invoiceNumber ??
-              null,
-            vendorName:
-              d.classification?.vendorName ??
-              d.userOverrides?.vendorName ??
-              null,
-            invoiceDate:
-              d.classification?.documentDate ??
-              d.userOverrides?.documentDate ??
-              null,
-            totalAmount: d.classification?.totalValue ?? null,
-            sourceFilename: d.file.name,
-          }))
-        )
-        totalCreated += result.created
-        totalFailed += result.failed
-        for (const r of result.results) {
-          if (!r.ok) errorMessages.push(`${r.invoiceNumber}: ${r.error}`)
-        }
-      } catch (err) {
-        totalFailed += invoiceDocs.length
-        errorMessages.push(
-          `Invoice ingest failed: ${
-            err instanceof Error ? err.message : String(err)
-          }`
-        )
-      }
-    }
-
-    // ── Case Data CSVs — ingest patient-level case metadata ────
-    // Ingest case data BEFORE procedures so procedures find parent cases.
-    for (const d of caseDataDocs) {
-      try {
-        const csvText = await d.file.text()
-        const r = await ingestCaseDataCSV(csvText, d.file.name)
-        totalCreated += r.created + r.updated
-        totalFailed += r.failed
-        for (const e of r.errors) errorMessages.push(`${d.file.name}: ${e}`)
-      } catch (err) {
-        totalFailed++
-        errorMessages.push(
-          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`
-        )
-      }
-    }
-
-    // ── Case Procedures CSVs ───────────────────────────────────
-    for (const d of caseProcedureDocs) {
-      try {
-        const csvText = await d.file.text()
-        const r = await ingestCaseProceduresCSV(csvText, d.file.name)
-        totalCreated += r.created
-        totalFailed += r.failed
-        for (const e of r.errors) errorMessages.push(`${d.file.name}: ${e}`)
-      } catch (err) {
-        totalFailed++
-        errorMessages.push(
-          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`
-        )
-      }
-    }
-
-    // ── Case Supplies CSVs (ingest AFTER case data + procedures
-    //     so parent Case rows exist first) ───────────────────────
-    for (const d of caseSupplyDocs) {
-      try {
-        const csvText = await d.file.text()
-        const r = await ingestCaseSuppliesCSV(csvText, d.file.name)
-        totalCreated += r.created
-        totalFailed += r.failed
-        for (const e of r.errors) errorMessages.push(`${d.file.name}: ${e}`)
-      } catch (err) {
-        totalFailed++
-        errorMessages.push(
-          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`
-        )
-      }
-    }
-
-    // ── COG Records — .xlsx + .csv via /api/import-cog ─────────
-    // Bug 2026-05-18 (Vick "Primary full COG.xlsx" — Maximum array
-    // nesting exceeded): previously `await d.file.text()` on an .xlsx
-    // produced binary garbage AND the resulting Server Action payload
-    // tripped RSC's array-leaf cap. Route Handler + multipart formData
-    // is the Next.js-recommended path for arbitrary tabular uploads;
-    // mirrors the /api/import-pricing fix.
-    for (const d of cogDocs) {
-      try {
-        const form = new FormData()
-        form.append("file", d.file)
-        const res = await fetch("/api/import-cog", {
-          method: "POST",
-          body: form,
-        })
-        if (!res.ok) {
-          const errBody = (await res
-            .json()
-            .catch(() => null)) as { error?: string } | null
-          throw new Error(errBody?.error ?? `import-cog ${res.status}`)
-        }
-        const r = (await res.json()) as {
-          imported: number
-          skipped: number
-          errors: number
-        }
-        totalCreated += r.imported
-        totalFailed += r.errors
-      } catch (err) {
-        totalFailed++
-        errorMessages.push(
-          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`,
-        )
-      }
-    }
-
-    // ── Pricing Files — CSV goes direct, xlsx via /api/parse-file ──
-    for (const d of pricingDocs) {
-      try {
-        // Bug 2026-05-18 (Vick "Primary full COG.xlsx" — Maximum
-        // array nesting exceeded): parse-on-client → send-rows-to-
-        // Server-Action tripped RSC's 1M-array-leaf cap on a
-        // 46k-row × 25-col file. Server Actions are the wrong
-        // transport for arbitrary tabular uploads — Next.js docs
-        // recommend Route Handlers with multipart formData.
-        // /api/import-pricing handles parse + ingest in one request;
-        // the rows array never crosses the wire as RSC.
-        const form = new FormData()
-        form.append("file", d.file)
-        const res = await fetch("/api/import-pricing", {
-          method: "POST",
-          body: form,
-        })
-        if (!res.ok) {
-          const errBody = (await res
-            .json()
-            .catch(() => null)) as { error?: string } | null
-          throw new Error(errBody?.error ?? `import-pricing ${res.status}`)
-        }
-        const r = (await res.json()) as {
-          imported: number
-          failed: number
-          vendorUsed: string | null
-        }
-        totalCreated += r.imported
-        totalFailed += r.failed
-      } catch (err) {
-        totalFailed++
-        errorMessages.push(
-          `${d.file.name}: ${err instanceof Error ? err.message : String(err)}`,
-        )
-      }
-    }
-
+    const { totalCreated, totalFailed, errorMessages, groupCounts } =
+      await commitCompletedDocuments(completed)
 
     // Optional callback for callers that want to react to completion.
     if (onComplete) {
@@ -852,11 +342,11 @@ export function MassUpload({
         `Imported ${totalCreated} document${totalCreated !== 1 ? "s" : ""}`,
         {
           description:
-            contractDocs.length > 0 && invoiceDocs.length > 0
-              ? `${contractDocs.length} contract${
-                  contractDocs.length !== 1 ? "s" : ""
-                } · ${invoiceDocs.length} invoice${
-                  invoiceDocs.length !== 1 ? "s" : ""
+            groupCounts.contracts > 0 && groupCounts.invoices > 0
+              ? `${groupCounts.contracts} contract${
+                  groupCounts.contracts !== 1 ? "s" : ""
+                } · ${groupCounts.invoices} invoice${
+                  groupCounts.invoices !== 1 ? "s" : ""
                 }`
               : undefined,
         }
@@ -907,26 +397,7 @@ export function MassUpload({
         }}
       >
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileStackIcon className="h-5 w-5" /> {title}
-            </DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
-            {/* bugs.rtfd 2026-06-14 ("need a place to upload pdf payor
-                contracts ... it should just be with uploading of data"):
-                payor contracts have their own PDF→CPT-rate extraction +
-                add/erase file list under Case Costing → Payor Contracts.
-                Surface that entry point from the global data-upload modal so
-                it's discoverable here. */}
-            <a
-              href="/dashboard/case-costing?tab=payor-contracts"
-              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-            >
-              <UploadIcon className="h-3.5 w-3.5" />
-              Uploading a payor contract? Add & manage them under Case Costing →
-              Payor Contracts
-            </a>
-          </DialogHeader>
+          <MassUploadHeader title={title} description={description} />
 
           <ScrollArea className="flex-1 pr-3">
             <Card className="border-0 shadow-none">
@@ -935,402 +406,76 @@ export function MassUpload({
                 <CardDescription className="sr-only">{description}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6 px-0">
-                {/* User Instructions */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowInstructionsInput(!showInstructionsInput)}
-                      className="gap-2 text-muted-foreground hover:text-foreground -ml-2"
-                    >
-                      <SparklesIcon className="h-4 w-4" />
-                      {showInstructionsInput ? "Hide Instructions" : "Add Instructions for AI"}
-                      <ChevronRightIcon
-                        className={`h-4 w-4 transition-transform ${showInstructionsInput ? "rotate-90" : ""}`}
-                      />
-                    </Button>
-                    {userInstructions && !showInstructionsInput && (
-                      <Badge variant="secondary" className="gap-1">
-                        <CheckCircle2Icon className="h-3 w-3" />
-                        Instructions added
-                      </Badge>
-                    )}
-                  </div>
-
-                  {showInstructionsInput && (
-                    <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
-                      <div className="space-y-1">
-                        <Label htmlFor="user-instructions" className="text-sm font-medium">
-                          Describe what you want the system to do
-                        </Label>
-                        <p className="text-xs text-muted-foreground">
-                          Help the AI understand your intent — what type of data, how to
-                          process it, and any special considerations
-                        </p>
-                      </div>
-                      <Textarea
-                        id="user-instructions"
-                        placeholder="Example: 'These are Q1 2024 invoices from Stryker for our orthopedic department.'"
-                        value={userInstructions}
-                        onChange={(e) => setUserInstructions(e.target.value)}
-                        className="min-h-[80px] resize-none"
-                        disabled={isProcessing}
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <span className="text-xs text-muted-foreground self-center">
-                          Quick prompts:
-                        </span>
-                        {[
-                          {
-                            label: "Contracts",
-                            text:
-                              "These are contract documents. Extract vendor name, effective dates, rebate tiers, and pricing terms.",
-                          },
-                          {
-                            label: "Invoices",
-                            text:
-                              "These are invoices. Extract vendor, invoice number, line items, quantities, and prices.",
-                          },
-                          {
-                            label: "COG Data",
-                            text:
-                              "This is COG (Cost of Goods) data. Import all line items and flag duplicates.",
-                          },
-                          {
-                            label: "Pricing",
-                            text:
-                              "These are pricing schedules. Extract all product pricing, effective dates, and tier structures.",
-                          },
-                        ].map((p) => (
-                          <Button
-                            key={p.label}
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-7"
-                            onClick={() => setUserInstructions(p.text)}
-                            disabled={isProcessing}
-                          >
-                            {p.label}
-                          </Button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Active instructions indicator */}
-                {userInstructions && isProcessing && (
-                  <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                    <div className="flex items-start gap-2">
-                      <SparklesIcon className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-primary">
-                          AI Instructions Active
-                        </p>
-                        <p className="text-xs text-muted-foreground">{userInstructions}</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <MassUploadInstructionsPanel
+                  showInstructionsInput={showInstructionsInput}
+                  onToggleInstructions={() =>
+                    setShowInstructionsInput(!showInstructionsInput)
+                  }
+                  userInstructions={userInstructions}
+                  onUserInstructionsChange={setUserInstructions}
+                  isProcessing={isProcessing}
+                />
 
                 {/* Overall progress */}
                 {documents.length > 0 && (
-                  <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>
-                          {statusCounts.completed} of {documents.length} processed
-                        </span>
-                        <span className="text-muted-foreground">{overallProgress}%</span>
-                      </div>
-                      <Progress value={overallProgress} />
-                    </div>
-                    <div className="flex gap-2">
-                      {statusCounts.error > 0 && (
-                        <Badge variant="destructive">{statusCounts.error} failed</Badge>
-                      )}
-                      {statusCounts.processing > 0 && (
-                        <Badge variant="secondary">
-                          {statusCounts.processing} in progress
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
+                  <MassUploadProgressSummary
+                    completedCount={statusCounts.completed}
+                    documentCount={documents.length}
+                    overallProgress={overallProgress}
+                    errorCount={statusCounts.error}
+                    processingCount={statusCounts.processing}
+                  />
                 )}
 
-                {/* Drop zone */}
-                <div
+                <MassUploadDropZone
+                  isDragging={isDragging}
+                  isProcessing={isProcessing}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
-                    isDragging
-                      ? "border-primary bg-primary/5"
-                      : "border-muted-foreground/25 hover:border-muted-foreground/50"
-                  } ${isProcessing ? "pointer-events-none opacity-50" : ""}`}
-                >
-                  <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10 mb-4">
-                    <UploadIcon className="h-8 w-8 text-primary" />
-                  </div>
-                  <p className="mb-1 text-lg font-medium">Drop files here</p>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Upload contracts, invoices, purchase orders, and more — all at once
-                  </p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
-                    <SparklesIcon className="h-3 w-3" />
-                    AI will automatically classify and extract data from each document
-                  </div>
-                  <label aria-label="Select files to upload">
-                    <Button variant="outline" asChild disabled={isProcessing}>
-                      <span>Select Files</span>
-                    </Button>
-                    <input
-                      type="file"
-                      accept=".pdf,.csv,.xlsx,.xls,.txt"
-                      multiple
-                      className="hidden"
-                      onChange={handleFileSelect}
-                      disabled={isProcessing}
-                    />
-                  </label>
-                </div>
+                  onFileSelect={handleFileSelect}
+                />
 
-                {/* Document queue */}
                 {documents.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label>Document Queue ({documents.length})</Label>
-                      {!isProcessing && statusCounts.error > 0 && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={retryFailed}
-                          className="gap-1"
-                        >
-                          <RotateCcwIcon className="h-3 w-3" />
-                          Retry Failed
-                        </Button>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      {documents.map((doc) => {
-                        const typeInfo = doc.classification?.type
-                          ? DOCUMENT_TYPE_INFO[doc.classification.type]
-                          : null
-
-                        return (
-                          <div
-                            key={doc.id}
-                            className={`flex items-center gap-3 p-3 rounded-lg border bg-card transition-colors ${
-                              doc.status === "needs_input"
-                                ? "border-amber-500 bg-amber-500/5"
-                                : ""
-                            }`}
-                          >
-                            <div
-                              className={`h-10 w-10 rounded flex items-center justify-center ${
-                                typeInfo ? typeInfo.color : "bg-muted"
-                              } text-white`}
-                            >
-                              {typeInfo?.icon ?? <FileTextIcon className="h-5 w-5" />}
-                            </div>
-
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">
-                                {doc.file.name}
-                              </p>
-                              <div className="flex items-center gap-2 mt-1">
-                                {doc.classification && (
-                                  <Badge variant="outline" className="text-xs">
-                                    {DOCUMENT_TYPE_INFO[doc.classification.type].label}
-                                    {doc.classification.confidence < 1 &&
-                                      ` (${Math.round(doc.classification.confidence * 100)}%)`}
-                                  </Badge>
-                                )}
-                                {doc.classification?.vendorName && (
-                                  <span className="text-xs text-muted-foreground">
-                                    {doc.classification.vendorName}
-                                  </span>
-                                )}
-                                {doc.classification?.dataPeriod && (
-                                  <span className="text-xs text-muted-foreground">
-                                    · {doc.classification.dataPeriod}
-                                  </span>
-                                )}
-                              </div>
-                              {doc.error && (
-                                <p className="text-xs text-destructive mt-1">
-                                  {doc.error}
-                                </p>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                              {renderStatusBadge(doc.status)}
-
-                              {doc.status === "needs_input" && !isProcessing && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setCurrentQuestionDoc(doc)
-                                    setCurrentAnswers(doc.answers || {})
-                                    setQuestionDialogOpen(true)
-                                  }}
-                                >
-                                  Answer
-                                </Button>
-                              )}
-
-                              {!isProcessing && doc.status !== "processing" && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8"
-                                  onClick={() => removeDocument(doc.id)}
-                                >
-                                  <XIcon className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
+                  <MassUploadQueueList
+                    documents={documents}
+                    isProcessing={isProcessing}
+                    errorCount={statusCounts.error}
+                    onRetryFailed={retryFailed}
+                    onAnswerDocument={(doc) => {
+                      setCurrentQuestionDoc(doc)
+                      setCurrentAnswers(doc.answers || {})
+                      setQuestionDialogOpen(true)
+                    }}
+                    onRemoveDocument={removeDocument}
+                  />
                 )}
               </CardContent>
             </Card>
           </ScrollArea>
 
-          <DialogFooter className="flex justify-between sm:justify-between">
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isProcessing}
-            >
-              Cancel
-            </Button>
-            <div className="flex gap-2">
-              {step === "review" && statusCounts.completed > 0 && (
-                <Button onClick={handleComplete}>
-                  <CheckCircle2Icon className="mr-2 h-4 w-4" />
-                  Complete ({statusCounts.completed} documents)
-                </Button>
-              )}
-              {step !== "review" && documents.length > 0 && (
-                <Button
-                  onClick={processAllDocuments}
-                  disabled={isProcessing || statusCounts.pending === 0}
-                >
-                  {isProcessing ? (
-                    <>
-                      <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <SparklesIcon className="mr-2 h-4 w-4" />
-                      Process All ({statusCounts.pending})
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-          </DialogFooter>
+          <MassUploadFooter
+            isProcessing={isProcessing}
+            step={step}
+            completedCount={statusCounts.completed}
+            pendingCount={statusCounts.pending}
+            documentCount={documents.length}
+            onCancel={() => onOpenChange(false)}
+            onComplete={handleComplete}
+            onProcessAll={processAllDocuments}
+          />
         </DialogContent>
       </Dialog>
 
-      {/* Per-document Question Dialog */}
-      <Dialog open={questionDialogOpen} onOpenChange={setQuestionDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <HelpCircleIcon className="h-5 w-5 text-amber-500" />
-              Additional Information Needed
-            </DialogTitle>
-            <DialogDescription>
-              {currentQuestionDoc && (
-                <>
-                  Please answer these questions about:{" "}
-                  <strong>{currentQuestionDoc.file.name}</strong>
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
-          {currentQuestionDoc?.questions && (
-            <div className="space-y-4 py-4">
-              {currentQuestionDoc.questions.map((q) => (
-                <div key={q.id} className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    {q.question}
-                    {q.required && <span className="text-destructive">*</span>}
-                  </Label>
-
-                  {q.type === "text" && (
-                    <Input
-                      value={currentAnswers[q.field] || ""}
-                      onChange={(e) =>
-                        setCurrentAnswers((prev) => ({
-                          ...prev,
-                          [q.field]: e.target.value,
-                        }))
-                      }
-                      placeholder={`Enter ${q.field.replace(/_/g, " ")}`}
-                    />
-                  )}
-
-                  {q.type === "select" && q.options && (
-                    <Select
-                      value={currentAnswers[q.field] || ""}
-                      onValueChange={(value) =>
-                        setCurrentAnswers((prev) => ({ ...prev, [q.field]: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select an option" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {q.options.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-
-                  {q.type === "date" && (
-                    <Input
-                      type="date"
-                      value={currentAnswers[q.field] || ""}
-                      onChange={(e) =>
-                        setCurrentAnswers((prev) => ({
-                          ...prev,
-                          [q.field]: e.target.value,
-                        }))
-                      }
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={handleSkipQuestions}>
-              Skip
-            </Button>
-            <Button onClick={handleSubmitAnswers}>
-              <ChevronRightIcon className="mr-2 h-4 w-4" />
-              Continue
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <MassUploadQuestionDialog
+        open={questionDialogOpen}
+        onOpenChange={setQuestionDialogOpen}
+        doc={currentQuestionDoc}
+        answers={currentAnswers}
+        onAnswersChange={setCurrentAnswers}
+        onSkip={handleSkipQuestions}
+        onSubmit={handleSubmitAnswers}
+      />
     </>
   )
 }

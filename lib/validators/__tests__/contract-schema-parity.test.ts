@@ -102,7 +102,12 @@ describe("createContractBase ↔ updateContract action parity", () => {
     const keys = readSchemaKeys()
     expect(keys.length).toBeGreaterThan(20) // sanity: we found the schema
 
-    const actionSrc = readFile("lib/actions/contracts.ts")
+    // 2026-08-05 F5 decomposition: lib/actions/contracts.ts was split into
+    // per-action files. The create + update write paths this guard scans
+    // now live in create.ts and update.ts — scan both sources together.
+    const actionSrc =
+      readFile("lib/actions/contracts/create.ts") +
+      readFile("lib/actions/contracts/update.ts")
 
     const missing: string[] = []
     for (const key of keys) {
@@ -123,7 +128,7 @@ describe("createContractBase ↔ updateContract action parity", () => {
 
     if (missing.length > 0) {
       throw new Error(
-        `createContractBase has ${missing.length} field(s) NOT referenced in lib/actions/contracts.ts:\n  ${missing.join(", ")}\n\nEither (a) wire the field through the create + update action paths, or (b) add it to ALLOWLIST_NOT_WRITTEN with a one-line comment explaining why it's intentionally out-of-band (e.g. join-table managed).`,
+        `createContractBase has ${missing.length} field(s) NOT referenced in lib/actions/contracts/create.ts or update.ts:\n  ${missing.join(", ")}\n\nEither (a) wire the field through the create + update action paths, or (b) add it to ALLOWLIST_NOT_WRITTEN with a one-line comment explaining why it's intentionally out-of-band (e.g. join-table managed).`,
       )
     }
     expect(missing).toEqual([])

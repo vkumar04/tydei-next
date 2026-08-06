@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from "vitest"
 // The amendment-extractor module is a client component whose import chain
 // touches server actions (which transitively pull in Stripe). Mock those
 // boundaries so the pure `nextStage` helper can be imported in isolation.
-vi.mock("@/lib/actions/contracts", () => ({
+vi.mock("@/lib/actions/contracts/update", () => ({
   updateContract: vi.fn(),
 }))
 vi.mock("sonner", () => ({

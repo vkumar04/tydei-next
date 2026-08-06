@@ -65,9 +65,16 @@ test.describe("facility Current State Analysis reports live data", () => {
     await expect(page.getByText(/representative model/i)).toHaveCount(0)
     // $12.5M is `DEFAULT_FACILITY_ASSUMPTIONS.currentVendorSpend` rendered
     // through usdCompact — the exact string the `0 || 12_500_000` fallback
-    // produced. The demo facility's real trailing-12-month COG spend is
-    // nowhere near it, so any occurrence means the fallback is back.
-    await expect(page.getByText("$12.5M")).toHaveCount(0)
+    // produced. The fallback fired ⇔ the VENDOR SPEND surfaces show the
+    // constant, so pin those two surfaces rather than the whole page: a
+    // page-wide string sweep false-positived on 2026-08-05 when a Deal
+    // Scenario PROJECTION derived from real data happened to format to
+    // "$12.5M" (real inputs drift; any derived figure can collide).
+    const spendCard = page
+      .locator("[data-slot=card]")
+      .filter({ hasText: "Current Vendor Spend" })
+    await expect(spendCard.getByText("$12.5M")).toHaveCount(0)
+    await expect(page.getByText(/vendor spend \$12\.5M/i)).toHaveCount(0)
 
     // ── The seeded expectation ──────────────────────────────
     // The demo facility DOES have COG rows, so the subtitle must say the

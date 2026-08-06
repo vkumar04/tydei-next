@@ -257,7 +257,7 @@ describe("parity: Earned YTD across surfaces", () => {
 
   it("surface: getContract(id).rebateEarnedYTD", async () => {
     // Dynamic import so the module picks up the Prisma mock from above.
-    const { getContract } = await import("@/lib/actions/contracts")
+    const { getContract } = await import("@/lib/actions/contracts/get-contract")
     contractRow = {
       id: FIXTURE_CONTRACT_ID,
       vendorId: "v-parity",
@@ -301,7 +301,7 @@ describe("parity: Collected across surfaces", () => {
   })
 
   it("surface: getContract(id).rebateCollected", async () => {
-    const { getContract } = await import("@/lib/actions/contracts")
+    const { getContract } = await import("@/lib/actions/contracts/get-contract")
     contractRow = {
       id: FIXTURE_CONTRACT_ID,
       vendorId: "v-parity",
@@ -386,7 +386,7 @@ describe("parity: Earned Lifetime across surfaces", () => {
   })
 
   it("surface: getContract(id).rebateEarned matches helper on same input", async () => {
-    const { getContract } = await import("@/lib/actions/contracts")
+    const { getContract } = await import("@/lib/actions/contracts/get-contract")
     contractRow = {
       id: FIXTURE_CONTRACT_ID,
       vendorId: "v-parity",

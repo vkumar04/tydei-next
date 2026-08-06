@@ -100,8 +100,17 @@ describe("parity: cross-surface category-filter wiring catalog", () => {
 
     const readSites = [
       "lib/actions/contracts/recompute-accrual.ts", // write path to Rebate ledger
-      "lib/actions/contracts/accrual.ts", // getAccrualTimeline (detail Performance tab)
-      "lib/actions/contracts.ts", // getContracts trailing-12mo cascade
+      // getAccrualTimeline's builder (detail Performance tab) — decomposed
+      // 2026-08-05; the category-scoped COG queries live in these modules
+      // (the action file is now a thin auth + delegate shell).
+      "lib/contracts/accrual-timeline/build-timeline.ts",
+      "lib/contracts/accrual-timeline/overlay-only-path.ts",
+      "lib/contracts/accrual-timeline/volume-series.ts",
+      // getContracts / getContract spend cascades — lib/actions/contracts.ts
+      // was decomposed into per-action files 2026-08-05; the category-scoped
+      // COG reads live in these two modules now.
+      "lib/actions/contracts/list.ts", // getContracts trailing-12mo cascade
+      "lib/actions/contracts/get-contract.ts", // detail cascade + per-term scoped spend
     ] as const
 
     for (const relative of readSites) {

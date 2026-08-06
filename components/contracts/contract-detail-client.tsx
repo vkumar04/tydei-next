@@ -10,6 +10,7 @@ import {
   DollarSign,
   Download,
   HelpCircle,
+  Loader2,
   Pencil,
   Percent,
   Plus,
@@ -24,7 +25,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { useContract, useDeleteContract } from "@/hooks/use-contracts"
-import type { getContract } from "@/lib/actions/contracts"
+import type { getContract } from "@/lib/actions/contracts/get-contract"
 import { getContractPeriods } from "@/lib/actions/contract-periods"
 import { formatCurrency, formatCalendarDate, formatPercent } from "@/lib/formatting"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
@@ -148,6 +149,43 @@ export function ContractDetailClient({
   })
   const deleteMutation = useDeleteContract()
   const [showDelete, setShowDelete] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
+
+  // The Export button shipped with NO handler at all — a dead affordance
+  // (found in the 2026-08-06 live smoke). It now renders the server-side
+  // contract report through /api/reports/pdf (CLAUDE.md: all PDFs render
+  // server-side via lib/pdf).
+  async function handleExportPdf() {
+    setExportingPdf(true)
+    try {
+      const res = await fetch("/api/reports/pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "contract", id: contractId }),
+      })
+      if (!res.ok) {
+        const msg = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(msg?.error ?? `Export failed (${res.status})`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `contract-report-${contract?.name?.replace(/[^a-zA-Z0-9._-]/g, "_") ?? contractId}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      toast.error(
+        err instanceof Error && err.message
+          ? `Contract export failed: ${err.message}`
+          : "Contract export failed",
+      )
+    } finally {
+      setExportingPdf(false)
+    }
+  }
   const [showAmendment, setShowAmendment] = useState(false)
   const [showRenewalBrief, setShowRenewalBrief] = useState(false)
   const [docDialogOpen, setDocDialogOpen] = useState(false)
@@ -421,8 +459,13 @@ export function ContractDetailClient({
               <Sparkles className="mr-2 size-4" /> Generate Renewal Brief
             </Button>
           )}
-          <Button>
-            <Download className="mr-2 size-4" /> Export
+          <Button onClick={() => void handleExportPdf()} disabled={exportingPdf}>
+            {exportingPdf ? (
+              <Loader2 className="mr-2 size-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 size-4" />
+            )}
+            Export
           </Button>
           <Button
             variant="destructive"

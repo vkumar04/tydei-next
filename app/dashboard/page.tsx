@@ -10,7 +10,7 @@ import { Suspense } from "react"
 import { requireFacility } from "@/lib/actions/auth"
 import { getDashboardKPISummary } from "@/lib/actions/dashboard/kpi"
 import { getDashboardCharts } from "@/lib/actions/dashboard/lifecycle"
-import { getContractStats } from "@/lib/actions/contracts"
+import { getContractStats } from "@/lib/actions/contracts/stats"
 import {
   DashboardClient,
   type DashboardInitialData,

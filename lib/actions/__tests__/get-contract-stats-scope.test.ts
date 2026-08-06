@@ -33,7 +33,7 @@ vi.mock("@/lib/actions/auth", () => ({
   }),
 }))
 
-import { getContractStats } from "@/lib/actions/contracts"
+import { getContractStats } from "@/lib/actions/contracts/stats"
 
 beforeEach(() => {
   vi.clearAllMocks()
