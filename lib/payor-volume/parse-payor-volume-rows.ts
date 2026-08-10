@@ -95,14 +95,24 @@ export function parsePayorVolumeRows(
     const year = toNumber(pick(row, ["year", "yr", "fiscal year"]))
     let quarter = toNumber(pick(row, ["quarter", "qtr", "q"]))
     if (!quarter) {
+      // Anchored + length-capped. The unanchored `/q?\s*([1-4])/i` retried at
+      // every start position, and `\s*` rescanned the whitespace run from
+      // each — quadratic: a 200KB cell of spaces blocked the event loop for
+      // 17s. A real quarter cell is "Q2" / "2" / " Q 2 ".
       const qraw = String(pick(row, ["quarter", "qtr", "q", "period"]) ?? "")
-      const m = qraw.match(/q?\s*([1-4])/i)
+        .trim()
+        .slice(0, 16)
+      const m = /^q?\s?([1-4])$/i.exec(qraw)
       if (m) quarter = Number(m[1])
     }
     const volume = toNumber(
       pick(row, ["volume", "cases", "case volume", "count", "qty"]),
     )
-    if (!year || !quarter) continue
+    // Range-check rather than trusting the numeric branch: a cell reading "5"
+    // parsed straight through and minted a bogus `2025-Q5` bucket.
+    if (!year || !Number.isInteger(quarter) || quarter < 1 || quarter > 4) {
+      continue
+    }
 
     if (!byGroup.has(group)) byGroup.set(group, new Map())
     const qkey = `${year}-Q${quarter}`

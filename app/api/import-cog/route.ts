@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server"
 import { headers as getHeaders } from "next/headers"
+import { unstable_rethrow } from "next/navigation"
 import { auth } from "@/lib/auth-server"
 import { rateLimit } from "@/lib/rate-limit"
+import { denyUnlessPortalWriter } from "@/lib/api/import-route-auth"
 import { ingestCOGRecordsRows } from "@/lib/actions/imports/cog-csv-import"
 import { parseXlsxBufferToRows } from "@/lib/actions/imports/shared"
 import { XlsxLimitError } from "@/lib/xlsx/parse-xlsx-bounded"
+import { CsvLimitError, parseCsvTextBounded } from "@/lib/csv/parse-csv-bounded"
 
 /**
  * Bug 2026-05-18 (Vick "Primary full COG.xlsx" via MassUpload):
@@ -25,6 +28,13 @@ export async function POST(request: Request) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // Role + write-tier gate runs BEFORE any parse work. It was previously
+    // reached only inside bulkImportCOGRecords, so a vendor-portal or
+    // read-only user could drive a full server-side parse of an arbitrary
+    // file they could never actually import.
+    const denied = await denyUnlessPortalWriter(session.user.id, "facility")
+    if (denied) return denied
 
     const { success, retryAfterMs } = rateLimit(
       `import-cog:${session.user.id}`,
@@ -71,46 +81,14 @@ export async function POST(request: Request) {
       rows = parsed.rows
     } else if (lowerName.endsWith(".csv")) {
       const text = await file.text()
-      const stripped = text.replace(/^﻿/, "")
-      const lines = stripped.split(/\r?\n/).filter((l) => l.trim().length > 0)
-      if (lines.length <= 1) {
+      const parsed = parseCsvTextBounded(text)
+      if (parsed.rows.length === 0) {
         return NextResponse.json(
           { error: "CSV has no data rows" },
           { status: 400 },
         )
       }
-      const splitRow = (line: string): string[] => {
-        const out: string[] = []
-        let cur = ""
-        let inQ = false
-        for (let i = 0; i < line.length; i++) {
-          const ch = line[i]
-          if (ch === '"') {
-            if (inQ && line[i + 1] === '"') {
-              cur += '"'
-              i++
-            } else {
-              inQ = !inQ
-            }
-          } else if (ch === "," && !inQ) {
-            out.push(cur)
-            cur = ""
-          } else {
-            cur += ch
-          }
-        }
-        out.push(cur)
-        return out.map((s) => s.trim())
-      }
-      const headers = splitRow(lines[0])
-      rows = lines.slice(1).map((line) => {
-        const cells = splitRow(line)
-        const row: Record<string, string> = {}
-        for (let j = 0; j < headers.length; j++) {
-          row[headers[j]] = cells[j] ?? ""
-        }
-        return row
-      })
+      rows = parsed.rows
     } else {
       return NextResponse.json(
         { error: "Only .xlsx and .csv files are supported" },
@@ -128,8 +106,9 @@ export async function POST(request: Request) {
     const result = await ingestCOGRecordsRows(rows, file.name)
     return NextResponse.json(result)
   } catch (error) {
+    unstable_rethrow(error)
     console.error("[/api/import-cog]", error)
-    if (error instanceof XlsxLimitError) {
+    if (error instanceof XlsxLimitError || error instanceof CsvLimitError) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
     const message = error instanceof Error ? error.message : "Failed to import"
