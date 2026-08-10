@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table"
 import {
   Activity,
@@ -43,8 +44,9 @@ import {
   type ProformaLineItems,
   type PurchaseScenario,
 } from "@/lib/financial-analysis/proforma-pnl"
+import { FileSpreadsheet } from "lucide-react"
 import {
-  getMedicareAscRate,
+  resolveMedicareAscRate,
   effectiveReimbursementPerCase,
   DEFAULT_PERCENT_OF_MEDICARE,
 } from "@/lib/financial-analysis/medicare-asc-rates"
@@ -55,7 +57,11 @@ import {
   type PayorQuarter,
 } from "@/lib/payor-volume/parse-payor-volume-rows"
 import type { SavedDividendProposal } from "@/lib/actions/dividend-proposals"
-import { usePayorVolumeDatasets } from "@/hooks/use-dividend"
+import {
+  usePayorVolumeDatasets,
+  useProformaStatements,
+  useMedicareRateSets,
+} from "@/hooks/use-dividend"
 import {
   MoneyInput,
   DeltaTile,
@@ -65,6 +71,8 @@ import {
 } from "@/components/vendor/prospective/dividend/primitives"
 import { ProformaEditor } from "@/components/vendor/prospective/dividend/proforma-editor"
 import { PayorVolumeUploadDialog } from "@/components/vendor/prospective/dividend/payor-volume-upload-dialog"
+import { ProformaUploadDialog } from "@/components/vendor/prospective/dividend/proforma-upload-dialog"
+import { MedicareRatesUploadDialog } from "@/components/vendor/prospective/dividend/medicare-rates-upload-dialog"
 import {
   DividendProposalActions,
   type DividendProposalSnapshot,
@@ -122,6 +130,13 @@ export function DividendImpactSection({
   // effective selection is DERIVED below rather than synced by an effect.
   const [facilityKeySel, setFacilityKeySel] = useState<string>("")
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [proformaUploadOpen, setProformaUploadOpen] = useState(false)
+  const [ratesUploadOpen, setRatesUploadOpen] = useState(false)
+  // "" = the built-in CY2025 national table.
+  const [rateSetId, setRateSetId] = useState<string>("")
+  // Which uploaded P&L the current lineItems came from, so a manual edit is
+  // visibly distinguishable from "as uploaded".
+  const [proformaSource, setProformaSource] = useState<string | null>(null)
   // The saved proposal currently loaded (enables in-place "Save"/"Update").
   const [currentProposalId, setCurrentProposalId] = useState<string | null>(null)
   const [currentProposalName, setCurrentProposalName] = useState<string | null>(
@@ -130,6 +145,11 @@ export function DividendImpactSection({
 
   const { data: facilityOptions = [], isLoading: datasetsLoading } =
     usePayorVolumeDatasets(vendorId)
+  const { data: proformaStatements = [] } = useProformaStatements(vendorId)
+  const { data: rateSets = [] } = useMedicareRateSets(vendorId)
+
+  // The uploaded rate table currently applied; undefined = built-in.
+  const activeRateSet = rateSets.find((s) => s.id === rateSetId)
 
   // Derive the effective selection: fall back to the first dataset so the tab
   // is usable the moment one exists, and so a selection pointing at a deleted
@@ -181,9 +201,9 @@ export function DividendImpactSection({
       effectiveSelectedPayors.map((g) => ({
         group: g.group,
         volume: g.annualizedVolume,
-        rate: getMedicareAscRate(g.group),
+        rate: resolveMedicareAscRate(g.group, activeRateSet?.rates),
       })),
-    [effectiveSelectedPayors],
+    [effectiveSelectedPayors, activeRateSet],
   )
   const blendedMedicareRate = useMemo(() => {
     const withRate = medicareBreakdown.filter(
@@ -271,11 +291,34 @@ export function DividendImpactSection({
     )
   }
 
+  /** Load an uploaded P&L into the editable line items. */
+  const applyProforma = (statement: {
+    facilityKey: string
+    lineItems: ProformaLineItems
+    facilityLabel: string
+  }) => {
+    setLineItems(statement.lineItems)
+    setProformaSource(statement.facilityLabel)
+  }
+
   // Switching facilities resets the selected procedure groups so stale volume
-  // never leaks across facilities.
+  // never leaks across facilities, and swaps in that facility's uploaded P&L.
+  // Critically, a facility with NO uploaded P&L falls back to the example
+  // rather than keeping the previous facility's statement — otherwise one
+  // report would silently mix facility A's P&L with facility B's volume.
   const applyFacility = (key: string) => {
     setFacilityKeySel(key)
     clearPayorGroups()
+    const statement = proformaStatements.find((s) => s.facilityKey === key)
+    if (statement) {
+      applyProforma(statement)
+    } else if (proformaSource !== null) {
+      setLineItems(DEFAULT_PROFORMA_LINE_ITEMS)
+      setProformaSource(null)
+      toast.info(
+        "No P&L on file for this facility — reset to the example statement. Upload the facility's P&L or enter it below.",
+      )
+    }
   }
 
   // Restore a saved proposal's full scenario in one shot. The payor dataset
@@ -318,7 +361,21 @@ export function DividendImpactSection({
       }
     }
 
+    // Restore the rate table the proposal was saved against; warn rather than
+    // silently recomputing on the built-in if that table is gone.
+    const savedRateSetId = p.payload.medicareRateSetId ?? null
+    if (savedRateSetId && !rateSets.some((s) => s.id === savedRateSetId)) {
+      toast.warning(
+        "The Medicare rate table this proposal was saved with is no longer available — the built-in CY2025 rates were used instead.",
+      )
+      setRateSetId("")
+    } else {
+      setRateSetId(savedRateSetId ?? "")
+    }
+
     setLineItems(p.payload.lineItems)
+    // The restored P&L comes from the proposal, not from a live upload.
+    setProformaSource(null)
     setPurchase(p.payload.purchase)
     setFacilityKeySel(dataset?.facilityKey ?? "")
     setPayorGroupNames(kept)
@@ -345,6 +402,7 @@ export function DividendImpactSection({
       quarterEdits,
       percentOfMedicare,
       medicareRateOverride,
+      medicareRateSetId: activeRateSet?.id ?? null,
     },
     summary: {
       verdict: impact.verdict,
@@ -769,15 +827,58 @@ export function DividendImpactSection({
                 : " (volume-weighted blend)"}
             </CardTitle>
             <CardDescription>
-              Public CMS ASC national payment rates. Facilities are paid a
-              negotiated percent of Medicare; effective reimbursement per case
-              = Medicare rate × % of Medicare.
+              Facilities are paid a negotiated percent of Medicare; effective
+              reimbursement per case = Medicare rate × % of Medicare.
               {medicareBreakdown.length === 1 && medicareBreakdown[0].rate?.note
                 ? ` ${medicareBreakdown[0].rate.note}`
                 : ""}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
+            {/* Which rate table applies */}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div className="flex flex-col gap-1.5 sm:max-w-md sm:flex-1">
+                <Label className="text-[11px] text-muted-foreground">
+                  Rate table
+                </Label>
+                <Select
+                  value={rateSetId || "builtin"}
+                  onValueChange={(v) => {
+                    setRateSetId(v === "builtin" ? "" : v)
+                    setMedicareRateOverride(null)
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="builtin">
+                      Built-in — CMS CY2025 national average
+                    </SelectItem>
+                    {rateSets.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name} · {s.rates.length} rates
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-[11px] text-muted-foreground">
+                  {activeRateSet
+                    ? `From ${activeRateSet.fileName}. Groups missing from the file fall back to the built-in rates.`
+                    : "Public CMS ASC national payment rates. Upload your own for a newer publication year or a locality-adjusted table."}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setRatesUploadOpen(true)}
+              >
+                <Upload className="h-4 w-4" />
+                Upload rates
+              </Button>
+            </div>
+            <Separator />
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <div className="flex flex-col gap-1.5">
                 <Label
@@ -1044,6 +1145,44 @@ export function DividendImpactSection({
         </CardContent>
       </Card>
 
+      {/* Facility P&L: upload the statement, or type it in below. */}
+      <div className="flex flex-col gap-2 rounded-lg border border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-2">
+          <FileSpreadsheet className="mt-0.5 h-4 w-4 text-muted-foreground" />
+          <div>
+            <div className="text-sm font-medium">Facility P&amp;L</div>
+            <div className="text-[11px] text-muted-foreground">
+              {proformaSource
+                ? `Loaded from the uploaded statement for ${proformaSource}. Edits below override it.`
+                : "Using the 1.2× Medicare example. Upload the facility's Steady State Proforma, or enter it line by line below."}
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {proformaSource ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setLineItems(DEFAULT_PROFORMA_LINE_ITEMS)
+                setProformaSource(null)
+              }}
+            >
+              Reset to example
+            </Button>
+          ) : null}
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => setProformaUploadOpen(true)}
+          >
+            <Upload className="h-4 w-4" />
+            Upload P&amp;L
+          </Button>
+        </div>
+      </div>
+
       {/* Editable facility proforma */}
       <ProformaEditor
         open={showProforma}
@@ -1057,6 +1196,24 @@ export function DividendImpactSection({
         onOpenChange={setUploadOpen}
         facilities={facilities}
         onSaved={(key) => applyFacility(key)}
+      />
+
+      <ProformaUploadDialog
+        open={proformaUploadOpen}
+        onOpenChange={setProformaUploadOpen}
+        facilities={facilities}
+        onImported={(r) => applyProforma(r)}
+      />
+
+      <MedicareRatesUploadDialog
+        open={ratesUploadOpen}
+        onOpenChange={setRatesUploadOpen}
+        onImported={(r) => {
+          setRateSetId(r.id)
+          // Drop any manual rate override, or the freshly uploaded table
+          // would be selected but have no effect on the displayed rate.
+          setMedicareRateOverride(null)
+        }}
       />
     </div>
   )

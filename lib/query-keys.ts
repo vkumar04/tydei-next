@@ -362,6 +362,10 @@ export const queryKeys = {
       ["prospective", "dividendProposals", vendorId] as const,
     payorVolumeDatasets: (vendorId: string) =>
       ["prospective", "payorVolumeDatasets", vendorId] as const,
+    proformaStatements: (vendorId: string) =>
+      ["prospective", "proformaStatements", vendorId] as const,
+    medicareRateSets: (vendorId: string) =>
+      ["prospective", "medicareRateSets", vendorId] as const,
   },
   settings: {
     facilityProfile: (facilityId: string) =>

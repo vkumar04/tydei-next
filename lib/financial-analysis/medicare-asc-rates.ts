@@ -130,6 +130,27 @@ export function getAllMedicareAscRates(): MedicareAscRate[] {
   return RATES
 }
 
+/**
+ * Resolve a rate against an optional UPLOADED rate set, falling back to the
+ * built-in table. One canonical lookup so every surface agrees on which rate
+ * applies — the built-in CY2025 national snapshot is the default, and an
+ * uploaded set (a newer publication year, or a locality-adjusted table)
+ * shadows it per group.
+ *
+ * Pass `null`/`undefined` for `uploaded` to get the built-in table alone.
+ */
+export function resolveMedicareAscRate(
+  group: string,
+  uploaded: MedicareAscRate[] | null | undefined,
+): MedicareAscRate | undefined {
+  if (uploaded && uploaded.length > 0) {
+    const key = normalizeGroupName(group)
+    const hit = uploaded.find((r) => normalizeGroupName(r.group) === key)
+    if (hit) return hit
+  }
+  return getMedicareAscRate(group)
+}
+
 /** Effective facility reimbursement per case = Medicare rate × % of Medicare. */
 export function effectiveReimbursementPerCase(
   medicareRate: number,
