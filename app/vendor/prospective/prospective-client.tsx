@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Gauge, Scale } from "lucide-react"
+import { Gauge, Landmark, Scale } from "lucide-react"
 
 import { ProspectiveHero } from "@/components/vendor/prospective/prospective-hero"
 import { useVendorProposals } from "@/hooks/use-prospective"
@@ -10,6 +10,7 @@ import { useVendorProposals } from "@/hooks/use-prospective"
 import { ProposalCards } from "./sections/ProposalCards"
 import { ProposalStepper } from "./sections/ProposalStepper"
 import { BenchmarksSection } from "./sections/BenchmarksSection"
+import { DividendImpactSection } from "./sections/DividendImpactSection"
 import { type OppEngineHandoff } from "./sections/OpportunityEngineSection"
 
 // ─── Main Component ────────────────────────────────────────────
@@ -82,6 +83,10 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
             <Scale className="h-4 w-4" />
             Benchmarks
           </TabsTrigger>
+          <TabsTrigger value="dividend" className="gap-2">
+            <Landmark className="h-4 w-4" />
+            Dividend / DCF
+          </TabsTrigger>
         </TabsList>
 
         {/* Opportunities = the list of past proposals (like My Contracts). */}
@@ -147,6 +152,18 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
 
         <TabsContent value="benchmarks" className="mt-4 space-y-4">
           <BenchmarksSection vendorId={vendorId} />
+        </TabsContent>
+
+        {/* Dividend / DCF = purchase-impact-on-owner-dividend workspace.
+            forceMount for the same reason as Proposals: the scenario (P&L
+            edits, quarter overrides, unsaved proposal) is client state that a
+            peek at another tab must not discard. */}
+        <TabsContent
+          value="dividend"
+          forceMount
+          className="mt-4 space-y-4 data-[state=inactive]:hidden"
+        >
+          <DividendImpactSection vendorId={vendorId} facilities={facilities} />
         </TabsContent>
       </Tabs>
     </div>

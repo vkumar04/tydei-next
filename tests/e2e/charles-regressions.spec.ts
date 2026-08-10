@@ -104,7 +104,7 @@ test.describe("facility Current State Analysis reports live data", () => {
 test.describe("vendor prospective workspace", () => {
   test.use({ storageState: "tests/e2e/.auth/vendor.json" })
 
-  test("tab strip is exactly Opportunities / Proposals / Benchmarks", async ({
+  test("tab strip is exactly Opportunities / Proposals / Benchmarks / Dividend", async ({
     page,
   }) => {
     await page.goto("/vendor/prospective")
@@ -112,10 +112,12 @@ test.describe("vendor prospective workspace", () => {
     const tabs = page.getByRole("tab")
     // Nothing else on this route renders tabs — the only other Tabs in the
     // subtree is ProposalDetailDialog's, and that dialog is closed.
-    await expect(tabs).toHaveCount(3, { timeout: 20_000 })
+    // (Dividend / DCF joined the strip 2026-08-09.)
+    await expect(tabs).toHaveCount(4, { timeout: 20_000 })
     await expect(tabs.nth(0)).toHaveText(/opportunities/i)
     await expect(tabs.nth(1)).toHaveText(/proposals/i)
     await expect(tabs.nth(2)).toHaveText(/benchmarks/i)
+    await expect(tabs.nth(3)).toHaveText(/dividend \/ dcf/i)
 
     // The separate "Analytics" tab was folded into the one-page Proposals
     // workspace; a reappearance means the split flow is back.
@@ -128,7 +130,7 @@ test.describe("vendor prospective workspace", () => {
     await page.goto("/vendor/prospective")
     // Wait for the whole strip before clicking — a half-rendered TabsList
     // means React has not taken over yet and the click would no-op.
-    await expect(page.getByRole("tab")).toHaveCount(3, { timeout: 20_000 })
+    await expect(page.getByRole("tab")).toHaveCount(4, { timeout: 20_000 })
     await page.getByRole("tab", { name: /proposals/i }).click()
 
     // Step 2 of the one-page workspace.
@@ -162,7 +164,7 @@ test.describe("vendor prospective workspace", () => {
     page,
   }) => {
     await page.goto("/vendor/prospective")
-    await expect(page.getByRole("tab")).toHaveCount(3, { timeout: 20_000 })
+    await expect(page.getByRole("tab")).toHaveCount(4, { timeout: 20_000 })
     await page.getByRole("tab", { name: /benchmarks/i }).click()
 
     await expect(

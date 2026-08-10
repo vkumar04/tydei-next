@@ -356,6 +356,12 @@ export const queryKeys = {
       ["prospective", "vendorBenchmarks", vendorId] as const,
     vendorCogPatterns: (vendorId: string | null) =>
       ["prospective", "vendorCOGPatterns", vendorId] as const,
+    // Dividend/DCF tab — both families sit under the `prospective` prefix so
+    // the existing `prospective.all` invalidations refresh them too.
+    dividendProposals: (vendorId: string) =>
+      ["prospective", "dividendProposals", vendorId] as const,
+    payorVolumeDatasets: (vendorId: string) =>
+      ["prospective", "payorVolumeDatasets", vendorId] as const,
   },
   settings: {
     facilityProfile: (facilityId: string) =>

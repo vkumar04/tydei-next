@@ -265,7 +265,7 @@ export function computeFacilityProspectiveModel(
   return { current, impact }
 }
 
-function computeEnterpriseValueScenarios(
+export function computeEnterpriseValueScenarios(
   currentEbitda: number,
   deltaEbitda: number,
 ): EnterpriseValueByMultiple[] {
