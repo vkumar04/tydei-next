@@ -14,6 +14,7 @@
  *   - toContractType / toPerfPeriod / toTermType / toRebateType (AI→enum)
  */
 import { parseXlsxMatrixBounded } from "@/lib/xlsx/parse-xlsx-bounded"
+import { parseCsvTextBounded } from "@/lib/csv/parse-csv-bounded"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { prisma } from "@/lib/db"
@@ -264,48 +265,14 @@ export function get(
 /**
  * Parse a CSV string into an array of row objects keyed by header.
  * Handles BOMs, CRLF line endings, and quoted fields containing commas.
- * No deps.
+ *
+ * Delegates to the canonical bounded parser \u2014 this was a fourth hand-rolled
+ * copy of the same splitter, and the only one still reachable from a Server
+ * Action (`ingestCOGRecordsCSV`, the case-costing imports), where the caller
+ * passes the whole file as a string. Row/column caps apply here too.
  */
 export function parseCSV(text: string): Record<string, string>[] {
-  const stripped = text.replace(/^\uFEFF/, "")
-  const lines = stripped.split(/\r?\n/).filter((l) => l.trim().length > 0)
-  if (lines.length === 0) return []
-
-  const splitRow = (line: string): string[] => {
-    const out: string[] = []
-    let cur = ""
-    let inQuotes = false
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i]
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          cur += '"'
-          i++
-        } else {
-          inQuotes = !inQuotes
-        }
-      } else if (ch === "," && !inQuotes) {
-        out.push(cur)
-        cur = ""
-      } else {
-        cur += ch
-      }
-    }
-    out.push(cur)
-    return out.map((s) => s.trim())
-  }
-
-  const headers = splitRow(lines[0])
-  const rows: Record<string, string>[] = []
-  for (let i = 1; i < lines.length; i++) {
-    const cells = splitRow(lines[i])
-    const row: Record<string, string> = {}
-    for (let j = 0; j < headers.length; j++) {
-      row[headers[j]] = cells[j] ?? ""
-    }
-    rows.push(row)
-  }
-  return rows
+  return parseCsvTextBounded(text).rows
 }
 
 /** Trim + strip "$ 205.00" / "$205.00" / "205.00" / "" → number. */
