@@ -9,6 +9,8 @@ import {
   deleteDividendProposal,
 } from "@/lib/actions/dividend-proposals"
 import { listPayorVolumeDatasets } from "@/lib/actions/payor-volume"
+import { listProformaStatements } from "@/lib/actions/proforma-statements"
+import { listMedicareRateSets } from "@/lib/actions/medicare-rate-sets"
 
 // TanStack Query hooks for the Dividend/DCF tab. Keys come from the
 // query-keys factory; mutations invalidate the shared `prospective` prefix.
@@ -24,6 +26,22 @@ export function usePayorVolumeDatasets(vendorId: string) {
   return useQuery({
     queryKey: queryKeys.prospective.payorVolumeDatasets(vendorId),
     queryFn: () => listPayorVolumeDatasets(),
+  })
+}
+
+/** Uploaded facility P&L statements, keyed by the payor-volume facilityKey. */
+export function useProformaStatements(vendorId: string) {
+  return useQuery({
+    queryKey: queryKeys.prospective.proformaStatements(vendorId),
+    queryFn: () => listProformaStatements(),
+  })
+}
+
+/** Uploaded CMS ASC rate tables that shadow the built-in snapshot. */
+export function useMedicareRateSets(vendorId: string) {
+  return useQuery({
+    queryKey: queryKeys.prospective.medicareRateSets(vendorId),
+    queryFn: () => listMedicareRateSets(),
   })
 }
 

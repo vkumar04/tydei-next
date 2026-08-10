@@ -573,6 +573,7 @@ model Facility {
   facilityAssignments FacilityAssignment[]
   proposalEvaluations ProposalEvaluation[]
   payorVolumeDatasets PayorVolumeDataset[]
+  proformaStatements  ProformaStatement[]
 
   @@index([status])
   @@map("facility")
@@ -670,8 +671,61 @@ model Vendor {
   aliases            VendorAlias[]
   payorVolumeDatasets PayorVolumeDataset[]
   dividendProposals  DividendProposal[]
+  proformaStatements ProformaStatement[]
+  medicareRateSets   MedicareRateSet[]
 
   @@map("vendor")
+}
+
+/// A facility's uploaded Steady State Proforma P&L, so the Dividend/DCF tab
+/// runs on the real statement instead of 22 hand-typed fields (Charles
+/// 2026-08-10). Shares the `facilityKey` space with PayorVolumeDataset —
+/// `facility:<id>` | `adhoc:<normalized label>` — so selecting a facility in
+/// the tab picks up both its volume and its P&L. VENDOR-owned: the rep's own
+/// copy of a statement the facility shared with them.
+model ProformaStatement {
+  id            String   @id @default(cuid())
+  vendorId      String
+  facilityKey   String
+  facilityId    String?
+  facilityLabel String
+  fileName      String
+  /// ProformaLineItems — the 22-field shape owned by
+  /// lib/financial-analysis/proforma-pnl.ts. Validated on write.
+  lineItems     Json
+  /// Field names the upload actually matched; the rest defaulted to 0.
+  matchedFields Json     @default("[]")
+  uploadedBy    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  vendor        Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  facility      Facility? @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+
+  @@unique([vendorId, facilityKey])
+  @@index([vendorId])
+  @@map("proforma_statement")
+}
+
+/// An uploaded CMS ASC rate table that shadows the built-in CY2025 national
+/// snapshot in lib/financial-analysis/medicare-asc-rates.ts. Named sets, so a
+/// rep can hold a publication year and a locality-adjusted table side by side
+/// and pick which applies. Absent = the built-in table.
+model MedicareRateSet {
+  id         String   @id @default(cuid())
+  vendorId   String
+  /// User-given, e.g. "CY2026 National" or "CY2026 Boston locality".
+  name       String
+  fileName   String
+  /// MedicareAscRate[] — { group, code, medicareRate, note? }.
+  rates      Json
+  uploadedBy String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  vendor     Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, name])
+  @@index([vendorId])
+  @@map("medicare_rate_set")
 }
 
 /// Vendor-uploaded payor-reported procedure volume for one facility —

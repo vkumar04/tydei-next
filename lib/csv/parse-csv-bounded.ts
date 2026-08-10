@@ -141,6 +141,32 @@ function scanLines(
 }
 
 /**
+ * Parse CSV text into a POSITIONAL cell matrix, same caps as the record form.
+ *
+ * For sheets with no reliable header row — a P&L is a label/value sheet where
+ * row 0 is data like any other. Header-keyed records cannot represent these:
+ * duplicate or blank header names collapse (last column wins) and cell
+ * position is then unrecoverable, so rebuilding a matrix by name silently
+ * swaps columns. Callers that need position must use this, not
+ * `parseCsvTextBounded`.
+ *
+ * @throws {CsvLimitError} when the row or column cap is exceeded.
+ */
+export function parseCsvTextToMatrixBounded(
+  text: string,
+  options: ParseCsvBoundedOptions = {},
+): string[][] {
+  const maxRows = options.maxRows ?? DEFAULT_MAX_ROWS
+  const maxColumns = options.maxColumns ?? DEFAULT_MAX_COLUMNS
+
+  const offset = text.charCodeAt(0) === 0xfeff ? 1 : 0
+  const body = offset === 0 ? text : text.slice(offset)
+
+  const spans = scanLines(body, maxRows, maxColumns)
+  return spans.map((s) => splitRow(body.slice(s.start, s.end)))
+}
+
+/**
  * Parse CSV text into header-keyed row records, rejecting oversized input
  * before allocating the rows.
  *

@@ -61,6 +61,13 @@ export const dividendProposalPayloadSchema = z.object({
   /** Whole percent (120 = 1.2× Medicare). */
   percentOfMedicare: z.number().finite().gte(0).lte(1_000),
   medicareRateOverride: z.number().finite().gte(0).lte(1e9).nullable(),
+  /**
+   * Which uploaded rate table was applied; null = the built-in CY2025 snapshot.
+   * Persisted so reopening a proposal cannot silently recompute the blended
+   * rate against a different table than the one it was saved with. Optional so
+   * proposals saved before rate sets existed still load.
+   */
+  medicareRateSetId: z.string().max(64).nullable().optional(),
 })
 
 export type DividendProposalPayload = z.infer<typeof dividendProposalPayloadSchema>
@@ -123,3 +130,36 @@ export const payorProcedureGroupSchema = z.object({
 export const payorProcedureGroupsSchema = z
   .array(payorProcedureGroupSchema)
   .max(500)
+
+// ─── Uploaded proforma + Medicare rate set ───────────────────────
+
+export const ingestProformaMetaSchema = z
+  .object({
+    fileName: z.string().min(1).max(300),
+    facilityId: z.string().max(64).optional(),
+    adhocName: z.string().trim().min(1).max(200).optional(),
+  })
+  .refine((v) => Boolean(v.facilityId) !== Boolean(v.adhocName), {
+    message: "Provide exactly one of facilityId or adhocName",
+  })
+
+export type IngestProformaMeta = z.infer<typeof ingestProformaMetaSchema>
+
+export const medicareAscRateSchema = z.object({
+  group: z.string().min(1).max(200),
+  code: z.string().max(60),
+  medicareRate: z.number().finite().gte(0).lte(1_000_000),
+  note: z.string().max(500).optional(),
+})
+
+export const medicareAscRatesSchema = z.array(medicareAscRateSchema).max(2_000)
+
+export const ingestMedicareRatesMetaSchema = z.object({
+  fileName: z.string().min(1).max(300),
+  /** User-given set name, e.g. "CY2026 National". */
+  name: z.string().trim().min(1).max(120),
+})
+
+export type IngestMedicareRatesMeta = z.infer<
+  typeof ingestMedicareRatesMetaSchema
+>

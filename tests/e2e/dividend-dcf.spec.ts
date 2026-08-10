@@ -167,3 +167,111 @@ test("save, reopen, and delete a dividend proposal", async ({ page }) => {
     .click()
   await expect(page.getByText("Proposal deleted")).toBeVisible()
 })
+
+test("uploaded P&L replaces the example proforma and drives the model", async ({
+  page,
+}) => {
+  await openDividendTab(page)
+
+  // Baseline: the 1.2x-Medicare example, NOI $12,465,463.
+  await expect(page.getByText(/Using the 1.2× Medicare example/)).toBeVisible()
+  await expect(page.getByText("$12,465,463").first()).toBeVisible()
+
+  await page.getByRole("button", { name: /upload p&l/i }).click()
+  await page.getByRole("button", { name: /unconnected facility/i }).click()
+  const facilityName = `E2E P&L Facility ${Date.now()}`
+  await page.getByPlaceholder("e.g. Coastal Surgery Center").fill(facilityName)
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles("tests/e2e/fixtures/proforma.csv")
+  await page.getByRole("button", { name: "Import", exact: true }).click()
+
+  // All 21 line items recognized, and the P&L card now cites the upload.
+  await expect(
+    page.getByText(new RegExp(`Loaded from the uploaded statement for ${facilityName}`)),
+  ).toBeVisible({ timeout: 15_000 })
+
+  // The before-column now reflects the uploaded statement, not the example:
+  // 300,000,000 - 260,000,000 = 40,000,000 revenue; NOI 17,895,000.
+  await expect(page.getByText("$40,000,000").first()).toBeVisible()
+  await expect(page.getByText("$17,895,000").first()).toBeVisible()
+
+  // Reset restores the example.
+  await page.getByRole("button", { name: /reset to example/i }).click()
+  await expect(page.getByText(/Using the 1.2× Medicare example/)).toBeVisible()
+  await expect(page.getByText("$12,465,463").first()).toBeVisible()
+})
+
+test("uploaded Medicare rates shadow the built-in table", async ({ page }) => {
+  await openDividendTab(page)
+
+  // Ground the scenario so the Medicare card renders.
+  await page.getByRole("button", { name: /upload payor data/i }).click()
+  await page.getByRole("button", { name: /unconnected facility/i }).click()
+  await page
+    .getByPlaceholder("e.g. Coastal Surgery Center")
+    .fill(`E2E Rates Facility ${Date.now()}`)
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles("tests/e2e/fixtures/payor-volume.csv")
+  await page.getByRole("button", { name: /save payor data/i }).click()
+  await expect(page.getByText(/3 groups · 880 cases\/yr/)).toBeVisible({
+    timeout: 15_000,
+  })
+  await page
+    .getByRole("button", { name: "Total Knee Replacement", exact: true })
+    .click()
+
+  // Built-in CY2025: $9,450.
+  await expect(page.getByLabel("Medicare rate ($/case)")).toHaveValue("9450")
+
+  // Upload a CY2026 table that raises knee to $9,750.
+  const setName = `E2E CY2026 ${Date.now()}`
+  await page.getByRole("button", { name: /upload rates/i }).click()
+  await page.getByLabel("Rate set name").fill(setName)
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles("tests/e2e/fixtures/medicare-rates.csv")
+  await page.getByRole("button", { name: "Import", exact: true }).click()
+
+  // The uploaded set auto-applies and the rate moves.
+  await expect(page.getByLabel("Medicare rate ($/case)")).toHaveValue("9750", {
+    timeout: 15_000,
+  })
+  // Facility reimbursement follows at 120%: 9750 x 1.2 = 11,700.
+  await expect(page.getByText("$11,700")).toBeVisible()
+
+  // Switching back to the built-in restores $9,450.
+  await page.getByRole("combobox").filter({ hasText: setName }).click()
+  await page.getByRole("option", { name: /built-in/i }).click()
+  await expect(page.getByLabel("Medicare rate ($/case)")).toHaveValue("9450")
+})
+
+test("an Excel-exported P&L with a title row imports the ANNUAL column", async ({
+  page,
+}) => {
+  // Audit regression 2026-08-10: the CSV path rebuilt the cell matrix from
+  // header NAMES. Excel pads every row to the used range, so a title row
+  // yields headers ["Steady State Proforma","",""] — the two blank keys
+  // collapsed and the trailing per-case column overwrote the annual column.
+  // Salaries imported as $583 instead of $3,500,000, with a success toast.
+  await openDividendTab(page)
+
+  await page.getByRole("button", { name: /upload p&l/i }).click()
+  await page.getByRole("button", { name: /unconnected facility/i }).click()
+  await page
+    .getByPlaceholder("e.g. Coastal Surgery Center")
+    .fill(`E2E Excel Export ${Date.now()}`)
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles("tests/e2e/fixtures/proforma-excel-export.csv")
+  await page.getByRole("button", { name: "Import", exact: true }).click()
+
+  // Annual figures, not per-case: revenue 40,000,000 and NOI 17,895,000.
+  await expect(page.getByText("$40,000,000").first()).toBeVisible({
+    timeout: 15_000,
+  })
+  await expect(page.getByText("$17,895,000").first()).toBeVisible()
+  // The per-case column must NOT have become the statement.
+  await expect(page.getByText("$583").first()).toHaveCount(0)
+})
