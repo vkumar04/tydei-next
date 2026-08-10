@@ -54,11 +54,6 @@ import {
   type PayorProcedureGroup,
   type PayorQuarter,
 } from "@/lib/payor-volume/parse-payor-volume-rows"
-import {
-  SAMPLE_PAYOR_VOLUME_DATASET,
-  SAMPLE_FACILITY_KEY,
-  type PayorVolumeDatasetView,
-} from "@/lib/payor-volume/sample-dataset"
 import type { SavedDividendProposal } from "@/lib/actions/dividend-proposals"
 import { usePayorVolumeDatasets } from "@/hooks/use-dividend"
 import {
@@ -123,7 +118,9 @@ export function DividendImpactSection({
   const [medicareRateOverride, setMedicareRateOverride] = useState<
     number | null
   >(null)
-  const [facilityKeySel, setFacilityKeySel] = useState<string>(SAMPLE_FACILITY_KEY)
+  // "" until the vendor picks one; datasets arrive from the server, so the
+  // effective selection is DERIVED below rather than synced by an effect.
+  const [facilityKeySel, setFacilityKeySel] = useState<string>("")
   const [uploadOpen, setUploadOpen] = useState(false)
   // The saved proposal currently loaded (enables in-place "Save"/"Update").
   const [currentProposalId, setCurrentProposalId] = useState<string | null>(null)
@@ -131,16 +128,16 @@ export function DividendImpactSection({
     null,
   )
 
-  const { data: storedDatasets = [] } = usePayorVolumeDatasets(vendorId)
+  const { data: facilityOptions = [], isLoading: datasetsLoading } =
+    usePayorVolumeDatasets(vendorId)
 
-  const facilityOptions = useMemo<PayorVolumeDatasetView[]>(
-    () => [...storedDatasets, SAMPLE_PAYOR_VOLUME_DATASET],
-    [storedDatasets],
-  )
+  // Derive the effective selection: fall back to the first dataset so the tab
+  // is usable the moment one exists, and so a selection pointing at a deleted
+  // dataset self-heals. `undefined` when the vendor has uploaded nothing yet.
   const activeDataset =
     facilityOptions.find((d) => d.facilityKey === facilityKeySel) ??
-    SAMPLE_PAYOR_VOLUME_DATASET
-  const payorGroups: PayorProcedureGroup[] = activeDataset.groups
+    facilityOptions[0]
+  const payorGroups: PayorProcedureGroup[] = activeDataset?.groups ?? []
 
   const selectedPayors = useMemo(
     () => payorGroups.filter((g) => payorGroupNames.includes(g.group)),
@@ -286,16 +283,16 @@ export function DividendImpactSection({
   // references are reconciled against the CURRENT dataset — case-insensitive,
   // dropped groups surfaced — instead of silently pointing at nothing.
   const loadProposal = (p: SavedDividendProposal) => {
-    const savedKey = p.facilityKey ?? SAMPLE_FACILITY_KEY
-    const dataset = facilityOptions.find((d) => d.facilityKey === savedKey)
+    const dataset = p.facilityKey
+      ? facilityOptions.find((d) => d.facilityKey === p.facilityKey)
+      : undefined
     if (!dataset && p.payload.payorGroupNames.length > 0) {
       toast.warning(
         `The payor dataset for “${p.facilityLabel}” is no longer available — the saved scenario numbers were restored, but its volume grounding was dropped.`,
       )
     }
-    const target = dataset ?? SAMPLE_PAYOR_VOLUME_DATASET
     const currentNameByNorm = new Map(
-      target.groups.map((g) => [normGroup(g.group), g.group]),
+      (dataset?.groups ?? []).map((g) => [normGroup(g.group), g.group]),
     )
     const kept: string[] = []
     const dropped: string[] = []
@@ -323,7 +320,7 @@ export function DividendImpactSection({
 
     setLineItems(p.payload.lineItems)
     setPurchase(p.payload.purchase)
-    setFacilityKeySel(target.facilityKey)
+    setFacilityKeySel(dataset?.facilityKey ?? "")
     setPayorGroupNames(kept)
     setQuarterEdits(edits)
     setPercentOfMedicare(p.payload.percentOfMedicare)
@@ -333,8 +330,10 @@ export function DividendImpactSection({
   }
 
   const snapshot: DividendProposalSnapshot = {
-    facilityKey: facilityKeySel,
-    facilityLabel: activeDataset.facilityLabel,
+    // The DERIVED selection, not the raw state — with auto-fallback the two
+    // differ, and the proposal must record the dataset actually modeled.
+    facilityKey: activeDataset?.facilityKey ?? null,
+    facilityLabel: activeDataset?.facilityLabel ?? "Unspecified facility",
     payload: {
       lineItems,
       // Deliberately the EFFECTIVE scenario (derived affectedCases +
@@ -410,7 +409,7 @@ export function DividendImpactSection({
           }}
           snapshot={snapshot}
           report={{
-            facilityLabel: activeDataset.facilityLabel,
+            facilityLabel: activeDataset?.facilityLabel ?? "Unspecified facility",
             lineItems,
             purchase: effectivePurchase,
             payorGroupNames,
@@ -439,19 +438,25 @@ export function DividendImpactSection({
               Facility payor dataset
             </Label>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <Select value={facilityKeySel} onValueChange={applyFacility}>
+              <Select
+                value={activeDataset?.facilityKey ?? ""}
+                onValueChange={applyFacility}
+                disabled={facilityOptions.length === 0}
+              >
                 <SelectTrigger className="sm:max-w-md">
-                  <SelectValue placeholder="Select a facility…" />
+                  <SelectValue
+                    placeholder={
+                      datasetsLoading
+                        ? "Loading…"
+                        : "No payor data yet — upload a file"
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   {facilityOptions.map((d) => (
                     <SelectItem key={d.facilityKey} value={d.facilityKey}>
                       {d.facilityLabel}
-                      {d.facilityKey === SAMPLE_FACILITY_KEY
-                        ? ""
-                        : d.connected
-                          ? " · connected"
-                          : " · unconnected"}
+                      {d.connected ? " · connected" : " · unconnected"}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -467,11 +472,15 @@ export function DividendImpactSection({
               </Button>
             </div>
             <span className="text-[11px] text-muted-foreground">
-              {`${activeDataset.groups.length} groups · ${activeDataset.totalAnnualizedVolume.toLocaleString()} cases/yr${
-                activeDataset.periods.length
-                  ? ` · ${activeDataset.periods.join(", ")}`
-                  : ""
-              }`}
+              {activeDataset
+                ? `${activeDataset.groups.length} groups · ${activeDataset.totalAnnualizedVolume.toLocaleString()} cases/yr${
+                    activeDataset.periods.length
+                      ? ` · ${activeDataset.periods.join(", ")}`
+                      : ""
+                  } · ${activeDataset.fileName}`
+                : datasetsLoading
+                  ? "Loading your payor datasets…"
+                  : "Upload a payor volume file to ground this analysis in real case volume."}
             </span>
           </div>
 
@@ -501,8 +510,9 @@ export function DividendImpactSection({
             {payorGroups.length === 0 ? (
               <div className="flex items-center gap-2 rounded-md border border-dashed border-border px-3 py-3 text-xs text-muted-foreground">
                 <Database className="h-4 w-4" />
-                Upload payor volume data for this facility to select procedure
-                groups.
+                {activeDataset
+                  ? "This dataset has no procedure groups — re-upload a file with Procedure Group, Year, Quarter, and Volume columns."
+                  : "Upload payor volume data to select procedure groups. Without it the analysis runs on the proforma's own case volume."}
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">

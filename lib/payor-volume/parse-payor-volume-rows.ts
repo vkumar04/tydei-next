@@ -33,6 +33,22 @@ export interface ParsedPayorVolume {
   totalAnnualizedVolume: number
 }
 
+/** One vendor-uploaded dataset, as the Dividend/DCF picker sees it. */
+export interface PayorVolumeDatasetView {
+  /** `PayorVolumeDataset.id`. */
+  id: string
+  /** `facility:<facilityId>` | `adhoc:<normalized label>` — the picker key. */
+  facilityKey: string
+  facilityLabel: string
+  /** True when tied to a connected Facility row. */
+  connected: boolean
+  fileName: string
+  periods: string[]
+  groups: PayorProcedureGroup[]
+  totalAnnualizedVolume: number
+  uploadedAt: string | null
+}
+
 function pick(
   row: Record<string, string>,
   candidates: string[],

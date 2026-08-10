@@ -50,25 +50,84 @@ test("scenario edits flip the verdict live", async ({ page }) => {
   ).toBeVisible()
 })
 
-test("selecting a payor group grounds volume and shows Medicare basis", async ({
+test("empty state prompts an upload when the vendor has no payor data", async ({
   page,
 }) => {
   await openDividendTab(page)
 
-  // The built-in sample dataset (East Coast Data) is preselected; its
-  // procedure-group chips render without any upload.
-  await page
-    .getByRole("button", { name: "Total Knee Replacement", exact: true })
-    .click()
+  // No built-in sample any more — a vendor with no uploads sees a prompt, and
+  // the model still runs on the proforma's own case volume.
+  const emptyPrompt = page.getByText(/upload payor volume data to select/i)
+  const picker = page.getByText(/no payor data yet/i)
+  // Either the vendor genuinely has none (both visible) or a prior test's
+  // upload survives; only assert the no-data branch when it applies.
+  if (await picker.isVisible().catch(() => false)) {
+    await expect(emptyPrompt).toBeVisible()
+    await expect(page.getByText("Payor-Reported Volume")).toHaveCount(0)
+  }
+  // The verdict banner renders either way — the tab is usable without data.
+  await expect(
+    page.getByText(/this purchase (increases|reduces) the dividend/i),
+  ).toBeVisible()
+})
 
-  // Affected cases become derived from the payor-verified volume…
+test("uploaded payor data drives the volume, Medicare rate, and the model", async ({
+  page,
+}) => {
+  await openDividendTab(page)
+
+  // ── Upload a real payor volume file through the dialog ──
+  await page.getByRole("button", { name: /upload payor data/i }).click()
+  await page.getByRole("button", { name: /unconnected facility/i }).click()
+  const facilityName = `E2E Payor Facility ${Date.now()}`
+  await page
+    .getByPlaceholder("e.g. Coastal Surgery Center")
+    .fill(facilityName)
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles("tests/e2e/fixtures/payor-volume.csv")
+  await page.getByRole("button", { name: /save payor data/i }).click()
+
+  // The route parsed it server-side and the dataset is now selected: 3 groups,
+  // 880 annualized cases (knee 500 + hip 270 + shoulder 110 — trailing four
+  // quarters each). Asserted on the durable summary line rather than the
+  // success toast, which auto-dismisses.
+  await expect(
+    page.getByText(/3 groups · 880 cases\/yr/),
+  ).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText(/2025-Q2, 2025-Q3, 2025-Q4, 2026-Q1/)).toBeVisible()
+  await expect(page.getByText(/payor-volume\.csv/)).toBeVisible()
+
+  // ── Select two groups; volume and reimbursement must come from the file ──
+  await page.getByRole("button", { name: "Total Knee Replacement", exact: true }).click()
+  await page.getByRole("button", { name: "Total Hip Replacement", exact: true }).click()
+
+  // Affected cases = knee 500 + hip 270 = 770, derived not typed.
+  await expect(page.getByText("2 selected · 770 cases/yr")).toBeVisible()
   await expect(
     page.getByText("Derived from the selected payor groups"),
   ).toBeVisible()
-  // …the quarterly volume card appears…
+
+  // Quarterly volumes render straight from the uploaded rows.
   await expect(page.getByText("Payor-Reported Volume")).toBeVisible()
-  // …and the Medicare card shows the group's public rate anchor (CPT 27447).
-  await expect(page.getByText("CPT 27447")).toBeVisible()
+  await expect(
+    page.getByLabel("Total Knee Replacement 2026 Q1 case volume"),
+  ).toHaveValue("140")
+
+  // Medicare basis: volume-weighted blend of CPT 27447 ($9,450 × 500) and
+  // CPT 27130 ($9,641 × 270) = $9,516.97 → displayed rounded to $9,517,
+  // and facility reimbursement at the 120% default = $11,420.
+  await expect(page.getByText("(volume-weighted blend)")).toBeVisible()
+  await expect(page.getByLabel("Medicare rate ($/case)")).toHaveValue("9517")
+  await expect(page.getByText("$11,420")).toBeVisible()
+
+  // ── Editing a quarter flows through to the model ──
+  await page
+    .getByLabel("Total Knee Replacement 2026 Q1 case volume")
+    .fill("240")
+  // Knee trailing-four becomes 110+120+130+240 = 600 → total 870.
+  await expect(page.getByText("2 selected · 870 cases/yr")).toBeVisible()
+  await expect(page.getByText(/\+100 cases\/yr vs\. the payor baseline/)).toBeVisible()
 })
 
 test("save, reopen, and delete a dividend proposal", async ({ page }) => {

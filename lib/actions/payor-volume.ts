@@ -9,8 +9,8 @@ import { vendorRelatedFacilityWhere } from "@/lib/vendors/related-facilities"
 import {
   parsePayorVolumeRows,
   type PayorProcedureGroup,
+  type PayorVolumeDatasetView,
 } from "@/lib/payor-volume/parse-payor-volume-rows"
-import type { PayorVolumeDatasetView } from "@/lib/payor-volume/sample-dataset"
 import {
   ingestPayorVolumeMetaSchema,
   payorProcedureGroupsSchema,

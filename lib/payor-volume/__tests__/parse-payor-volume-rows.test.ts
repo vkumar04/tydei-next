@@ -4,10 +4,6 @@ import {
   getPayorTrend,
   type PayorProcedureGroup,
 } from "../parse-payor-volume-rows"
-import {
-  SAMPLE_PAYOR_VOLUME_DATASET,
-  SAMPLE_FACILITY_KEY,
-} from "../sample-dataset"
 
 const row = (
   group: string,
@@ -125,15 +121,16 @@ describe("getPayorTrend", () => {
   })
 })
 
-describe("sample dataset", () => {
-  it("exposes the East Coast sample under the sample key", () => {
-    expect(SAMPLE_PAYOR_VOLUME_DATASET.facilityKey).toBe(SAMPLE_FACILITY_KEY)
-    expect(SAMPLE_PAYOR_VOLUME_DATASET.groups.length).toBeGreaterThan(0)
-    // Internal consistency: totalAnnualizedVolume = Σ group annualized.
-    const sum = SAMPLE_PAYOR_VOLUME_DATASET.groups.reduce(
-      (s, g) => s + g.annualizedVolume,
-      0,
-    )
-    expect(SAMPLE_PAYOR_VOLUME_DATASET.totalAnnualizedVolume).toBe(sum)
+describe("parsed dataset totals", () => {
+  it("totalAnnualizedVolume equals the sum of each group's annualized volume", () => {
+    const parsed = parsePayorVolumeRows([
+      row("Total Knee Replacement", 2025, 1, 100),
+      row("Total Knee Replacement", 2025, 2, 120),
+      row("Shoulder", 2025, 1, 40),
+      row("Shoulder", 2025, 2, 60),
+    ])
+    const sum = parsed.groups.reduce((s, g) => s + g.annualizedVolume, 0)
+    expect(parsed.totalAnnualizedVolume).toBe(sum)
+    expect(parsed.groups).toHaveLength(2)
   })
 })
