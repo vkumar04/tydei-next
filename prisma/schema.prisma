@@ -572,6 +572,7 @@ model Facility {
   vendorNameMappings VendorNameMapping[]
   facilityAssignments FacilityAssignment[]
   proposalEvaluations ProposalEvaluation[]
+  payorVolumeDatasets PayorVolumeDataset[]
 
   @@index([status])
   @@map("facility")
@@ -667,8 +668,68 @@ model Vendor {
   crossVendorTieInMembers CrossVendorTieInMember[]
   vendorCogRecords   VendorCogRecord[]
   aliases            VendorAlias[]
+  payorVolumeDatasets PayorVolumeDataset[]
+  dividendProposals  DividendProposal[]
 
   @@map("vendor")
+}
+
+/// Vendor-uploaded payor-reported procedure volume for one facility —
+/// connected (facilityId set) or an ad-hoc prospect (facilityId null,
+/// identified by label). One row per (vendor, facilityKey); re-uploading
+/// replaces the dataset. VENDOR-owned: this is the vendor rep's own copy of a
+/// payor report used to ground Dividend/DCF scenarios — it is never surfaced
+/// to the facility portal, so no Connection-mode gate applies to reads.
+model PayorVolumeDataset {
+  id                    String   @id @default(cuid())
+  vendorId              String
+  /// `facility:<facilityId>` | `adhoc:<normalized label>` — the picker key.
+  facilityKey           String
+  facilityId            String?
+  facilityLabel         String
+  fileName              String
+  /// string[] of `YYYY-Qn` period keys covered by the upload.
+  periods               Json     @default("[]")
+  /// PayorProcedureGroup[]: { group, quarters[{year,quarter,volume}],
+  /// totalVolume, annualizedVolume } — shape owned by
+  /// lib/payor-volume/parse-payor-volume-rows.ts.
+  groups                Json     @default("[]")
+  totalAnnualizedVolume Int      @default(0)
+  uploadedBy            String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  vendor                Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  facility              Facility? @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+
+  @@unique([vendorId, facilityKey])
+  @@index([vendorId])
+  @@map("payor_volume_dataset")
+}
+
+/// Vendor-side saved Dividend/DCF proposal — the ProposalEvaluation pattern
+/// (full engine snapshot in one `payload` Json, headline figures denormalized
+/// for the list). Payload: { lineItems, purchase, payorGroupNames,
+/// quarterEdits, percentOfMedicare, medicareRateOverride, facilityKey }.
+model DividendProposal {
+  id                   String   @id @default(cuid())
+  vendorId             String
+  name                 String
+  /// Same key space as PayorVolumeDataset.facilityKey (incl. the sample).
+  facilityKey          String?
+  facilityLabel        String
+  /// "accretive" | "dilutive" | "neutral"
+  verdict              String?
+  annualDividendImpact Float?
+  netPresentValue      Float?
+  paybackYears         Float?
+  noiImpact            Float?
+  payload              Json
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  vendor               Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId])
+  @@map("dividend_proposal")
 }
 
 // ─── Cross-Vendor Tie-In (v0 doc §4 — facility GPO bundle) ─────────

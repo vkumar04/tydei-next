@@ -1,0 +1,822 @@
+{
+  "source": "East Coast Data (payor-reported procedure volumes)",
+  "periods": [
+    "2025 Q2",
+    "2025 Q3",
+    "2025 Q4",
+    "2026 Q1"
+  ],
+  "totalAnnualizedVolume": 5339,
+  "groups": [
+    {
+      "group": "Other Sports Med",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 162
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 134
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 146
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 178
+        }
+      ],
+      "totalVolume": 620,
+      "annualizedVolume": 620
+    },
+    {
+      "group": "Series RT",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 211
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 145
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 144
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 104
+        }
+      ],
+      "totalVolume": 604,
+      "annualizedVolume": 604
+    },
+    {
+      "group": "Orthovisc (DePuy)",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 211
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 145
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 144
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 104
+        }
+      ],
+      "totalVolume": 604,
+      "annualizedVolume": 604
+    },
+    {
+      "group": "Total Knee Replacement",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 109
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 139
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 122
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 125
+        }
+      ],
+      "totalVolume": 495,
+      "annualizedVolume": 495
+    },
+    {
+      "group": "Knee Meniscus Repair",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 118
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 133
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 108
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 122
+        }
+      ],
+      "totalVolume": 481,
+      "annualizedVolume": 481
+    },
+    {
+      "group": "Shoulder",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 60
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 73
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 93
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 109
+        }
+      ],
+      "totalVolume": 335,
+      "annualizedVolume": 335
+    },
+    {
+      "group": "Total Hip Replacement",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 85
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 78
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 68
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 88
+        }
+      ],
+      "totalVolume": 319,
+      "annualizedVolume": 319
+    },
+    {
+      "group": "Computer Assisted Nav",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 57
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 82
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 70
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 101
+        }
+      ],
+      "totalVolume": 310,
+      "annualizedVolume": 310
+    },
+    {
+      "group": "ROTATOR CUFF REPAIR",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 34
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 43
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 53
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 61
+        }
+      ],
+      "totalVolume": 191,
+      "annualizedVolume": 191
+    },
+    {
+      "group": "Shoulder Replacement",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 52
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 34
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 41
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 62
+        }
+      ],
+      "totalVolume": 189,
+      "annualizedVolume": 189
+    },
+    {
+      "group": "Total/Reverse Shoulder Replacement",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 52
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 34
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 41
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 62
+        }
+      ],
+      "totalVolume": 189,
+      "annualizedVolume": 189
+    },
+    {
+      "group": "Mini Frag",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 47
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 41
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 34
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 56
+        }
+      ],
+      "totalVolume": 178,
+      "annualizedVolume": 178
+    },
+    {
+      "group": "Hand Wrist Recon",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 32
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 23
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 30
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 33
+        }
+      ],
+      "totalVolume": 118,
+      "annualizedVolume": 118
+    },
+    {
+      "group": "AC Joint Repair",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 17
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 16
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 19
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 22
+        }
+      ],
+      "totalVolume": 74,
+      "annualizedVolume": 74
+    },
+    {
+      "group": "Synvisc/ Synvisc One (Sanofi)",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 22
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 11
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 18
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 11
+        }
+      ],
+      "totalVolume": 62,
+      "annualizedVolume": 62
+    },
+    {
+      "group": "ACL/PCL Reconstruction",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 17
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 14
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 8
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 20
+        }
+      ],
+      "totalVolume": 59,
+      "annualizedVolume": 59
+    },
+    {
+      "group": "Internal Fixation - Arm",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 21
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 10
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 10
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 16
+        }
+      ],
+      "totalVolume": 57,
+      "annualizedVolume": 57
+    },
+    {
+      "group": "Repair of Forearm/Wrist",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 8
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 16
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 15
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 14
+        }
+      ],
+      "totalVolume": 53,
+      "annualizedVolume": 53
+    },
+    {
+      "group": "Wrist",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 18
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 8
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 10
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 15
+        }
+      ],
+      "totalVolume": 51,
+      "annualizedVolume": 51
+    },
+    {
+      "group": "Hand",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 15
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 8
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 9
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 16
+        }
+      ],
+      "totalVolume": 48,
+      "annualizedVolume": 48
+    },
+    {
+      "group": "Internal Fixation - Hand",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 15
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 8
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 9
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 16
+        }
+      ],
+      "totalVolume": 48,
+      "annualizedVolume": 48
+    },
+    {
+      "group": "Repair of Elbow",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 16
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 14
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 9
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 8
+        }
+      ],
+      "totalVolume": 47,
+      "annualizedVolume": 47
+    },
+    {
+      "group": "Pre-op Planning CT",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 6
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 4
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 13
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 18
+        }
+      ],
+      "totalVolume": 41,
+      "annualizedVolume": 41
+    },
+    {
+      "group": "Internal Fixation - Tibia/Fibula",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 6
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 10
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 11
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 10
+        }
+      ],
+      "totalVolume": 37,
+      "annualizedVolume": 37
+    },
+    {
+      "group": "Partial Knee Replacement",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 11
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 5
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 10
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 9
+        }
+      ],
+      "totalVolume": 35,
+      "annualizedVolume": 35
+    },
+    {
+      "group": "Ankle Fracture",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 5
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 8
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 11
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 6
+        }
+      ],
+      "totalVolume": 30,
+      "annualizedVolume": 30
+    },
+    {
+      "group": "Tendon/Ligament Repair, Hand/Fingers",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 2
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 5
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 7
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 9
+        }
+      ],
+      "totalVolume": 23,
+      "annualizedVolume": 23
+    },
+    {
+      "group": "Internal Fixation - Shoulder/Proximal Humerus",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 3
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 4
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 3
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 7
+        }
+      ],
+      "totalVolume": 17,
+      "annualizedVolume": 17
+    },
+    {
+      "group": "Internal Fixation - Hip/Upper Femur",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 2
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 2
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 7
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 2
+        }
+      ],
+      "totalVolume": 13,
+      "annualizedVolume": 13
+    },
+    {
+      "group": "Knee Revision",
+      "quarters": [
+        {
+          "year": 2025,
+          "quarter": 2,
+          "volume": 4
+        },
+        {
+          "year": 2025,
+          "quarter": 3,
+          "volume": 3
+        },
+        {
+          "year": 2025,
+          "quarter": 4,
+          "volume": 3
+        },
+        {
+          "year": 2026,
+          "quarter": 1,
+          "volume": 1
+        }
+      ],
+      "totalVolume": 11,
+      "annualizedVolume": 11
+    }
+  ]
+}
