@@ -92,11 +92,13 @@ test("uploaded payor data drives the volume, Medicare rate, and the model", asyn
   // 880 annualized cases (knee 500 + hip 270 + shoulder 110 — trailing four
   // quarters each). Asserted on the durable summary line rather than the
   // success toast, which auto-dismisses.
+  // One locator for the whole summary line — matching the filename on its own
+  // also hits the upload dialog's picked-file label while it animates closed.
   await expect(
-    page.getByText(/3 groups · 880 cases\/yr/),
+    page.getByText(
+      /3 groups · 880 cases\/yr · 2025-Q2, 2025-Q3, 2025-Q4, 2026-Q1 · payor-volume\.csv/,
+    ),
   ).toBeVisible({ timeout: 15_000 })
-  await expect(page.getByText(/2025-Q2, 2025-Q3, 2025-Q4, 2026-Q1/)).toBeVisible()
-  await expect(page.getByText(/payor-volume\.csv/)).toBeVisible()
 
   // ── Select two groups; volume and reimbursement must come from the file ──
   await page.getByRole("button", { name: "Total Knee Replacement", exact: true }).click()
