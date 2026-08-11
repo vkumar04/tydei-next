@@ -275,3 +275,63 @@ test("an Excel-exported P&L with a title row imports the ANNUAL column", async (
   // The per-case column must NOT have become the statement.
   await expect(page.getByText("$583").first()).toHaveCount(0)
 })
+
+test("editing an authoritative Medicare rate overrides the built-in estimate", async ({
+  page,
+}) => {
+  // Charles 2026-08-11: "need to be able to adjust these". The built-in table
+  // is an ESTIMATE; a rep must be able to enter the real allowable per group.
+  await openDividendTab(page)
+
+  // Ground the scenario so the Medicare card (and its editor) render.
+  await page.getByRole("button", { name: /upload payor data/i }).click()
+  await page.getByRole("button", { name: /unconnected facility/i }).click()
+  await page
+    .getByPlaceholder("e.g. Coastal Surgery Center")
+    .fill(`E2E Rate Editor ${Date.now()}`)
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles("tests/e2e/fixtures/payor-volume.csv")
+  await page.getByRole("button", { name: /save payor data/i }).click()
+  await expect(page.getByText(/3 groups · 880 cases\/yr/)).toBeVisible({
+    timeout: 15_000,
+  })
+  await page
+    .getByRole("button", { name: "Total Knee Replacement", exact: true })
+    .click()
+
+  // Built-in estimate: $9,450.
+  await expect(page.getByLabel("Medicare rate ($/case)")).toHaveValue("9450")
+
+  // Open the editor and set an authoritative figure.
+  await page.getByRole("button", { name: /^medicare rates/i }).click()
+  await expect(
+    page.getByRole("heading", { name: /authoritative medicare rates/i }),
+  ).toBeVisible()
+  const kneeRate = page.getByLabel("Rate per case for Total Knee Replacement")
+  await expect(kneeRate).toHaveValue("9450")
+  await kneeRate.fill("10200")
+  await expect(page.getByText("1 unsaved")).toBeVisible()
+  await page.getByRole("button", { name: /save changes/i }).click()
+  await expect(page.getByText(/Saved 1 authoritative rate/)).toBeVisible({
+    timeout: 15_000,
+  })
+
+  // The row is now Authoritative, and the trigger carries a count badge.
+  await expect(page.getByText("Authoritative").first()).toBeVisible()
+  await page.keyboard.press("Escape")
+
+  // The blended rate on the card follows the authoritative value.
+  await expect(page.getByLabel("Medicare rate ($/case)")).toHaveValue("10200")
+  // Facility reimbursement at 120%: 10,200 x 1.2 = 12,240.
+  await expect(page.getByText("$12,240")).toBeVisible()
+
+  // Revert restores the built-in estimate.
+  await page.getByRole("button", { name: /^medicare rates/i }).click()
+  await page.getByRole("button", { name: /revert/i }).first().click()
+  await expect(page.getByText(/Reverted to the underlying rate/)).toBeVisible({
+    timeout: 15_000,
+  })
+  await page.keyboard.press("Escape")
+  await expect(page.getByLabel("Medicare rate ($/case)")).toHaveValue("9450")
+})

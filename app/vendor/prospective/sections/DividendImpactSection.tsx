@@ -61,6 +61,7 @@ import {
   usePayorVolumeDatasets,
   useProformaStatements,
   useMedicareRateSets,
+  useMedicareRateOverrides,
 } from "@/hooks/use-dividend"
 import {
   MoneyInput,
@@ -73,6 +74,7 @@ import { ProformaEditor } from "@/components/vendor/prospective/dividend/proform
 import { PayorVolumeUploadDialog } from "@/components/vendor/prospective/dividend/payor-volume-upload-dialog"
 import { ProformaUploadDialog } from "@/components/vendor/prospective/dividend/proforma-upload-dialog"
 import { MedicareRatesUploadDialog } from "@/components/vendor/prospective/dividend/medicare-rates-upload-dialog"
+import { MedicareRateManager } from "@/components/vendor/prospective/dividend/medicare-rate-manager"
 import {
   DividendProposalActions,
   type DividendProposalSnapshot,
@@ -147,6 +149,7 @@ export function DividendImpactSection({
     usePayorVolumeDatasets(vendorId)
   const { data: proformaStatements = [] } = useProformaStatements(vendorId)
   const { data: rateSets = [] } = useMedicareRateSets(vendorId)
+  const { data: rateOverrides = [] } = useMedicareRateOverrides(vendorId)
 
   // The uploaded rate table currently applied; undefined = built-in.
   const activeRateSet = rateSets.find((s) => s.id === rateSetId)
@@ -201,9 +204,12 @@ export function DividendImpactSection({
       effectiveSelectedPayors.map((g) => ({
         group: g.group,
         volume: g.annualizedVolume,
-        rate: resolveMedicareAscRate(g.group, activeRateSet?.rates),
+        rate: resolveMedicareAscRate(g.group, {
+          overrides: rateOverrides,
+          uploaded: activeRateSet?.rates,
+        }),
       })),
-    [effectiveSelectedPayors, activeRateSet],
+    [effectiveSelectedPayors, activeRateSet, rateOverrides],
   )
   const blendedMedicareRate = useMemo(() => {
     const withRate = medicareBreakdown.filter(
@@ -403,6 +409,17 @@ export function DividendImpactSection({
       percentOfMedicare,
       medicareRateOverride,
       medicareRateSetId: activeRateSet?.id ?? null,
+      // Snapshot the authoritative rates too — they outrank the rate set, so
+      // recording only the set id would let a later rate edit silently change
+      // a saved proposal's figures.
+      medicareRateOverrides: rateOverrides.map((r) => ({
+        group: r.group,
+        label: r.label,
+        code: r.code,
+        medicareRate: r.medicareRate,
+        note: r.note,
+        rateEntered: r.rateEntered,
+      })),
     },
     summary: {
       verdict: impact.verdict,
@@ -868,15 +885,22 @@ export function DividendImpactSection({
                     : "Public CMS ASC national payment rates. Upload your own for a newer publication year or a locality-adjusted table."}
                 </span>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => setRatesUploadOpen(true)}
-              >
-                <Upload className="h-4 w-4" />
-                Upload rates
-              </Button>
+              <div className="flex items-center gap-2">
+                <MedicareRateManager
+                  overrides={rateOverrides}
+                  uploaded={activeRateSet?.rates}
+                  onRatesChanged={() => setMedicareRateOverride(null)}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setRatesUploadOpen(true)}
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload rates
+                </Button>
+              </div>
             </div>
             <Separator />
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

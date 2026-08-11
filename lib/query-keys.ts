@@ -366,6 +366,8 @@ export const queryKeys = {
       ["prospective", "proformaStatements", vendorId] as const,
     medicareRateSets: (vendorId: string) =>
       ["prospective", "medicareRateSets", vendorId] as const,
+    medicareRateOverrides: (vendorId: string) =>
+      ["prospective", "medicareRateOverrides", vendorId] as const,
   },
   settings: {
     facilityProfile: (facilityId: string) =>

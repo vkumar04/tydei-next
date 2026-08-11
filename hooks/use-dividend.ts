@@ -11,6 +11,12 @@ import {
 import { listPayorVolumeDatasets } from "@/lib/actions/payor-volume"
 import { listProformaStatements } from "@/lib/actions/proforma-statements"
 import { listMedicareRateSets } from "@/lib/actions/medicare-rate-sets"
+import {
+  listMedicareRateOverrides,
+  saveMedicareRateOverrides,
+  removeMedicareRateOverride,
+  resetMedicareRateOverrides,
+} from "@/lib/actions/medicare-rate-overrides"
 
 // TanStack Query hooks for the Dividend/DCF tab. Keys come from the
 // query-keys factory; mutations invalidate the shared `prospective` prefix.
@@ -58,5 +64,41 @@ export function useDeleteDividendProposal() {
     invalidate: [queryKeys.prospective.all],
     success: "Proposal deleted",
     error: "Failed to delete the proposal",
+  })
+}
+
+/** Hand-entered authoritative rates; these beat uploaded sets and built-ins. */
+export function useMedicareRateOverrides(vendorId: string) {
+  return useQuery({
+    queryKey: queryKeys.prospective.medicareRateOverrides(vendorId),
+    queryFn: () => listMedicareRateOverrides(),
+  })
+}
+
+export function useSaveMedicareRateOverrides() {
+  return useToastMutation(saveMedicareRateOverrides, {
+    invalidate: [queryKeys.prospective.all],
+    success: (r) =>
+      `Saved ${r.saved} authoritative rate${r.saved === 1 ? "" : "s"}`,
+    error: "Failed to save the Medicare rate changes",
+  })
+}
+
+export function useRemoveMedicareRateOverride() {
+  return useToastMutation(removeMedicareRateOverride, {
+    invalidate: [queryKeys.prospective.all],
+    success: "Reverted to the underlying rate",
+    error: "Failed to revert the Medicare rate",
+  })
+}
+
+export function useResetMedicareRateOverrides() {
+  return useToastMutation(resetMedicareRateOverrides, {
+    invalidate: [queryKeys.prospective.all],
+    success: (r) =>
+      r.removed === 0
+        ? "Nothing to reset"
+        : `Reset ${r.removed} rate${r.removed === 1 ? "" : "s"} to defaults`,
+    error: "Failed to reset the Medicare rates",
   })
 }
