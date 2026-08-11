@@ -46,7 +46,7 @@ import {
 } from "@/lib/financial-analysis/proforma-pnl"
 import { FileSpreadsheet } from "lucide-react"
 import {
-  resolveMedicareAscRate,
+  createMedicareRateResolver,
   effectiveReimbursementPerCase,
   DEFAULT_PERCENT_OF_MEDICARE,
 } from "@/lib/financial-analysis/medicare-asc-rates"
@@ -199,17 +199,24 @@ export function DividendImpactSection({
   const hasQuarterEdits = totalSelectedVolume !== baselineSelectedVolume
 
   // Per-group public Medicare rate, blended by (edited) volume.
+  // Index the rate sources once per change, not once per selected group.
+  const resolveRate = useMemo(
+    () =>
+      createMedicareRateResolver({
+        overrides: rateOverrides,
+        uploaded: activeRateSet?.rates,
+      }),
+    [rateOverrides, activeRateSet],
+  )
+
   const medicareBreakdown = useMemo(
     () =>
       effectiveSelectedPayors.map((g) => ({
         group: g.group,
         volume: g.annualizedVolume,
-        rate: resolveMedicareAscRate(g.group, {
-          overrides: rateOverrides,
-          uploaded: activeRateSet?.rates,
-        }),
+        rate: resolveRate(g.group),
       })),
-    [effectiveSelectedPayors, activeRateSet, rateOverrides],
+    [effectiveSelectedPayors, resolveRate],
   )
   const blendedMedicareRate = useMemo(() => {
     const withRate = medicareBreakdown.filter(
@@ -465,8 +472,14 @@ export function DividendImpactSection({
             question: does this change help or hurt the dividend?
           </p>
         </div>
-        <DividendProposalActions
-          vendorId={vendorId}
+        <div className="flex flex-wrap items-center gap-2">
+          <MedicareRateManager
+            overrides={rateOverrides}
+            uploaded={activeRateSet?.rates}
+            onRatesChanged={() => setMedicareRateOverride(null)}
+          />
+          <DividendProposalActions
+            vendorId={vendorId}
           currentId={currentProposalId}
           currentName={currentProposalName}
           onLoad={loadProposal}
@@ -493,8 +506,9 @@ export function DividendImpactSection({
             facilityReimbursement,
             totalSelectedVolume,
             impact,
-          }}
-        />
+            }}
+          />
+        </div>
       </div>
 
       {/* Purchase scenario inputs */}
@@ -885,22 +899,15 @@ export function DividendImpactSection({
                     : "Public CMS ASC national payment rates. Upload your own for a newer publication year or a locality-adjusted table."}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <MedicareRateManager
-                  overrides={rateOverrides}
-                  uploaded={activeRateSet?.rates}
-                  onRatesChanged={() => setMedicareRateOverride(null)}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => setRatesUploadOpen(true)}
-                >
-                  <Upload className="h-4 w-4" />
-                  Upload rates
-                </Button>
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setRatesUploadOpen(true)}
+              >
+                <Upload className="h-4 w-4" />
+                Upload rates
+              </Button>
             </div>
             <Separator />
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">

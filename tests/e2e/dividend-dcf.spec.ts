@@ -335,3 +335,37 @@ test("editing an authoritative Medicare rate overrides the built-in estimate", a
   await page.keyboard.press("Escape")
   await expect(page.getByLabel("Medicare rate ($/case)")).toHaveValue("9450")
 })
+
+test("the rate editor filters, and filtering preserves unsaved edits", async ({
+  page,
+}) => {
+  await openDividendTab(page)
+  await page.getByRole("button", { name: /^medicare rates/i }).click()
+  await expect(
+    page.getByRole("heading", { name: /authoritative medicare rates/i }),
+  ).toBeVisible()
+
+  // The built-in table is 30 groups; the count line reports the full set.
+  await expect(page.getByText(/^30 rows$/)).toBeVisible()
+
+  // Edit a rate, then filter — the unsaved edit must survive, because the
+  // filter narrows what is RENDERED, not what is held in the draft.
+  const knee = page.getByLabel("Rate per case for Total Knee Replacement")
+  await knee.fill("10200")
+  await expect(page.getByText(/30 rows · 1 edited/)).toBeVisible()
+
+  await page.getByLabel("Filter Medicare rates").fill("hip")
+  await expect(page.getByText(/of 30 rows/)).toBeVisible()
+  await expect(knee).toHaveCount(0) // knee is filtered out of the DOM…
+  await expect(page.getByText(/· 1 edited/)).toBeVisible() // …but still dirty
+
+  // Clearing the filter brings the row back WITH the edit intact.
+  await page.getByLabel("Filter Medicare rates").fill("")
+  await expect(
+    page.getByLabel("Rate per case for Total Knee Replacement"),
+  ).toHaveValue("10200")
+
+  // A filter matching nothing says so rather than showing a blank table.
+  await page.getByLabel("Filter Medicare rates").fill("zzzznope")
+  await expect(page.getByText(/No rate matches/)).toBeVisible()
+})

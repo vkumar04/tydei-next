@@ -1,7 +1,14 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { Plus, RotateCcw, ShieldCheck, SlidersHorizontal, Loader2 } from "lucide-react"
+import { memo, useCallback, useEffect, useMemo, useState } from "react"
+import {
+  Plus,
+  RotateCcw,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Loader2,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -76,6 +83,111 @@ function isDirty(r: DraftRow): boolean {
   )
 }
 
+/**
+ * One editable rate row, memoized.
+ *
+ * `patchRow` rebuilds the draft array on every keystroke, so without this a
+ * single digit re-rendered every input in the table — ~8,100 of them for the
+ * 2,000-row uploaded table the sibling upload action permits. Memoizing on the
+ * row object plus stable callbacks keeps a keystroke to one row.
+ */
+const RateRow = memo(function RateRow({
+  row: r,
+  busy,
+  onPatch,
+  onRevert,
+}: {
+  row: DraftRow
+  busy: boolean
+  onPatch: (group: string, patch: Partial<DraftRow>) => void
+  onRevert: (group: string) => void
+}) {
+  const dirty = isDirty(r)
+  return (
+    <TableRow className={dirty ? "bg-emerald-600/5" : undefined}>
+      <TableCell className="align-top">
+        <Input
+          value={r.label ?? ""}
+          placeholder={r.group}
+          onChange={(e) => onPatch(r.group, { label: e.target.value })}
+          className="h-8 font-medium leading-tight"
+          aria-label={`Display name for ${r.group}`}
+        />
+        {(r.label ?? "") && r.label !== r.group ? (
+          <span className="mt-1 block text-[10px] text-muted-foreground">
+            matches: {r.group}
+          </span>
+        ) : null}
+        <Input
+          value={r.note ?? ""}
+          placeholder="Optional note (e.g. ASP-based drug)"
+          onChange={(e) => onPatch(r.group, { note: e.target.value })}
+          aria-label={`Note for ${r.group}`}
+          className="mt-1.5 h-7 border-0 bg-transparent px-0 text-[11px] text-muted-foreground focus-visible:ring-0"
+        />
+      </TableCell>
+      <TableCell className="align-top">
+        <Input
+          value={r.code}
+          onChange={(e) => onPatch(r.group, { code: e.target.value })}
+          aria-label={`CPT or HCPCS code for ${r.group}`}
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell className="align-top">
+        <Input
+          type="number"
+          min={0}
+          value={r.medicareRate}
+          onChange={(e) =>
+            onPatch(r.group, { medicareRate: Number(e.target.value) || 0 })
+          }
+          aria-label={`Rate per case for ${r.group}`}
+          className="h-8 tabular-nums"
+        />
+        <span className="mt-1 block text-[11px] text-muted-foreground">
+          {formatCurrency(r.medicareRate)}
+        </span>
+      </TableCell>
+      <TableCell className="align-top">
+        {r.source === "authoritative" ? (
+          <Badge className="gap-1 bg-emerald-600 text-[10px] hover:bg-emerald-600">
+            <ShieldCheck className="h-3 w-3" />
+            Authoritative
+          </Badge>
+        ) : r.source === "uploaded" ? (
+          <Badge variant="secondary" className="text-[10px]">
+            Uploaded
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-[10px]">
+            Estimate
+          </Badge>
+        )}
+        {r.medicareRate !== r.baseRate ? (
+          <span className="mt-1 block text-[10px] text-muted-foreground">
+            becomes authoritative on save
+          </span>
+        ) : null}
+      </TableCell>
+      <TableCell className="text-right align-top">
+        {r.source === "authoritative" ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            className="h-8 gap-1 text-xs text-muted-foreground"
+            onClick={() => onRevert(r.group)}
+          >
+            <RotateCcw className="h-3 w-3" />
+            Revert
+          </Button>
+        ) : null}
+      </TableCell>
+    </TableRow>
+  )
+})
+
 export function MedicareRateManager({
   overrides,
   uploaded,
@@ -89,6 +201,7 @@ export function MedicareRateManager({
 }) {
   const [open, setOpen] = useState(false)
   const [rows, setRows] = useState<DraftRow[]>([])
+  const [query, setQuery] = useState("")
   const [newGroup, setNewGroup] = useState("")
   const [newCode, setNewCode] = useState("")
   const [newRate, setNewRate] = useState("")
@@ -127,9 +240,33 @@ export function MedicareRateManager({
   const busy =
     saveMutation.isPending || revertMutation.isPending || resetMutation.isPending
 
-  const patchRow = (group: string, patch: Partial<DraftRow>) => {
+  // Stable identities, or the memoized rows re-render on every keystroke
+  // anyway and the memo buys nothing.
+  const patchRow = useCallback((group: string, patch: Partial<DraftRow>) => {
     setRows((rs) => rs.map((r) => (r.group === group ? { ...r, ...patch } : r)))
-  }
+  }, [])
+
+  const revertRow = useCallback(
+    (group: string) => {
+      revertMutation.mutate(group, { onSuccess: () => onRatesChanged?.() })
+    },
+    [revertMutation, onRatesChanged],
+  )
+
+  // A rep with a full CMS addendum wants to FIND "knee", not scroll 2,000
+  // rows. Filtering is both the usability answer and what keeps the mounted
+  // input count small. Unsaved edits stay in `rows`, so filtering never
+  // discards them.
+  const visibleRows = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter(
+      (r) =>
+        r.group.toLowerCase().includes(q) ||
+        (r.label ?? "").toLowerCase().includes(q) ||
+        r.code.toLowerCase().includes(q),
+    )
+  }, [rows, query])
 
   const saveAll = () => {
     if (dirtyRows.length === 0) return
@@ -206,6 +343,27 @@ export function MedicareRateManager({
           </DialogHeader>
           <Separator />
 
+          <div className="flex flex-col gap-2 px-6 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative sm:max-w-xs sm:flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Filter by name or code…"
+                aria-label="Filter Medicare rates"
+                className="h-8 pl-9"
+              />
+            </div>
+            <span className="text-[11px] text-muted-foreground">
+              {query.trim()
+                ? `${visibleRows.length} of ${rows.length} rows`
+                : `${rows.length} rows`}
+              {dirtyRows.length > 0
+                ? ` · ${dirtyRows.length} edited`
+                : ""}
+            </span>
+          </div>
+
           <ScrollArea className="flex-1 overflow-y-auto">
             <div className="p-6 pt-4">
               <Table>
@@ -219,109 +377,22 @@ export function MedicareRateManager({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {rows.map((r) => {
-                    const dirty = isDirty(r)
-                    return (
-                      <TableRow
-                        key={r.group}
-                        className={dirty ? "bg-emerald-600/5" : undefined}
-                      >
-                        <TableCell className="align-top">
-                          <Input
-                            value={r.label ?? ""}
-                            placeholder={r.group}
-                            onChange={(e) =>
-                              patchRow(r.group, { label: e.target.value })
-                            }
-                            className="h-8 font-medium leading-tight"
-                            aria-label={`Display name for ${r.group}`}
-                          />
-                          {(r.label ?? "") && r.label !== r.group ? (
-                            <span className="mt-1 block text-[10px] text-muted-foreground">
-                              matches: {r.group}
-                            </span>
-                          ) : null}
-                          <Input
-                            value={r.note ?? ""}
-                            placeholder="Optional note (e.g. ASP-based drug)"
-                            onChange={(e) =>
-                              patchRow(r.group, { note: e.target.value })
-                            }
-                            aria-label={`Note for ${r.group}`}
-                            className="mt-1.5 h-7 border-0 bg-transparent px-0 text-[11px] text-muted-foreground focus-visible:ring-0"
-                          />
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <Input
-                            value={r.code}
-                            onChange={(e) =>
-                              patchRow(r.group, { code: e.target.value })
-                            }
-                            aria-label={`CPT or HCPCS code for ${r.group}`}
-                            className="h-8"
-                          />
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <Input
-                            type="number"
-                            min={0}
-                            value={r.medicareRate}
-                            onChange={(e) =>
-                              patchRow(r.group, {
-                                medicareRate: Number(e.target.value) || 0,
-                              })
-                            }
-                            aria-label={`Rate per case for ${r.group}`}
-                            className="h-8 tabular-nums"
-                          />
-                          <span className="mt-1 block text-[11px] text-muted-foreground">
-                            {formatCurrency(r.medicareRate)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="align-top">
-                          {r.source === "authoritative" ? (
-                            <Badge className="gap-1 bg-emerald-600 text-[10px] hover:bg-emerald-600">
-                              <ShieldCheck className="h-3 w-3" />
-                              Authoritative
-                            </Badge>
-                          ) : r.source === "uploaded" ? (
-                            <Badge variant="secondary" className="text-[10px]">
-                              Uploaded
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="text-[10px]">
-                              Estimate
-                            </Badge>
-                          )}
-                          {r.medicareRate !== r.baseRate ? (
-                            <span className="mt-1 block text-[10px] text-muted-foreground">
-                              becomes authoritative on save
-                            </span>
-                          ) : null}
-                        </TableCell>
-                        <TableCell className="text-right align-top">
-                          {r.source === "authoritative" ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={busy}
-                              className="h-8 gap-1 text-xs text-muted-foreground"
-                              onClick={() =>
-                                revertMutation.mutate(r.group, {
-                                  onSuccess: () => onRatesChanged?.(),
-                                })
-                              }
-                            >
-                              <RotateCcw className="h-3 w-3" />
-                              Revert
-                            </Button>
-                          ) : null}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
+                  {visibleRows.map((r) => (
+                    <RateRow
+                      key={r.group}
+                      row={r}
+                      busy={busy}
+                      onPatch={patchRow}
+                      onRevert={revertRow}
+                    />
+                  ))}
                 </TableBody>
               </Table>
+              {visibleRows.length === 0 ? (
+                <div className="rounded-md border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+                  No rate matches “{query.trim()}”.
+                </div>
+              ) : null}
 
               {/* Add a custom procedure group */}
               <div className="mt-6 rounded-md border border-dashed border-border p-4">

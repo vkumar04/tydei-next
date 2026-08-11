@@ -186,42 +186,81 @@ export interface MedicareRateSources {
  * Group matching is case/whitespace-insensitive at every tier — uploaded and
  * hand-entered group names come from human input.
  */
+/**
+ * Build an indexed lookup over the supplied sources ONCE.
+ *
+ * The naive form linear-scanned overrides then uploaded on every group, and
+ * `listEffectiveMedicareRates` calls it per row — O(rows x sources), which
+ * measured 39ms for a 2,000-row uploaded table (a supported upload size).
+ * Indexing first makes the whole merge O(n).
+ *
+ * Prefer this whenever resolving more than one group; `resolveMedicareAscRate`
+ * is the single-lookup convenience wrapper.
+ */
+export function createMedicareRateResolver(
+  sources: MedicareRateSources = {},
+): (group: string) => ResolvedMedicareRate | undefined {
+  const overrideByGroup = new Map<string, MedicareRateOverrideInput>()
+  for (const r of sources.overrides ?? []) {
+    overrideByGroup.set(normalizeGroupName(r.group), r)
+  }
+  const uploadedByGroup = new Map<string, MedicareAscRate>()
+  for (const r of sources.uploaded ?? []) {
+    uploadedByGroup.set(normalizeGroupName(r.group), r)
+  }
+
+  return (group: string) => {
+    const key = normalizeGroupName(group)
+    const override = overrideByGroup.get(key)
+    const uploaded = uploadedByGroup.get(key)
+    const builtIn = getMedicareAscRate(group)
+
+    if (override) {
+      // A hand-entered RATE is authoritative and wins outright.
+      if (override.rateEntered !== false) {
+        return { ...override, source: "authoritative" }
+      }
+      // Presentation-only override: keep the user's label/note/code, but the
+      // NUMBER — and therefore the trust badge — still belongs to the tier
+      // underneath. Painting "Authoritative" on an unverified placeholder
+      // because someone renamed the row would actively mislead.
+      const underlying = uploaded ?? builtIn
+      if (!underlying) return undefined
+      return {
+        ...underlying,
+        label: override.label,
+        note: override.note ?? underlying.note,
+        code: override.code || underlying.code,
+        source: uploaded ? "uploaded" : "estimate",
+      }
+    }
+
+    if (uploaded) return { ...uploaded, source: "uploaded" }
+    return builtIn ? { ...builtIn, source: "estimate" } : undefined
+  }
+}
+
+/**
+ * THE canonical rate lookup for a SINGLE group. Precedence, most
+ * authoritative first:
+ *
+ *   1. `authoritative` - a hand-entered override for this group
+ *   2. `uploaded`      - a row in the selected uploaded rate table
+ *   3. `estimate`      - the built-in CY2025 national snapshot
+ *
+ * Every surface resolves through this (or `createMedicareRateResolver` when
+ * resolving many), so the number shown on the Medicare card, the number the
+ * engine bills incremental cases at, and the number a saved proposal
+ * recomputes on can never disagree.
+ *
+ * Group matching is case/whitespace-insensitive at every tier - uploaded and
+ * hand-entered group names come from human input.
+ */
 export function resolveMedicareAscRate(
   group: string,
   sources: MedicareRateSources = {},
 ): ResolvedMedicareRate | undefined {
-  const key = normalizeGroupName(group)
-
-  const override = sources.overrides?.find(
-    (r) => normalizeGroupName(r.group) === key,
-  )
-  const uploaded = sources.uploaded?.find(
-    (r) => normalizeGroupName(r.group) === key,
-  )
-  const builtIn = getMedicareAscRate(group)
-
-  if (override) {
-    // A hand-entered RATE is authoritative and wins outright.
-    if (override.rateEntered !== false) {
-      return { ...override, source: "authoritative" }
-    }
-    // Presentation-only override: keep the user's label/note/code, but the
-    // NUMBER — and therefore the trust badge — still belongs to the tier
-    // underneath. Painting "Authoritative" on an unverified placeholder
-    // because someone renamed the row would actively mislead.
-    const underlying = uploaded ?? builtIn
-    if (!underlying) return undefined
-    return {
-      ...underlying,
-      label: override.label,
-      note: override.note ?? underlying.note,
-      code: override.code || underlying.code,
-      source: uploaded ? "uploaded" : "estimate",
-    }
-  }
-
-  if (uploaded) return { ...uploaded, source: "uploaded" }
-  return builtIn ? { ...builtIn, source: "estimate" } : undefined
+  return createMedicareRateResolver(sources)(group)
 }
 
 /**
@@ -232,6 +271,7 @@ export function resolveMedicareAscRate(
 export function listEffectiveMedicareRates(
   sources: MedicareRateSources = {},
 ): ResolvedMedicareRate[] {
+  const resolve = createMedicareRateResolver(sources)
   const seen = new Set<string>()
   const rows: ResolvedMedicareRate[] = []
 
@@ -239,7 +279,7 @@ export function listEffectiveMedicareRates(
     const key = normalizeGroupName(group)
     if (seen.has(key)) return
     seen.add(key)
-    const resolved = resolveMedicareAscRate(group, sources)
+    const resolved = resolve(group)
     if (resolved) rows.push(resolved)
   }
 
