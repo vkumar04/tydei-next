@@ -18,6 +18,11 @@
 export interface MedicareAscRate {
   /** Procedure group name — matches payor volume procedure groups exactly. */
   group: string
+  /**
+   * Optional display name. The `group` stays the join key against payor
+   * volume; this is what a user renamed the row to for readability.
+   */
+  label?: string
   /** Representative primary CPT/HCPCS code for the group. */
   code: string
   /** CMS ASC national average payment rate for that code, USD. */
@@ -131,24 +136,120 @@ export function getAllMedicareAscRates(): MedicareAscRate[] {
 }
 
 /**
- * Resolve a rate against an optional UPLOADED rate set, falling back to the
- * built-in table. One canonical lookup so every surface agrees on which rate
- * applies — the built-in CY2025 national snapshot is the default, and an
- * uploaded set (a newer publication year, or a locality-adjusted table)
- * shadows it per group.
+ * Where a resolved rate came from. Ordered by authority — the UI shows this
+ * so a rep knows which figures are trustworthy before quoting them.
  *
- * Pass `null`/`undefined` for `uploaded` to get the built-in table alone.
+ * `estimate` is the honest label for the built-in table: only the total-knee
+ * and total-hip anchors are verified CMS figures, the rest are reasonable
+ * placeholders. Charles 2026-08-11: "need to be able to adjust these".
+ */
+export type MedicareRateSource = "authoritative" | "uploaded" | "estimate"
+
+export interface ResolvedMedicareRate extends MedicareAscRate {
+  source: MedicareRateSource
+}
+
+/** A per-group authoritative override, entered by hand. */
+export interface MedicareRateOverrideInput {
+  group: string
+  label?: string
+  code: string
+  medicareRate: number
+  note?: string
+  /**
+   * Whether a human actually entered this rate. A label/note-only edit stores
+   * an override for presentation but leaves the NUMBER unverified, so the row
+   * keeps its underlying source. Defaults true for older rows, which could
+   * only be created by entering a rate.
+   */
+  rateEntered?: boolean
+}
+
+export interface MedicareRateSources {
+  /** Hand-entered per-group values — the most deliberate signal, wins. */
+  overrides?: MedicareRateOverrideInput[] | null
+  /** An uploaded CMS table (newer year, or locality-adjusted). */
+  uploaded?: MedicareAscRate[] | null
+}
+
+/**
+ * THE canonical rate lookup. Precedence, most authoritative first:
+ *
+ *   1. `authoritative` — a hand-entered override for this group
+ *   2. `uploaded`      — a row in the selected uploaded rate table
+ *   3. `estimate`      — the built-in CY2025 national snapshot
+ *
+ * Every surface resolves through this, so the number shown on the Medicare
+ * card, the number the engine bills incremental cases at, and the number a
+ * saved proposal recomputes on can never disagree.
+ *
+ * Group matching is case/whitespace-insensitive at every tier — uploaded and
+ * hand-entered group names come from human input.
  */
 export function resolveMedicareAscRate(
   group: string,
-  uploaded: MedicareAscRate[] | null | undefined,
-): MedicareAscRate | undefined {
-  if (uploaded && uploaded.length > 0) {
-    const key = normalizeGroupName(group)
-    const hit = uploaded.find((r) => normalizeGroupName(r.group) === key)
-    if (hit) return hit
+  sources: MedicareRateSources = {},
+): ResolvedMedicareRate | undefined {
+  const key = normalizeGroupName(group)
+
+  const override = sources.overrides?.find(
+    (r) => normalizeGroupName(r.group) === key,
+  )
+  const uploaded = sources.uploaded?.find(
+    (r) => normalizeGroupName(r.group) === key,
+  )
+  const builtIn = getMedicareAscRate(group)
+
+  if (override) {
+    // A hand-entered RATE is authoritative and wins outright.
+    if (override.rateEntered !== false) {
+      return { ...override, source: "authoritative" }
+    }
+    // Presentation-only override: keep the user's label/note/code, but the
+    // NUMBER — and therefore the trust badge — still belongs to the tier
+    // underneath. Painting "Authoritative" on an unverified placeholder
+    // because someone renamed the row would actively mislead.
+    const underlying = uploaded ?? builtIn
+    if (!underlying) return undefined
+    return {
+      ...underlying,
+      label: override.label,
+      note: override.note ?? underlying.note,
+      code: override.code || underlying.code,
+      source: uploaded ? "uploaded" : "estimate",
+    }
   }
-  return getMedicareAscRate(group)
+
+  if (uploaded) return { ...uploaded, source: "uploaded" }
+  return builtIn ? { ...builtIn, source: "estimate" } : undefined
+}
+
+/**
+ * The merged table the rate editor renders: every built-in group, plus any
+ * uploaded or hand-added group that isn't in it, each carrying its source.
+ * Sorted by display name.
+ */
+export function listEffectiveMedicareRates(
+  sources: MedicareRateSources = {},
+): ResolvedMedicareRate[] {
+  const seen = new Set<string>()
+  const rows: ResolvedMedicareRate[] = []
+
+  const push = (group: string) => {
+    const key = normalizeGroupName(group)
+    if (seen.has(key)) return
+    seen.add(key)
+    const resolved = resolveMedicareAscRate(group, sources)
+    if (resolved) rows.push(resolved)
+  }
+
+  for (const r of RATES) push(r.group)
+  for (const r of sources.uploaded ?? []) push(r.group)
+  for (const r of sources.overrides ?? []) push(r.group)
+
+  return rows.sort((a, b) =>
+    (a.label || a.group).localeCompare(b.label || b.group),
+  )
 }
 
 /** Effective facility reimbursement per case = Medicare rate × % of Medicare. */

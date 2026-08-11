@@ -46,6 +46,17 @@ export const purchaseScenarioSchema = z.object({
   caseReimbursement: z.number().finite().gte(0).lte(1e9).optional(),
 })
 
+/** One hand-entered authoritative rate. */
+export const medicareRateOverrideSchema = z.object({
+  group: z.string().trim().min(1).max(200),
+  label: z.string().max(200).optional(),
+  code: z.string().max(60),
+  medicareRate: z.number().finite().gte(0).lte(1_000_000),
+  note: z.string().max(500).optional(),
+  /** False for a label/note-only edit — see MedicareRateOverride.rateEntered. */
+  rateEntered: z.boolean().optional(),
+})
+
 export const dividendProposalPayloadSchema = z.object({
   lineItems: proformaLineItemsSchema,
   purchase: purchaseScenarioSchema,
@@ -68,6 +79,13 @@ export const dividendProposalPayloadSchema = z.object({
    * proposals saved before rate sets existed still load.
    */
   medicareRateSetId: z.string().max(64).nullable().optional(),
+  /**
+   * The authoritative rates in force when the proposal was saved. They OUTRANK
+   * the rate set, so recording only `medicareRateSetId` would let a later rate
+   * edit silently change a saved proposal's figures. Optional so proposals
+   * saved before overrides existed still load.
+   */
+  medicareRateOverrides: z.array(medicareRateOverrideSchema).max(500).optional(),
 })
 
 export type DividendProposalPayload = z.infer<typeof dividendProposalPayloadSchema>
@@ -147,10 +165,19 @@ export type IngestProformaMeta = z.infer<typeof ingestProformaMetaSchema>
 
 export const medicareAscRateSchema = z.object({
   group: z.string().min(1).max(200),
+  /** Display-only rename; `group` stays the join key. */
+  label: z.string().max(200).optional(),
   code: z.string().max(60),
   medicareRate: z.number().finite().gte(0).lte(1_000_000),
   note: z.string().max(500).optional(),
 })
+
+/** The editor saves every dirty row at once; cap the batch. */
+/** The editor only ever posts hand-edited rows from a ~35-row table; 500
+ *  matches the chunk size every other bulk write here uses. */
+export const medicareRateOverridesSchema = z
+  .array(medicareRateOverrideSchema)
+  .max(500)
 
 export const medicareAscRatesSchema = z.array(medicareAscRateSchema).max(2_000)
 

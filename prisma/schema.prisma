@@ -673,8 +673,44 @@ model Vendor {
   dividendProposals  DividendProposal[]
   proformaStatements ProformaStatement[]
   medicareRateSets   MedicareRateSet[]
+  medicareRateOverrides MedicareRateOverride[]
 
   @@map("vendor")
+}
+
+/// A hand-entered AUTHORITATIVE Medicare rate for one procedure group
+/// (Charles 2026-08-11: "need to be able to adjust these"). The built-in
+/// table is an estimate — only the total-knee and total-hip anchors are
+/// verified CMS figures — so a rep must be able to correct a single group
+/// without uploading a whole table.
+///
+/// Precedence, resolved by `resolveMedicareAscRate`:
+///   this override  >  the selected MedicareRateSet  >  the built-in estimate
+///
+/// `group` is the join key against payor-volume procedure groups; `label` is
+/// a display-only rename that must NOT affect matching.
+model MedicareRateOverride {
+  id           String   @id @default(cuid())
+  vendorId     String
+  group        String
+  label        String?
+  code         String
+  medicareRate Float
+  /// TRUE only when a human actually entered the rate. A label/note-only edit
+  /// stores an override for presentation but must NOT promote the built-in
+  /// ESTIMATE to "Authoritative" — that badge is a trust signal, and painting
+  /// it on an unverified placeholder because someone renamed the row is worse
+  /// than showing no badge at all.
+  rateEntered  Boolean  @default(true)
+  note         String?
+  updatedBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  vendor       Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, group])
+  @@index([vendorId])
+  @@map("medicare_rate_override")
 }
 
 /// A facility's uploaded Steady State Proforma P&L, so the Dividend/DCF tab
