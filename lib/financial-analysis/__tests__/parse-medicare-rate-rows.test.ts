@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import { parseMedicareRateRows } from "../parse-medicare-rate-rows"
 import {
   resolveMedicareAscRate,
+  createMedicareRateResolver,
   listEffectiveMedicareRates,
   getAllMedicareAscRates,
 } from "../medicare-asc-rates"
@@ -324,5 +325,55 @@ describe("resolveMedicareAscRate — presentation-only overrides", () => {
       ],
     })
     expect(r?.source).toBe("authoritative")
+  })
+})
+
+// ─── Perf regression: the merge must stay O(n) ───────────────────
+// listEffectiveMedicareRates once called resolveMedicareAscRate per row, and
+// each call linear-scanned overrides then uploaded — O(rows x sources).
+// Measured 39ms for a 2,000-row uploaded table (a supported upload size),
+// on top of mounting ~8,100 controlled inputs. Indexed once, it is ~0.6ms.
+
+describe("listEffectiveMedicareRates — scaling", () => {
+  const build = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      group: `Group ${i}`,
+      code: `CPT ${i}`,
+      medicareRate: 1_000 + i,
+    }))
+
+  const timeAt = (n: number) => {
+    const uploaded = build(n)
+    const t0 = performance.now()
+    const rows = listEffectiveMedicareRates({ uploaded })
+    const elapsed = performance.now() - t0
+    expect(rows.length).toBe(n + getAllMedicareAscRates().length)
+    return elapsed
+  }
+
+  it("merges a 2,000-row uploaded table well inside a frame budget", () => {
+    // Generous ceiling so the test is not flaky on a loaded machine, while
+    // still failing hard on a return to quadratic (which measured ~39ms).
+    expect(timeAt(2_000)).toBeLessThan(15)
+  })
+
+  it("scales roughly linearly, not quadratically", () => {
+    timeAt(500) // warm up
+    const small = timeAt(500)
+    const large = timeAt(2_000)
+    // 4x the rows must not cost anywhere near 16x the time. Compare against a
+    // floor so sub-millisecond timer noise cannot fail the assertion.
+    expect(large).toBeLessThan(Math.max(small, 0.5) * 8)
+  })
+
+  it("createMedicareRateResolver indexes once and reuses it", () => {
+    const uploaded = build(2_000)
+    const resolve = createMedicareRateResolver({ uploaded })
+    const t0 = performance.now()
+    for (let i = 0; i < 2_000; i++) resolve(`Group ${i}`)
+    // 2,000 lookups against a 2,000-row table would be 4M comparisons unindexed.
+    expect(performance.now() - t0).toBeLessThan(15)
+    expect(resolve("Group 7")?.medicareRate).toBe(1_007)
+    expect(resolve("group 7")?.source).toBe("uploaded")
   })
 })
