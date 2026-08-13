@@ -369,3 +369,44 @@ test("the rate editor filters, and filtering preserves unsaved edits", async ({
   await page.getByLabel("Filter Medicare rates").fill("zzzznope")
   await expect(page.getByText(/No rate matches/)).toBeVisible()
 })
+
+test("rate editor rows lay out in columns — inputs stack, nothing overflows", async ({
+  page,
+}) => {
+  // Regression 2026-08-13 (Vick, screenshot): <input> is inline-block and
+  // TableCell is whitespace-nowrap, so the name and note inputs shared one
+  // line at w-full each — 200% of the cell — and bled across the CPT and Rate
+  // columns, which then rendered on top of the note text.
+  await openDividendTab(page)
+  await page.getByRole("button", { name: /^medicare rates/i }).click()
+  await expect(
+    page.getByRole("heading", { name: /authoritative medicare rates/i }),
+  ).toBeVisible()
+
+  const geom = await page.evaluate(() => {
+    // Scope to the DIALOG: the section behind it also renders a Table
+    // (the before/after P&L), and it comes first in the DOM.
+    const dialog = document.querySelector('[role="dialog"]')
+    const row = dialog?.querySelector('[data-slot="table"] tbody tr')
+    if (!row) return null
+    const cells = [...row.querySelectorAll("td")]
+    const inputs = [...cells[0].querySelectorAll("input")]
+    const r = (el: Element) => el.getBoundingClientRect()
+    return {
+      nameCell: { x: r(cells[0]).x, right: r(cells[0]).right },
+      cptCell: { x: r(cells[1]).x },
+      nameInput: { y: r(inputs[0]).y, right: r(inputs[0]).right },
+      noteInput: { y: r(inputs[1]).y, right: r(inputs[1]).right },
+    }
+  })
+  expect(geom).not.toBeNull()
+  const g = geom!
+
+  // The note must sit BELOW the name, not beside it.
+  expect(g.noteInput.y).toBeGreaterThan(g.nameInput.y)
+  // Both must stay inside the Name column (1px tolerance for subpixel).
+  expect(g.nameInput.right).toBeLessThanOrEqual(g.nameCell.right + 1)
+  expect(g.noteInput.right).toBeLessThanOrEqual(g.nameCell.right + 1)
+  // …and must not reach into the CPT column.
+  expect(g.noteInput.right).toBeLessThanOrEqual(g.cptCell.x + 1)
+})
