@@ -106,25 +106,30 @@ const RateRow = memo(function RateRow({
   return (
     <TableRow className={dirty ? "bg-emerald-600/5" : undefined}>
       <TableCell className="align-top">
-        <Input
-          value={r.label ?? ""}
-          placeholder={r.group}
-          onChange={(e) => onPatch(r.group, { label: e.target.value })}
-          className="h-8 font-medium leading-tight"
-          aria-label={`Display name for ${r.group}`}
-        />
-        {(r.label ?? "") && r.label !== r.group ? (
-          <span className="mt-1 block text-[10px] text-muted-foreground">
-            matches: {r.group}
-          </span>
-        ) : null}
-        <Input
-          value={r.note ?? ""}
-          placeholder="Optional note (e.g. ASP-based drug)"
-          onChange={(e) => onPatch(r.group, { note: e.target.value })}
-          aria-label={`Note for ${r.group}`}
-          className="mt-1.5 h-7 border-0 bg-transparent px-0 text-[11px] text-muted-foreground focus-visible:ring-0"
-        />
+        {/* flex-col, not bare siblings: <input> is inline-block and TableCell
+            is whitespace-nowrap, so two w-full inputs shared one line and
+            overflowed to 200% of the cell, bleeding across CPT and Rate. */}
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <Input
+            value={r.label ?? ""}
+            placeholder={r.group}
+            onChange={(e) => onPatch(r.group, { label: e.target.value })}
+            className="h-8 font-medium leading-tight"
+            aria-label={`Display name for ${r.group}`}
+          />
+          {(r.label ?? "") && r.label !== r.group ? (
+            <span className="truncate text-[10px] text-muted-foreground">
+              matches: {r.group}
+            </span>
+          ) : null}
+          <Input
+            value={r.note ?? ""}
+            placeholder="Optional note"
+            onChange={(e) => onPatch(r.group, { note: e.target.value })}
+            aria-label={`Note for ${r.group}`}
+            className="h-7 border-0 bg-transparent px-0 text-[11px] text-muted-foreground focus-visible:ring-0"
+          />
+        </div>
       </TableCell>
       <TableCell className="align-top">
         <Input
@@ -366,7 +371,7 @@ export function MedicareRateManager({
 
           <ScrollArea className="flex-1 overflow-y-auto">
             <div className="p-6 pt-4">
-              <Table>
+              <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
                     <TableHead className="w-[38%]">Name &amp; note</TableHead>
