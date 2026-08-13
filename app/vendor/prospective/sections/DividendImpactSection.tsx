@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
   Card,
@@ -56,7 +56,10 @@ import {
   type PayorProcedureGroup,
   type PayorQuarter,
 } from "@/lib/payor-volume/parse-payor-volume-rows"
-import type { SavedDividendProposal } from "@/lib/actions/dividend-proposals"
+import {
+  getDividendProposal,
+  type SavedDividendProposal,
+} from "@/lib/actions/dividend-proposals"
 import {
   usePayorVolumeDatasets,
   useProformaStatements,
@@ -107,9 +110,15 @@ const DEFAULT_PURCHASE: PurchaseScenario = {
 export function DividendImpactSection({
   vendorId,
   facilities,
+  openProposalId,
+  onProposalOpened,
 }: {
   vendorId: string
   facilities: { id: string; name: string }[]
+  /** A saved proposal to load, set when opened from the Opportunities list. */
+  openProposalId?: string | null
+  /** Called once the load has been applied (or has failed), clearing the request. */
+  onProposalOpened?: () => void
 }) {
   const [lineItems, setLineItems] = useState<ProformaLineItems>(
     DEFAULT_PROFORMA_LINE_ITEMS,
@@ -148,7 +157,8 @@ export function DividendImpactSection({
   const { data: facilityOptions = [], isLoading: datasetsLoading } =
     usePayorVolumeDatasets(vendorId)
   const { data: proformaStatements = [] } = useProformaStatements(vendorId)
-  const { data: rateSets = [] } = useMedicareRateSets(vendorId)
+  const { data: rateSets = [], isLoading: ratesLoading } =
+    useMedicareRateSets(vendorId)
   const { data: rateOverrides = [] } = useMedicareRateOverrides(vendorId)
 
   // The uploaded rate table currently applied; undefined = built-in.
@@ -398,6 +408,34 @@ export function DividendImpactSection({
     setCurrentProposalId(p.id)
     setCurrentProposalName(p.name)
   }
+
+  // Load a proposal requested from the Opportunities list. Gated on the
+  // datasets and rate sets being settled: loadProposal reconciles the saved
+  // payor groups and rate set against them, so firing mid-fetch would report
+  // every group as "no longer in the dataset" and warn spuriously.
+  const readyToLoad = !datasetsLoading && !ratesLoading
+  useEffect(() => {
+    if (!openProposalId || !readyToLoad) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const full = await getDividendProposal(openProposalId)
+        if (cancelled) return
+        if (full) loadProposal(full)
+        else toast.error("This proposal could not be loaded")
+      } catch {
+        if (!cancelled) toast.error("This proposal could not be loaded")
+      } finally {
+        if (!cancelled) onProposalOpened?.()
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // loadProposal closes over live query data; re-running on its identity
+    // would reload on every refetch. The id is the intent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openProposalId, readyToLoad])
 
   const snapshot: DividendProposalSnapshot = {
     // The DERIVED selection, not the raw state — with auto-fallback the two
