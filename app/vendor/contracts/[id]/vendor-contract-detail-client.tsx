@@ -12,6 +12,7 @@ import {
 import { ContractAmortizationCard } from "@/components/contracts/contract-amortization-card"
 import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
 import { ContractAccrualTimeline } from "@/components/contracts/contract-accrual-timeline"
+import { ContractDcfTab } from "@/components/vendor/contracts/contract-dcf-tab"
 import { getVendorAccrualTimeline } from "@/lib/actions/contracts/accrual"
 import { useQuery } from "@tanstack/react-query"
 import { getVendorContractPeriods } from "@/lib/actions/contract-periods"
@@ -120,6 +121,11 @@ export function VendorContractDetailClient({
   // Parity surfaces merged into the ONE tab bar VendorContractOverview owns
   // (was a second, nested outer Tabs → doubled bar / duplicate "Overview").
   const extraTabs: VendorContractExtraTab[] = [
+    {
+      value: "dcf",
+      label: "DCF Analysis",
+      content: <ContractDcfTab contractId={contract.id} />,
+    },
     {
       value: "accruals",
       label: "Accruals",

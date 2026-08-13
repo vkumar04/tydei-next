@@ -674,8 +674,33 @@ model Vendor {
   proformaStatements ProformaStatement[]
   medicareRateSets   MedicareRateSet[]
   medicareRateOverrides MedicareRateOverride[]
+  contractDcfLinks   ContractDcfLink[]
 
   @@map("vendor")
+}
+
+/// Links a vendor contract to a saved Dividend/DCF proposal (Charles
+/// 2026-08-13). A contract is tied to a facility, so linking a proposal lets
+/// the rep see how THAT contract's rebate ladder feeds THAT proposal's
+/// projected owner dividend — see lib/financial-analysis/contract-dcf-projection.ts.
+///
+/// Vendor-scoped: both sides already belong to the vendor, and the link is the
+/// rep's own analysis, never surfaced to the facility portal.
+model ContractDcfLink {
+  id         String   @id @default(cuid())
+  vendorId   String
+  contractId String
+  proposalId String
+  createdBy  String?
+  createdAt  DateTime @default(now())
+  vendor     Vendor           @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  contract   Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  proposal   DividendProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, proposalId])
+  @@index([vendorId])
+  @@index([contractId])
+  @@map("contract_dcf_link")
 }
 
 /// A hand-entered AUTHORITATIVE Medicare rate for one procedure group
@@ -817,6 +842,7 @@ model DividendProposal {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
   vendor               Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  dcfLinks             ContractDcfLink[]
 
   @@index([vendorId])
   @@map("dividend_proposal")
@@ -1060,6 +1086,8 @@ model Contract {
   @@index([status])
   @@index([expirationDate])
   @@index([vendorDivisionId])
+  dcfLinks ContractDcfLink[]
+
   @@map("contract")
 }
 
