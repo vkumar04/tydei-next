@@ -41,6 +41,8 @@ export const purchaseScenarioSchema = z.object({
   incrementalCases: cases,
   revenueDeltaPerCase: money,
   capitalOutlay: money,
+  /** Amortization life for the capital charge; defaults to the DCF horizon. */
+  capitalUsefulLifeYears: z.number().finite().gt(0).lte(100).optional(),
   recurringAnnualCost: money,
   /** Defined ⇒ incremental cases bill at exactly this rate (incl. $0). */
   caseReimbursement: z.number().finite().gte(0).lte(1e9).optional(),

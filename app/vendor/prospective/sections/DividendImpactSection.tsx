@@ -1006,9 +1006,13 @@ export function DividendImpactSection({
           positive={impact.noiImpact === 0 ? null : impact.noiImpact > 0}
         />
         <DeltaTile
-          label="Annual Dividend (80% of EBITDA)"
+          label="Annual Dividend (net of capital)"
           value={`${impact.annualDividendImpact > 0 ? "+" : ""}${formatCompactCurrency(impact.annualDividendImpact, { kDecimals: 1 })}`}
-          sub={`${formatCompactCurrency(impact.annualDividendBefore, { kDecimals: 1 })} → ${formatCompactCurrency(impact.annualDividendAfter, { kDecimals: 1 })}`}
+          sub={
+            impact.annualCapitalCharge > 0
+              ? `${formatCompactCurrency(impact.operatingDividendImpact, { kDecimals: 1 })} operating − ${formatCompactCurrency(impact.annualCapitalCharge, { kDecimals: 1 })} capital/yr`
+              : `${formatCompactCurrency(impact.annualDividendBefore, { kDecimals: 1 })} → ${formatCompactCurrency(impact.annualDividendAfter, { kDecimals: 1 })}`
+          }
           icon={Landmark}
           positive={
             impact.annualDividendImpact === 0
@@ -1113,6 +1117,26 @@ export function DividendImpactSection({
                   after={impact.after.netOperatingIncome}
                   bold
                 />
+                {impact.annualCapitalCharge > 0 ? (
+                  <TableRow>
+                    <TableCell className="pl-8 text-muted-foreground">
+                      Annual capital charge
+                      <span className="ml-1 text-[11px]">
+                        ({formatCurrency(impact.capitalOutlay)} ÷{" "}
+                        {effectivePurchase.capitalUsefulLifeYears ||
+                          impact.assumptions.dcfProjectionYears}{" "}
+                        yrs)
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">—</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatCurrency(impact.annualCapitalCharge)}
+                    </TableCell>
+                    <TableCell className={`text-right tabular-nums ${BAD_TONE}`}>
+                      −{formatCurrency(impact.annualCapitalCharge)}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
                 <PnlRow
                   label="Annual Dividend (Distributable CF)"
                   before={impact.annualDividendBefore}
