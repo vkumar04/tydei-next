@@ -421,8 +421,14 @@ export function DividendImpactSection({
       try {
         const full = await getDividendProposal(openProposalId)
         if (cancelled) return
-        if (full) loadProposal(full)
-        else toast.error("This proposal could not be loaded")
+        if (full) {
+          loadProposal(full)
+          // Confirm the arrival: the user clicked on a different tab, so
+          // without this the scenario silently swaps under them.
+          toast.success(`Loaded “${full.name}”`)
+        } else {
+          toast.error("This proposal could not be loaded")
+        }
       } catch {
         if (!cancelled) toast.error("This proposal could not be loaded")
       } finally {
