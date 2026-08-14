@@ -152,6 +152,29 @@ export const auth = betterAuth({
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
     },
+    // Without this the rate limiter has no client IP and buckets EVERY user
+    // together: better-auth refuses to trust a multi-hop `x-forwarded-for`
+    // (the leftmost token is client-controlled behind an appending proxy), so
+    // `getIp` returns null and the key degrades to the literal
+    // "no-trusted-ip|<path>". Confirmed live on 2026-08-14 — production logged
+    // "Rate limiting could not determine a client IP and is falling back to a
+    // single shared per-path bucket", which caps /sign-in/email at 10/min for
+    // the WHOLE app and every other auth path at 100/min.
+    //
+    // Railway is the only thing in front of us (`server: railway-hikari`, no
+    // CDN in the response headers), and Railway strips client-supplied
+    // X-Forwarded-For at its edge, so the leftmost token is the true client.
+    // Their internal proxy hops are always in 100.0.0.0/8, which is exactly
+    // what better-auth wants in `trustedProxies`: it walks the chain right to
+    // left, skips trusted hops, and takes the first untrusted address.
+    //
+    // NOT `ipAddressHeaders: ["x-real-ip"]`, which the better-auth docs
+    // suggest first: Railway's CDN rollout currently sets x-real-ip to the CDN
+    // edge IP rather than the client, so it would silently bucket everyone
+    // behind a POP together — the same bug in a new coat.
+    ipAddress: {
+      trustedProxies: ["100.0.0.0/8"],
+    },
   },
   session: {
     expiresIn: 60 * 60 * 24 * 7, // 7 days
