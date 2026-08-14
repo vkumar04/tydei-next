@@ -161,23 +161,31 @@ export function ProposalCards({
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-6 text-right">
-                  <div>
-                    <div className="text-[10px] uppercase text-muted-foreground">
-                      Dividend / yr
+                  {d.recomputed ? (
+                    <>
+                      <div>
+                        <div className="text-[10px] uppercase text-muted-foreground">
+                          Dividend / yr
+                        </div>
+                        <div className="text-sm font-semibold tabular-nums">
+                          {(d.annualDividendImpact ?? 0) >= 0 ? "+" : ""}
+                          {formatCurrency(d.annualDividendImpact ?? 0)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase text-muted-foreground">
+                          NPV
+                        </div>
+                        <div className="text-sm font-semibold tabular-nums">
+                          {formatCurrency(d.netPresentValue ?? 0)}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="max-w-[14rem] text-[11px] text-muted-foreground">
+                      Figures unavailable — open and re-save this proposal
                     </div>
-                    <div className="text-sm font-semibold tabular-nums">
-                      {(d.annualDividendImpact ?? 0) >= 0 ? "+" : ""}
-                      {formatCurrency(d.annualDividendImpact ?? 0)}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase text-muted-foreground">
-                      NPV
-                    </div>
-                    <div className="text-sm font-semibold tabular-nums">
-                      {formatCurrency(d.netPresentValue ?? 0)}
-                    </div>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

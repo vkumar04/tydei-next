@@ -41,6 +41,7 @@ import {
   EMPTY_PURCHASE_SCENARIO,
   computePurchaseDividendImpact,
   lineItemsToProforma,
+  resolveCapitalUsefulLifeYears,
   type ProformaLineItems,
   type PurchaseScenario,
 } from "@/lib/financial-analysis/proforma-pnl"
@@ -455,6 +456,10 @@ export function DividendImpactSection({
       // reproduce its saved economics even if the grounding dataset later
       // changes or disappears (loadProposal falls back to these numbers).
       purchase: effectivePurchase,
+      // Snapshot the assumption set these figures were computed under, same
+      // rationale as medicareRateOverrides below: a linked surface must not
+      // have to guess the growth/discount convention behind the saved NPV.
+      assumptions: impact.assumptions,
       payorGroupNames,
       quarterEdits,
       percentOfMedicare,
@@ -1167,8 +1172,10 @@ export function DividendImpactSection({
                       Annual capital charge
                       <span className="ml-1 text-[11px]">
                         ({formatCurrency(impact.capitalOutlay)} ÷{" "}
-                        {effectivePurchase.capitalUsefulLifeYears ||
-                          impact.assumptions.dcfProjectionYears}{" "}
+                        {resolveCapitalUsefulLifeYears(
+                          effectivePurchase,
+                          impact.assumptions,
+                        )}{" "}
                         yrs)
                       </span>
                     </TableCell>

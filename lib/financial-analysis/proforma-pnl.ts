@@ -251,6 +251,20 @@ export const EMPTY_PURCHASE_SCENARIO: PurchaseScenario = {
   recurringAnnualCost: 0,
 }
 
+/**
+ * Amortization life behind the annual capital charge: the purchase's own useful
+ * life when positive, else the DCF horizon. Exported so the surfaces that print
+ * the divisor beside the charge use the divisor the charge actually used.
+ */
+export function resolveCapitalUsefulLifeYears(
+  purchase: Pick<PurchaseScenario, "capitalUsefulLifeYears">,
+  assumptions: DividendAssumptions = DEFAULT_DIVIDEND_ASSUMPTIONS,
+): number {
+  return purchase.capitalUsefulLifeYears && purchase.capitalUsefulLifeYears > 0
+    ? purchase.capitalUsefulLifeYears
+    : assumptions.dcfProjectionYears
+}
+
 export type DividendVerdict = "accretive" | "dilutive" | "neutral"
 
 export interface DividendEvScenario extends EnterpriseValueByMultiple {
@@ -350,10 +364,7 @@ export function computePurchaseDividendImpact(
   // A capital outlay is not a P&L item, but the owners must fund it — so
   // amortize it straight-line over its useful life into an annual charge the
   // dividend bears. Without this a $1.5M robot showed a pure dividend GAIN.
-  const usefulLife =
-    purchase.capitalUsefulLifeYears && purchase.capitalUsefulLifeYears > 0
-      ? purchase.capitalUsefulLifeYears
-      : assumptions.dcfProjectionYears
+  const usefulLife = resolveCapitalUsefulLifeYears(purchase, assumptions)
   const annualCapitalCharge =
     purchase.capitalOutlay > 0 && usefulLife > 0
       ? purchase.capitalOutlay / usefulLife

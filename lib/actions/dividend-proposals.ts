@@ -11,6 +11,7 @@ import {
   type SaveDividendProposalInput,
 } from "@/lib/validators/dividend-proposals"
 import type { DividendVerdict } from "@/lib/financial-analysis/proforma-pnl"
+import { resolveDividendProposalSummary } from "@/lib/financial-analysis/dividend-proposal-summary"
 
 // Vendor-side Dividend/DCF proposals — every read and write is scoped to the
 // caller's own vendor (tenant isolation invariant #1). Rows live in the
@@ -27,6 +28,10 @@ export interface DividendProposalListItem {
   netPresentValue: number | null
   paybackYears: number | null
   noiImpact: number | null
+  /** False when the stored payload could not drive the engine, so the five
+   *  figures above are null and MUST NOT be rendered as numbers — a `?? 0`
+   *  fallback prints "+$0", which reads as a real result. */
+  recomputed: boolean
   createdAt: string
   updatedAt: string
 }
@@ -35,16 +40,15 @@ export interface SavedDividendProposal extends DividendProposalListItem {
   payload: DividendProposalPayload
 }
 
+// The headline columns are deliberately not selected — see
+// resolveDividendProposalSummary. Reading the payload makes staleness
+// structurally impossible.
 const LIST_SELECT = {
   id: true,
   name: true,
   facilityKey: true,
   facilityLabel: true,
-  verdict: true,
-  annualDividendImpact: true,
-  netPresentValue: true,
-  paybackYears: true,
-  noiImpact: true,
+  payload: true,
   createdAt: true,
   updatedAt: true,
 } as const
@@ -54,19 +58,26 @@ type ListRow = {
   name: string
   facilityKey: string | null
   facilityLabel: string
-  verdict: string | null
-  annualDividendImpact: number | null
-  netPresentValue: number | null
-  paybackYears: number | null
-  noiImpact: number | null
+  payload: unknown
   createdAt: Date
   updatedAt: Date
 }
 
 function toListItem(row: ListRow): DividendProposalListItem {
+  // Fields listed explicitly rather than spread so `payload` — and `vendorId`,
+  // on the full-row findFirst path — cannot leak to the client.
+  const summary = resolveDividendProposalSummary(row.payload)
   return {
-    ...row,
-    verdict: (row.verdict as DividendVerdict | null) ?? null,
+    id: row.id,
+    name: row.name,
+    facilityKey: row.facilityKey,
+    facilityLabel: row.facilityLabel,
+    verdict: summary?.verdict ?? null,
+    annualDividendImpact: summary?.annualDividendImpact ?? null,
+    netPresentValue: summary?.netPresentValue ?? null,
+    paybackYears: summary?.paybackYears ?? null,
+    noiImpact: summary?.noiImpact ?? null,
+    recomputed: summary !== null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
@@ -111,15 +122,22 @@ export async function saveDividendProposal(
   const parsed = saveDividendProposalSchema.parse(input)
 
   try {
+    // The client still posts `parsed.summary` for wire compatibility, but it is
+    // not trusted: the columns are derived server-side by the same helper the
+    // read path uses, so a stale client bundle cannot persist a figure that
+    // disagrees with the payload.
+    const summary = resolveDividendProposalSummary(parsed.payload)
+    if (!summary) throw new Error("Invalid proposal payload")
+
     const data = {
       name: parsed.name,
       facilityKey: parsed.facilityKey,
       facilityLabel: parsed.facilityLabel,
-      verdict: parsed.summary.verdict,
-      annualDividendImpact: parsed.summary.annualDividendImpact,
-      netPresentValue: parsed.summary.netPresentValue,
-      paybackYears: parsed.summary.paybackYears,
-      noiImpact: parsed.summary.noiImpact,
+      verdict: summary.verdict,
+      annualDividendImpact: summary.annualDividendImpact,
+      netPresentValue: summary.netPresentValue,
+      paybackYears: summary.paybackYears,
+      noiImpact: summary.noiImpact,
       payload: parsed.payload,
     }
 
@@ -146,8 +164,10 @@ export async function saveDividendProposal(
   } catch (err) {
     console.error("[saveDividendProposal]", err, { vendorId: vendor.id })
     throw new Error(
-      err instanceof Error && err.message === "Proposal not found"
-        ? "Proposal not found"
+      err instanceof Error &&
+      (err.message === "Proposal not found" ||
+        err.message === "Invalid proposal payload")
+        ? err.message
         : "Failed to save the dividend proposal",
     )
   }

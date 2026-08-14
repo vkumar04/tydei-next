@@ -235,6 +235,44 @@ export function scaleRebateValueForEngine(
   return rebateType === "percent_of_spend" ? raw * 100 : raw
 }
 
+export interface EngineRebateUnits {
+  /** Percent, e.g. 4 = 4%. Always 0 for a flat-dollar or unit-driven type. */
+  rebateValue: number
+  /** Flat dollars paid on tier qualification; null unless `fixed_rebate`. */
+  fixedRebateAmount: number | null
+}
+
+/**
+ * Map one `ContractTier`'s stored value into the engine's unit pair:
+ *
+ *   percent_of_spend      → fraction × 100,  fixedRebateAmount null
+ *   fixed_rebate          → 0,               fixedRebateAmount = stored dollars
+ *   fixed_rebate_per_unit → 0, null   (unit-driven — no unit count exists
+ *   per_procedure_rebate  → 0, null    on a spend basis)
+ *
+ * Use this, not `scaleRebateValueForEngine`, wherever the result lands in a
+ * percent field: that helper returns non-percent types unchanged, so its raw
+ * dollars get read as a percent (Charles 2026-04-21; Bug #16 2026-05-08).
+ */
+export function toEngineRebateUnits(
+  rebateValue: number | string | { toString(): string },
+  rebateType: RebateType,
+): EngineRebateUnits {
+  if (rebateType === "fixed_rebate") {
+    return { rebateValue: 0, fixedRebateAmount: Number(rebateValue) }
+  }
+  if (
+    rebateType === "fixed_rebate_per_unit" ||
+    rebateType === "per_procedure_rebate"
+  ) {
+    return { rebateValue: 0, fixedRebateAmount: null }
+  }
+  return {
+    rebateValue: scaleRebateValueForEngine(rebateValue, rebateType),
+    fixedRebateAmount: null,
+  }
+}
+
 // ─── Tier lookup ────────────────────────────────────────────────
 
 /**

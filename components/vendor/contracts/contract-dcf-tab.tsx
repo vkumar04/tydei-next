@@ -55,6 +55,7 @@ import {
   DEFAULT_DIVIDEND_ASSUMPTIONS,
   lineItemsToProforma,
 } from "@/lib/financial-analysis/proforma-pnl"
+import { resolveProposalAssumptions } from "@/lib/financial-analysis/dividend-proposal-summary"
 
 const GOOD = "text-emerald-600 dark:text-emerald-400"
 const BAD = "text-red-600 dark:text-red-400"
@@ -92,30 +93,38 @@ function LinkedProposalCard({
   proposal,
   ladder,
   baseAnnualSpend,
-  usageGrowth,
+  growthOverride,
   onUnlink,
   unlinking,
 }: {
   proposal: LinkedDcfProposal
   ladder: ContractRebateLadder | null
   baseAnnualSpend: number
-  usageGrowth: number
+  /** Whole percent, or null for "no override". */
+  growthOverride: number | null
   onUnlink: (id: string) => void
   unlinking: boolean
 }) {
+  const assumptions = resolveProposalAssumptions(proposal.payload)
+
   const projection: ContractDcfProjection = useMemo(
     () =>
       computeContractDcfProjection({
         proforma: lineItemsToProforma(proposal.payload.lineItems),
         purchase: proposal.payload.purchase,
-        assumptions: DEFAULT_DIVIDEND_ASSUMPTIONS,
+        assumptions,
         baseAnnualSpend,
         tiers: ladder?.tiers ?? [],
-        usageGrowthPercent: usageGrowth,
+        // undefined = no override: run at the proposal's own growth rate, the
+        // state in which this card and the Dividend/DCF tab agree exactly.
+        usageGrowthPercent: growthOverride ?? undefined,
         rebateMethod: ladder?.rebateMethod,
         boundaryRule: ladder?.boundaryRule,
+        spendBaseline: ladder?.spendBaseline ?? null,
+        growthOnly: ladder?.growthOnly ?? false,
+        periodCap: ladder?.annualSpendCap ?? null,
       }),
-    [proposal, ladder, baseAnnualSpend, usageGrowth],
+    [proposal, assumptions, ladder, baseAnnualSpend, growthOverride],
   )
 
   const positive = projection.netPresentValue > 0
@@ -132,9 +141,12 @@ function LinkedProposalCard({
             </CardTitle>
             <CardDescription>
               {proposal.facilityLabel} · projected over{" "}
-              {DEFAULT_DIVIDEND_ASSUMPTIONS.dcfProjectionYears} years at{" "}
-              {usageGrowth > 0 ? "+" : ""}
-              {usageGrowth}% usage / yr
+              {assumptions.dcfProjectionYears} years at{" "}
+              {projection.growthPercent > 0 ? "+" : ""}
+              {Math.round(projection.growthPercent * 10) / 10}% growth / yr
+              {growthOverride === null
+                ? " (this proposal's own rate)"
+                : " (override)"}
             </CardDescription>
           </div>
           <Button
@@ -154,11 +166,11 @@ function LinkedProposalCard({
           <Stat
             label="NPV (net of capital)"
             value={formatCompactCurrency(projection.netPresentValue, { kDecimals: 1 })}
-            sub={
+            sub={`proposal alone ${formatCompactCurrency(projection.proposalNetPresentValue, { kDecimals: 1 })}${
               projection.capitalOutlay > 0
-                ? `after ${formatCompactCurrency(projection.capitalOutlay, { kDecimals: 1 })} outlay`
-                : "no capital outlay"
-            }
+                ? ` · after ${formatCompactCurrency(projection.capitalOutlay, { kDecimals: 1 })} outlay`
+                : ""
+            }`}
             tone={positive ? "good" : "bad"}
           />
           <Stat
@@ -224,7 +236,10 @@ function LinkedProposalCard({
                   <TableCell className="text-right">
                     {y.tierAchieved > 0 ? (
                       <Badge variant="outline" className="text-[10px]">
-                        T{y.tierAchieved} · {y.rebatePercent}%
+                        T{y.tierAchieved}
+                        {/* A flat-dollar tier has no percent rate, and
+                            "T1 · 0%" beside a non-zero Rebate reads as a bug. */}
+                        {y.rebatePercent > 0 ? ` · ${y.rebatePercent}%` : ""}
                       </Badge>
                     ) : (
                       <span className="text-muted-foreground">—</span>
@@ -246,10 +261,16 @@ function LinkedProposalCard({
         </div>
 
         <p className="text-[11px] text-muted-foreground">
-          Usage growth compounds both sides: more procedures lift the
-          proposal&apos;s operating dividend and push more spend through this
-          contract, whose cumulative spend is what steps the rebate tier.
+          Growth compounds both sides: more procedures lift the proposal&apos;s
+          operating dividend and push more spend through this contract, whose
+          cumulative spend is what steps the rebate tier.
           {ladder?.termName ? ` Ladder from “${ladder.termName}”.` : ""}
+          {ladder?.growthOnly && ladder.spendBaseline
+            ? ` Rebate accrues only on spend above the ${formatCurrency(ladder.spendBaseline)} annual growth baseline.`
+            : ""}
+          {ladder?.annualSpendCap != null
+            ? ` Eligible spend is capped at ${formatCurrency(ladder.annualSpendCap)} per year.`
+            : ""}
         </p>
       </CardContent>
     </Card>
@@ -260,11 +281,17 @@ function LinkedProposalCard({
  * DCF Analysis — how THIS contract affects the facility's Dividend/DCF
  * proposals (Charles 2026-08-13). Link one or more saved proposals and the tab
  * projects, year by year, the owner dividend they produce once this contract's
- * rebate ladder is layered on. The usage-growth slider is the prospective
- * lever; everything re-derives from it and from live contract data.
+ * rebate ladder is layered on. The growth slider is the prospective lever;
+ * everything re-derives from it and from live contract data.
  */
 export function ContractDcfTab({ contractId }: { contractId: string }) {
-  const [usageGrowth, setUsageGrowth] = useState(5)
+  // null = no override: every card runs at its own proposal's cashFlowGrowthPct,
+  // the state in which this tab's NPV equals the Dividend/DCF tab's exactly.
+  const [growthOverride, setGrowthOverride] = useState<number | null>(null)
+  const defaultGrowthPercent = Math.round(
+    DEFAULT_DIVIDEND_ASSUMPTIONS.cashFlowGrowthPct * 100,
+  )
+  const growthValue = growthOverride ?? defaultGrowthPercent
   const [pickerOpen, setPickerOpen] = useState(false)
 
   const { data: bundle, isLoading } = useQuery({
@@ -312,25 +339,40 @@ export function ContractDcfTab({ contractId }: { contractId: string }) {
           <CardContent className="flex flex-col gap-3">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">
-                Usage growth assumption
+                Growth assumption
+                {growthOverride === null ? " (proposal default)" : ""}
               </span>
-              <span className="font-medium tabular-nums">
-                {usageGrowth > 0 ? "+" : ""}
-                {usageGrowth}% / yr
+              <span className="flex items-center gap-2">
+                <span className="font-medium tabular-nums">
+                  {growthValue > 0 ? "+" : ""}
+                  {growthValue}% / yr
+                </span>
+                {growthOverride !== null ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-[11px]"
+                    onClick={() => setGrowthOverride(null)}
+                  >
+                    Reset
+                  </Button>
+                ) : null}
               </span>
             </div>
             <Slider
-              value={[usageGrowth]}
-              onValueChange={([v]) => setUsageGrowth(v)}
+              value={[growthValue]}
+              onValueChange={([v]) => setGrowthOverride(v)}
               min={-10}
               max={25}
               step={1}
-              aria-label="Usage growth percent per year"
+              aria-label="Growth percent per year"
             />
             <p className="text-[11px] text-muted-foreground">
-              Drives procedure volume in the projection AND this contract&apos;s
-              annual spend, so it also determines how fast cumulative spend
-              steps the rebate tier.
+              Replaces each proposal&apos;s own cash-flow growth assumption. It
+              drives the owner dividend AND this contract&apos;s annual spend, so
+              it also determines how fast cumulative spend steps the rebate tier.
+              Untouched, every card matches its proposal&apos;s Dividend/DCF NPV
+              exactly.
             </p>
           </CardContent>
         ) : null}
@@ -356,7 +398,7 @@ export function ContractDcfTab({ contractId }: { contractId: string }) {
             proposal={p}
             ladder={bundle?.ladder ?? null}
             baseAnnualSpend={bundle?.baseAnnualSpend ?? 0}
-            usageGrowth={usageGrowth}
+            growthOverride={growthOverride}
             unlinking={unlinkMutation.isPending}
             onUnlink={(proposalId) =>
               unlinkMutation.mutate({ contractId, proposalId })

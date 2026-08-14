@@ -1,9 +1,10 @@
 "use client"
 
-import type {
-  ProformaLineItems,
-  PurchaseScenario,
-  PurchaseDividendImpact,
+import {
+  resolveCapitalUsefulLifeYears,
+  type ProformaLineItems,
+  type PurchaseScenario,
+  type PurchaseDividendImpact,
 } from "@/lib/financial-analysis/proforma-pnl"
 
 // Client-side report exports for a Dividend/DCF proposal: a printable,
@@ -64,8 +65,14 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;")
 }
 
-export function exportDividendReportHtml(ctx: DividendReportContext) {
+/** Pure builder, split from the download wrapper so it is testable under node. */
+export function buildDividendReportHtml(ctx: DividendReportContext): string {
   const { impact } = ctx
+  const usefulLifeYears = resolveCapitalUsefulLifeYears(
+    ctx.purchase,
+    impact.assumptions,
+  )
+  const distributablePct = Math.round(impact.assumptions.dcfPctOfEbitda * 100)
   const verdictLabel =
     impact.verdict === "accretive"
       ? "Accretive — increases the dividend"
@@ -83,17 +90,39 @@ export function exportDividendReportHtml(ctx: DividendReportContext) {
     label: string,
     before: number,
     after: number,
-    invert = false,
+    opts: { invert?: boolean; indent?: boolean } = {},
   ) => {
     const d = after - before
-    const good = invert ? d < 0 : d > 0
+    const good = opts.invert ? d < 0 : d > 0
     const color = Math.abs(d) < 1 ? "#525252" : good ? "#15803d" : "#b91c1c"
-    return `<tr><td>${label}</td><td class="num">${fmtUSD(before)}</td><td class="num">${fmtUSD(
+    return `<tr${opts.indent ? ` class="indent"` : ""}><td>${label}</td><td class="num">${fmtUSD(before)}</td><td class="num">${fmtUSD(
       after,
     )}</td><td class="num" style="color:${color}">${
       Math.abs(d) < 1 ? "—" : `${d > 0 ? "+" : ""}${fmtUSD(d)}`
     }</td></tr>`
   }
+
+  // Not a before/after delta — a one-sided line the owners bear after the
+  // purchase, rendered like the in-app row.
+  const capitalChargeRow =
+    impact.annualCapitalCharge > 0
+      ? `<tr class="indent"><td>Annual capital charge <span class="note">(${fmtUSD(impact.capitalOutlay)} ÷ ${usefulLifeYears} yrs)</span></td><td class="num">—</td><td class="num">${fmtUSD(impact.annualCapitalCharge)}</td><td class="num" style="color:#b91c1c">−${fmtUSD(impact.annualCapitalCharge)}</td></tr>`
+      : ""
+
+  const caseVolumeDelta = impact.after.caseVolume - impact.before.caseVolume
+  const caseVolumeRow = `<tr><td>Case Volume</td><td class="num">${fmtNum(impact.before.caseVolume)}</td><td class="num">${fmtNum(impact.after.caseVolume)}</td><td class="num">${caseVolumeDelta >= 0 ? "+" : ""}${fmtNum(caseVolumeDelta)}</td></tr>`
+
+  // Spells out the NOI → dividend bridge; without it the reader sees NOI and
+  // dividend differing by the capital charge with nothing naming it.
+  const pnlFootnote = `Annual dividend = net operating income × ${distributablePct}% distributable cash flow${
+    impact.annualCapitalCharge > 0
+      ? `, less the ${fmtUSD(impact.annualCapitalCharge)} annual capital charge shown above (${fmtUSD(impact.capitalOutlay)} outlay ÷ ${usefulLifeYears} yrs)`
+      : ""
+  }. Change column: ${fmtUSD(impact.operatingDividendImpact)} operating${
+    impact.annualCapitalCharge > 0
+      ? ` − ${fmtUSD(impact.annualCapitalCharge)} capital`
+      : ""
+  } = ${fmtUSD(impact.annualDividendImpact)} net.`
 
   const evRows = impact.evScenarios
     .map(
@@ -120,6 +149,10 @@ export function exportDividendReportHtml(ctx: DividendReportContext) {
   .kpi { border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px; }
   .kpi .label { font-size: 11px; color: #737373; }
   .kpi .value { font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .kpi .sub { font-size: 10px; color: #737373; margin-top: 3px; }
+  tr.indent td:first-child { padding-left: 26px; }
+  .note { font-size: 11px; color: #737373; }
+  .footnote { font-size: 11px; color: #737373; margin-top: 8px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
   th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #f0f0f0; }
   th { font-size: 11px; text-transform: uppercase; color: #737373; letter-spacing: .03em; }
@@ -137,7 +170,11 @@ export function exportDividendReportHtml(ctx: DividendReportContext) {
 
   <div class="kpis">
     <div class="kpi"><div class="label">NOI impact / yr</div><div class="value">${fmtUSD(impact.noiImpact)}</div></div>
-    <div class="kpi"><div class="label">Dividend impact / yr</div><div class="value">${fmtUSD(impact.annualDividendImpact)}</div></div>
+    <div class="kpi"><div class="label">Annual Dividend (net of capital)</div><div class="value">${fmtUSD(impact.annualDividendImpact)}</div>${
+      impact.annualCapitalCharge > 0
+        ? `<div class="sub">${fmtUSD(impact.operatingDividendImpact)} operating − ${fmtUSD(impact.annualCapitalCharge)} capital</div>`
+        : `<div class="sub">${fmtUSD(impact.annualDividendBefore)} → ${fmtUSD(impact.annualDividendAfter)}</div>`
+    }</div>
     <div class="kpi"><div class="label">Net present value</div><div class="value">${fmtUSD(impact.netPresentValue)}</div></div>
     <div class="kpi"><div class="label">Payback</div><div class="value">${
       impact.paybackYears !== null ? `${impact.paybackYears.toFixed(1)} yrs` : impact.capitalOutlay > 0 ? "None" : "n/a"
@@ -152,6 +189,8 @@ export function exportDividendReportHtml(ctx: DividendReportContext) {
     <div><span>Incremental new cases / yr</span><span>${fmtNum(ctx.purchase.incrementalCases)}</span></div>
     <div><span>Revenue Δ / case</span><span>${fmtUSD(ctx.purchase.revenueDeltaPerCase)}</span></div>
     <div><span>Capital outlay</span><span>${fmtUSD(ctx.purchase.capitalOutlay)}</span></div>
+    <div><span>Capital useful life</span><span>${usefulLifeYears} yrs</span></div>
+    <div><span>Annual capital charge</span><span>${fmtUSD(impact.annualCapitalCharge)}</span></div>
     <div><span>Recurring annual cost</span><span>${fmtUSD(ctx.purchase.recurringAnnualCost)}</span></div>
     <div><span>Reimbursement / case</span><span>${
       ctx.purchase.caseReimbursement ? fmtUSD(ctx.purchase.caseReimbursement) : "—"
@@ -175,12 +214,18 @@ export function exportDividendReportHtml(ctx: DividendReportContext) {
   <table>
     <thead><tr><th>Line</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr></thead>
     <tbody>
-      ${deltaRow("Total revenue", impact.before.totalRevenue, impact.after.totalRevenue)}
-      ${deltaRow("Medical supply expense", impact.before.medicalSupplyExpense, impact.after.medicalSupplyExpense, true)}
-      ${deltaRow("Net operating income", impact.before.netOperatingIncome, impact.after.netOperatingIncome)}
-      ${deltaRow("Annual dividend", impact.annualDividendBefore, impact.annualDividendAfter)}
+      ${deltaRow("Total Revenue", impact.before.totalRevenue, impact.after.totalRevenue)}
+      ${deltaRow("Medical Supplies", impact.before.medicalSupplyExpense, impact.after.medicalSupplyExpense, { invert: true, indent: true })}
+      ${deltaRow("Other Variable Expenses", impact.before.otherVariableExpense, impact.after.otherVariableExpense, { invert: true, indent: true })}
+      ${deltaRow("Total Variable Expenses", impact.before.totalVariableExpense, impact.after.totalVariableExpense, { invert: true })}
+      ${deltaRow("Fixed Expenses", impact.before.fixedExpenses, impact.after.fixedExpenses, { invert: true })}
+      ${deltaRow("Net Operating Income", impact.before.netOperatingIncome, impact.after.netOperatingIncome)}
+      ${capitalChargeRow}
+      ${deltaRow("Annual Dividend (Distributable CF)", impact.annualDividendBefore, impact.annualDividendAfter)}
+      ${caseVolumeRow}
     </tbody>
   </table>
+  <div class="footnote">${pnlFootnote}</div>
 
   <h2>Enterprise Value Impact (net of capital)</h2>
   <table>
@@ -191,11 +236,24 @@ export function exportDividendReportHtml(ctx: DividendReportContext) {
   <footer>Generated by Tyde-I Health · Figures are modeled estimates based on the entered facility proforma and payor-reported volume.</footer>
 </body></html>`
 
-  download(`${safeName(ctx.proposalName)}_dividend_report.html`, html, "text/html")
+  return html
 }
 
-export function exportDividendReportCsv(ctx: DividendReportContext) {
+export function exportDividendReportHtml(ctx: DividendReportContext) {
+  download(
+    `${safeName(ctx.proposalName)}_dividend_report.html`,
+    buildDividendReportHtml(ctx),
+    "text/html",
+  )
+}
+
+/** Pure builder — returns the report CSV text. */
+export function buildDividendReportCsv(ctx: DividendReportContext): string {
   const { impact } = ctx
+  const usefulLifeYears = resolveCapitalUsefulLifeYears(
+    ctx.purchase,
+    impact.assumptions,
+  )
   const rows: [string, string | number][] = [
     ["Proposal", ctx.proposalName],
     ["Facility", ctx.facilityLabel],
@@ -207,6 +265,8 @@ export function exportDividendReportCsv(ctx: DividendReportContext) {
     ["Incremental cases per year", ctx.purchase.incrementalCases],
     ["Revenue delta per case", ctx.purchase.revenueDeltaPerCase],
     ["Capital outlay", ctx.purchase.capitalOutlay],
+    ["Capital useful life years", usefulLifeYears],
+    ["Annual capital charge", Math.round(impact.annualCapitalCharge)],
     ["Recurring annual cost", ctx.purchase.recurringAnnualCost],
     ["Reimbursement per case", ctx.purchase.caseReimbursement ?? ""],
     ["Procedure groups", ctx.payorGroupNames.join("; ")],
@@ -215,9 +275,23 @@ export function exportDividendReportCsv(ctx: DividendReportContext) {
     ["Percent of Medicare", ctx.percentOfMedicare],
     ["Facility reimbursement per case", Math.round(ctx.facilityReimbursement)],
     ["NOI impact per year", Math.round(impact.noiImpact)],
+    [
+      "Distributable share of NOI percent",
+      Math.round(impact.assumptions.dcfPctOfEbitda * 100),
+    ],
     ["Annual dividend before", Math.round(impact.annualDividendBefore)],
-    ["Annual dividend after", Math.round(impact.annualDividendAfter)],
-    ["Annual dividend impact", Math.round(impact.annualDividendImpact)],
+    [
+      "Annual dividend after (net of capital charge)",
+      Math.round(impact.annualDividendAfter),
+    ],
+    [
+      "Operating dividend impact per year (before capital charge)",
+      Math.round(impact.operatingDividendImpact),
+    ],
+    [
+      "Net annual dividend impact (operating less capital charge)",
+      Math.round(impact.annualDividendImpact),
+    ],
     ["Net present value", Math.round(impact.netPresentValue)],
     [
       "Payback years",
@@ -232,6 +306,13 @@ export function exportDividendReportCsv(ctx: DividendReportContext) {
     const guard = typeof v === "string" && /^[=+\-@\t\r]/.test(s) ? "'" : ""
     return `"${guard}${s}"`
   }
-  const csv = rows.map(([k, v]) => `${cell(k)},${cell(v)}`).join("\n")
-  download(`${safeName(ctx.proposalName)}_dividend_report.csv`, csv, "text/csv")
+  return rows.map(([k, v]) => `${cell(k)},${cell(v)}`).join("\n")
+}
+
+export function exportDividendReportCsv(ctx: DividendReportContext) {
+  download(
+    `${safeName(ctx.proposalName)}_dividend_report.csv`,
+    buildDividendReportCsv(ctx),
+    "text/csv",
+  )
 }
