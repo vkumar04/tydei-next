@@ -10,18 +10,27 @@ test.use({ storageState: "tests/e2e/.auth/vendor.json" })
 /**
  * Open the first contract's DCF Analysis tab.
  *
- * The DataTable renders five SKELETON rows while loading, so a bare
- * `tbody tr` count is non-zero before any real contract exists and clicking one
- * navigates nowhere. Wait for the skeletons to clear first.
+ * Waiting correctly here is fiddlier than it looks. The DataTable renders five
+ * SKELETON rows while loading, so clicking `tbody tr` too early hits a skeleton
+ * and never navigates. But waiting for zero skeletons is ALSO wrong on its own:
+ * that is true before the table has rendered anything at all, so the wait
+ * returns instantly, the row count is 0, and the test skips itself while
+ * reporting green. (Measured against production, which has 3 contracts: the
+ * skeleton-only wait skipped; a 6s sleep saw rows=3.)
+ *
+ * So: wait for SOME row to exist first — skeleton or real, and the empty state
+ * is itself a row, so this terminates either way — then wait for the skeletons
+ * to clear. Only then is the row count meaningful.
  */
 async function openFirstContractDcfTab(page: Page) {
   await page.goto("/vendor/contracts")
+  const rows = page.locator("tbody tr")
+  await expect(rows.first()).toBeVisible({ timeout: 30_000 })
   await expect(page.locator('tbody [data-slot="skeleton"]')).toHaveCount(0, {
-    timeout: 15_000,
+    timeout: 30_000,
   })
 
   const firstContract = page.getByRole("link", { name: /view|detail/i }).first()
-  const rows = page.locator("tbody tr")
   if ((await rows.count()) === 0) test.skip(true, "no contracts seeded")
 
   // Open the first contract however the list links to it.
