@@ -13,62 +13,59 @@ import { getIPFromHeader } from "@better-auth/core/utils/ip"
  *   "Rate limiting could not determine a client IP and is falling back to a
  *    single shared per-path bucket"
  * because better-auth refuses to trust a multi-hop x-forwarded-for chain (the
- * leftmost token is client-controlled behind an appending proxy) and Railway
- * always adds at least one internal hop.
+ * leftmost token is client-controlled behind an APPENDING proxy) and Railway
+ * always adds an edge hop.
  *
- * Railway strips client-supplied X-Forwarded-For at its edge and its internal
- * proxy hops are always in 100.0.0.0/8, so declaring that range as a trusted
- * proxy makes the leftmost surviving token the true client.
+ * Measured shape of a real production request:
+ *   x-forwarded-for: 173.92.72.77, 152.233.30.102
+ *   x-real-ip:       173.92.72.77
+ *
+ * So `x-real-ip` carries the client on its own. Railway overwrites both
+ * headers at the edge — replaying the request with forged values had them
+ * discarded — so a single-header resolve is both correct and unspoofable here.
  */
 
-const TRUSTED = ["100.0.0.0/8"]
+const REAL_IP = "173.92.72.77"
+const EDGE_IP = "152.233.30.102"
 
 describe("client IP resolution behind Railway's proxy", () => {
-  it("resolves the client from a Railway-shaped chain", () => {
+  it("resolves the client from the x-real-ip header alone", () => {
+    // No trustedProxies needed: a one-entry header is trusted as-is.
+    expect(getIPFromHeader(REAL_IP, {})).toBe(REAL_IP)
+  })
+
+  it("REGRESSION: the real x-forwarded-for chain yields NO ip by default", () => {
+    // This is the production bug, reproduced with the exact measured header.
+    expect(getIPFromHeader(`${REAL_IP}, ${EDGE_IP}`, {})).toBeNull()
+  })
+
+  it("a guessed trusted-proxy CIDR resolves the EDGE, not the client", () => {
+    // Why this fix is not `trustedProxies: ["100.0.0.0/8"]`, which Railway's
+    // community docs suggest: the measured hop is 152.233.x, so the walk
+    // right-to-left stops on the edge address and every user behind that POP
+    // shares a bucket. Silently wrong is worse than loudly broken.
     expect(
-      getIPFromHeader("203.0.113.5, 100.64.1.2", { trustedProxies: TRUSTED }),
-    ).toBe("203.0.113.5")
-    // More than one internal hop is normal once the CDN layer is in play.
-    expect(
-      getIPFromHeader("203.0.113.5, 100.64.1.2, 100.90.3.4", {
-        trustedProxies: TRUSTED,
+      getIPFromHeader(`${REAL_IP}, ${EDGE_IP}`, {
+        trustedProxies: ["100.0.0.0/8"],
       }),
-    ).toBe("203.0.113.5")
+    ).toBe(EDGE_IP)
   })
 
-  it("still resolves a single-entry chain", () => {
-    expect(
-      getIPFromHeader("203.0.113.5", { trustedProxies: TRUSTED }),
-    ).toBe("203.0.113.5")
+  it("normalizes IPv6 to its /64 subnet", () => {
+    // Default ipv6Subnet is 64 — one bucket per allocation, so a client can't
+    // rotate through 2^64 addresses to bypass the limit.
+    expect(getIPFromHeader("2001:db8::1", {})).toBe(
+      "2001:0db8:0000:0000:0000:0000:0000:0000",
+    )
   })
 
-  it("ignores a spoofed leftmost token rather than trusting it", () => {
-    // Railway strips client-supplied XFF, so this should never arrive — but if
-    // it ever leaked through, the attacker's value must NOT win. Walking right
-    // to left past the trusted hops lands on the address Railway appended.
-    expect(
-      getIPFromHeader("9.9.9.9, 203.0.113.5, 100.64.1.2", {
-        trustedProxies: TRUSTED,
-      }),
-    ).toBe("203.0.113.5")
-  })
-
-  it("REGRESSION: without trustedProxies a Railway chain yields no IP at all", () => {
-    // This is the production bug. If someone removes the config, this is the
-    // behaviour that returns — and the only symptom is a one-time log line.
-    expect(getIPFromHeader("203.0.113.5, 100.64.1.2", {})).toBeNull()
-    expect(
-      getIPFromHeader("203.0.113.5, 100.64.1.2, 100.90.3.4", {}),
-    ).toBeNull()
-  })
-
-  it("auth-server declares the Railway proxy range", () => {
+  it("auth-server resolves from x-real-ip and not a guessed proxy range", () => {
     const source = readFileSync(
       join(process.cwd(), "lib/auth-server.ts"),
       "utf8",
     )
-    // Strip line comments so the rationale prose below the config (which names
-    // ipAddressHeaders in order to warn against it) doesn't match.
+    // Strip line comments: the rationale prose names both options in order to
+    // explain the choice, and would otherwise match either way.
     const code = source
       .split("\n")
       .filter((l) => !l.trim().startsWith("//"))
@@ -76,15 +73,12 @@ describe("client IP resolution behind Railway's proxy", () => {
 
     expect(
       code,
-      "advanced.ipAddress.trustedProxies must stay configured — without it the rate limiter buckets every user together",
-    ).toMatch(/trustedProxies:\s*\[\s*"100\.0\.0\.0\/8"\s*\]/)
+      "advanced.ipAddress.ipAddressHeaders must stay configured — without it the rate limiter buckets every user together",
+    ).toMatch(/ipAddressHeaders:\s*\[\s*"x-real-ip"\s*\]/)
 
-    // x-real-ip is the header better-auth's docs reach for first, but Railway's
-    // CDN sets it to the POP address rather than the client, which reintroduces
-    // the shared-bucket bug. Guard against a well-meaning "simplification".
     expect(
       code,
-      "do not switch to ipAddressHeaders:['x-real-ip'] — Railway's CDN sets it to the edge IP, not the client",
-    ).not.toMatch(/ipAddressHeaders/)
+      "do not switch to trustedProxies — Railway's edge hop is not in the CIDR their docs cite, so it would resolve the edge as the client",
+    ).not.toMatch(/trustedProxies/)
   })
 })

@@ -162,18 +162,32 @@ export const auth = betterAuth({
     // the WHOLE app and every other auth path at 100/min.
     //
     // Railway is the only thing in front of us (`server: railway-hikari`, no
-    // CDN in the response headers), and Railway strips client-supplied
-    // X-Forwarded-For at its edge, so the leftmost token is the true client.
-    // Their internal proxy hops are always in 100.0.0.0/8, which is exactly
-    // what better-auth wants in `trustedProxies`: it walks the chain right to
-    // left, skips trusted hops, and takes the first untrusted address.
+    // CDN markers in the response headers). Measured against production on
+    // 2026-08-14, a request arrives as:
     //
-    // NOT `ipAddressHeaders: ["x-real-ip"]`, which the better-auth docs
-    // suggest first: Railway's CDN rollout currently sets x-real-ip to the CDN
-    // edge IP rather than the client, so it would silently bucket everyone
-    // behind a POP together — the same bug in a new coat.
+    //   x-forwarded-for: 173.92.72.77, 152.233.30.102   <- client, then edge
+    //   x-real-ip:       173.92.72.77                   <- client
+    //
+    // Two XFF entries is what defeats better-auth's default. `x-real-ip`
+    // carries the client on its own, so point the resolver at it directly:
+    // a single-entry header needs no trusted-proxy chain walking.
+    //
+    // Both headers are edge-controlled, verified by replaying the request with
+    // `X-Real-IP: 1.2.3.4` and `X-Forwarded-For: 9.9.9.9` — Railway discarded
+    // both and delivered the real values, so this cannot be spoofed.
+    //
+    // Do NOT swap this for `trustedProxies`: Railway's hop here is 152.233.x,
+    // not the 100.0.0.0/8 range their community docs cite, and the edge address
+    // varies by POP — trusting a guessed CIDR silently resolves the EDGE as the
+    // client and rebuckets every user behind that POP together.
+    //
+    // Watch item: Railway has an open bug where traffic through their CDN layer
+    // sets x-real-ip to the POP address instead of the client. It is not
+    // happening on this service today (x-real-ip matches the leftmost XFF
+    // token). If sign-in rate limiting ever starts biting groups of users at
+    // once, re-run the /api/health diagnostic below and compare the two.
     ipAddress: {
-      trustedProxies: ["100.0.0.0/8"],
+      ipAddressHeaders: ["x-real-ip"],
     },
   },
   session: {
