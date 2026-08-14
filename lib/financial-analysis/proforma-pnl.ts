@@ -225,6 +225,11 @@ export interface PurchaseScenario {
   revenueDeltaPerCase: number
   /** One-time capital outlay (robot / console / equipment), $. */
   capitalOutlay: number
+  /**
+   * Useful life over which the capital outlay is amortized into the annual
+   * dividend, in years. Defaults to the projection horizon when unset.
+   */
+  capitalUsefulLifeYears?: number
   /** New recurring annual cost (service, lease, warranty), $. */
   recurringAnnualCost: number
   /**
@@ -246,6 +251,20 @@ export const EMPTY_PURCHASE_SCENARIO: PurchaseScenario = {
   recurringAnnualCost: 0,
 }
 
+/**
+ * Amortization life behind the annual capital charge: the purchase's own useful
+ * life when positive, else the DCF horizon. Exported so the surfaces that print
+ * the divisor beside the charge use the divisor the charge actually used.
+ */
+export function resolveCapitalUsefulLifeYears(
+  purchase: Pick<PurchaseScenario, "capitalUsefulLifeYears">,
+  assumptions: DividendAssumptions = DEFAULT_DIVIDEND_ASSUMPTIONS,
+): number {
+  return purchase.capitalUsefulLifeYears && purchase.capitalUsefulLifeYears > 0
+    ? purchase.capitalUsefulLifeYears
+    : assumptions.dcfProjectionYears
+}
+
 export type DividendVerdict = "accretive" | "dilutive" | "neutral"
 
 export interface DividendEvScenario extends EnterpriseValueByMultiple {
@@ -261,7 +280,12 @@ export interface PurchaseDividendImpact {
   ebitdaImpact: number
   annualDividendBefore: number
   annualDividendAfter: number
+  /** NET annual dividend impact = operating impact − the annual capital charge. */
   annualDividendImpact: number
+  /** Dividend impact from operations only (ΔNOI × distributable %), pre-capital. */
+  operatingDividendImpact: number
+  /** Straight-line annual capital charge (outlay ÷ useful life) the owners bear. */
+  annualCapitalCharge: number
   /** NPV of the incremental dividend stream, net of the capital outlay. */
   netPresentValue: number
   /** Simple payback on the capital outlay (null = no outlay or no return). */
@@ -330,15 +354,31 @@ export function computePurchaseDividendImpact(
   const noiImpact = after.netOperatingIncome - before.netOperatingIncome
   const ebitdaImpact = noiImpact
 
+  // Operating dividend impact: the recurring P&L effect (supply, incremental
+  // cases, revenue mix, recurring annual cost) flowing to the dividend.
   const annualDividendBefore =
     before.netOperatingIncome * assumptions.dcfPctOfEbitda
-  const annualDividendAfter =
-    after.netOperatingIncome * assumptions.dcfPctOfEbitda
-  const annualDividendImpact = annualDividendAfter - annualDividendBefore
+  const operatingDividendImpact =
+    after.netOperatingIncome * assumptions.dcfPctOfEbitda - annualDividendBefore
 
+  // A capital outlay is not a P&L item, but the owners must fund it — so
+  // amortize it straight-line over its useful life into an annual charge the
+  // dividend bears. Without this a $1.5M robot showed a pure dividend GAIN.
+  const usefulLife = resolveCapitalUsefulLifeYears(purchase, assumptions)
+  const annualCapitalCharge =
+    purchase.capitalOutlay > 0 && usefulLife > 0
+      ? purchase.capitalOutlay / usefulLife
+      : 0
+
+  const annualDividendImpact = operatingDividendImpact - annualCapitalCharge
+  const annualDividendAfter = annualDividendBefore + annualDividendImpact
+
+  // NPV charges the FULL outlay at year 0 (a real cash event) and then
+  // discounts the OPERATING stream — pre-amortization, so capital is counted
+  // exactly once rather than twice.
   const netPresentValue =
     discountedCashFlow(
-      annualDividendImpact,
+      operatingDividendImpact,
       assumptions.dcfProjectionYears,
       assumptions.discountRatePct,
       assumptions.cashFlowGrowthPct,
@@ -380,6 +420,8 @@ export function computePurchaseDividendImpact(
     annualDividendBefore: round(annualDividendBefore),
     annualDividendAfter: round(annualDividendAfter),
     annualDividendImpact: round(annualDividendImpact),
+    operatingDividendImpact: round(operatingDividendImpact),
+    annualCapitalCharge: round(annualCapitalCharge),
     netPresentValue: round(netPresentValue),
     paybackYears,
     capitalOutlay: round(purchase.capitalOutlay),

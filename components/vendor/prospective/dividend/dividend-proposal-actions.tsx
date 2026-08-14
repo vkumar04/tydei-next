@@ -314,10 +314,17 @@ export function DividendProposalActions({
                         ) : null}
                       </div>
                       <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                        {p.facilityLabel} · Dividend{" "}
-                        {(p.annualDividendImpact ?? 0) >= 0 ? "+" : ""}
-                        {formatCurrency(p.annualDividendImpact ?? 0)} · NPV{" "}
-                        {formatCurrency(p.netPresentValue ?? 0)} ·{" "}
+                        {p.facilityLabel} ·{" "}
+                        {p.recomputed ? (
+                          <>
+                            Dividend{" "}
+                            {(p.annualDividendImpact ?? 0) >= 0 ? "+" : ""}
+                            {formatCurrency(p.annualDividendImpact ?? 0)} · NPV{" "}
+                            {formatCurrency(p.netPresentValue ?? 0)} ·{" "}
+                          </>
+                        ) : (
+                          <>Figures unavailable — re-save this proposal · </>
+                        )}
                         {new Date(p.updatedAt).toLocaleDateString()}
                       </div>
                     </div>

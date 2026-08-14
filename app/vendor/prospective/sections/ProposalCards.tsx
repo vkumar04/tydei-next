@@ -38,6 +38,8 @@ import {
   Rocket,
 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/formatting"
+import type { DividendProposalListItem } from "@/lib/actions/dividend-proposals"
+import { Landmark } from "lucide-react"
 import type { OppEngineHandoff } from "./OpportunityEngineSection"
 import { StatusBadge, RecommendationBadge } from "./shared"
 import { ProposalDetailDialog } from "./ProposalDetailDialog"
@@ -46,6 +48,10 @@ import type { VendorProposal } from "@/lib/actions/prospective"
 
 interface Props {
   proposals: VendorProposal[]
+  /** Saved Dividend/DCF proposals — a DIFFERENT object with different maths. */
+  dividendProposals?: DividendProposalListItem[]
+  /** Opens one in the Dividend/DCF tab, never the contract-proposal dialog. */
+  onOpenDividendProposal?: (id: string) => void
   isLoading: boolean
   onNewProposal: () => void
   /** Push a scored deal into the Opportunity Engine (proposal → score → opp). */
@@ -56,6 +62,8 @@ interface Props {
 
 export function ProposalCards({
   proposals,
+  dividendProposals = [],
+  onOpenDividendProposal,
   isLoading,
   onNewProposal,
   onAnalyzeInOpportunityEngine,
@@ -100,6 +108,90 @@ export function ProposalCards({
           New Proposal
         </Button>
       </div>
+
+      {dividendProposals.length > 0 ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Landmark className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Dividend / DCF proposals</h3>
+            <Badge variant="secondary" className="px-1.5 text-[10px]">
+              {dividendProposals.length}
+            </Badge>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Saved purchase-impact models. Opening one restores it in the
+            Dividend / DCF tab — a different analysis from a contract proposal.
+          </p>
+          {dividendProposals.map((d) => (
+            <Card
+              key={d.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Open ${d.name} in the Dividend / DCF tab`}
+              onClick={() => onOpenDividendProposal?.(d.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  onOpenDividendProposal?.(d.id)
+                }
+              }}
+              className="cursor-pointer transition-colors hover:border-foreground/30"
+            >
+              <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{d.name}</span>
+                    {d.verdict ? (
+                      <Badge
+                        variant="outline"
+                        className={
+                          d.verdict === "accretive"
+                            ? "border-emerald-600/40 text-emerald-600 dark:text-emerald-400"
+                            : d.verdict === "dilutive"
+                              ? "border-red-600/40 text-red-600 dark:text-red-400"
+                              : ""
+                        }
+                      >
+                        {d.verdict}
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    {d.facilityLabel} · {formatDate(d.updatedAt)}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-6 text-right">
+                  {d.recomputed ? (
+                    <>
+                      <div>
+                        <div className="text-[10px] uppercase text-muted-foreground">
+                          Dividend / yr
+                        </div>
+                        <div className="text-sm font-semibold tabular-nums">
+                          {(d.annualDividendImpact ?? 0) >= 0 ? "+" : ""}
+                          {formatCurrency(d.annualDividendImpact ?? 0)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] uppercase text-muted-foreground">
+                          NPV
+                        </div>
+                        <div className="text-sm font-semibold tabular-nums">
+                          {formatCurrency(d.netPresentValue ?? 0)}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="max-w-[14rem] text-[11px] text-muted-foreground">
+                      Figures unavailable — open and re-save this proposal
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : null}
 
       {isLoading ? (
         <div className="space-y-4">

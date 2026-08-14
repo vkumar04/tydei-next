@@ -230,3 +230,66 @@ describe("computePurchaseDividendImpact — reimbursement + verdict edges", () =
     expect(impact.verdict).toBe("dilutive")
   })
 })
+
+// ─── Capital charge on the dividend (v0 engine update, 2026-08-13) ───
+// A capital outlay is not a P&L item, but the owners fund it. Amortizing it
+// into an annual charge is what stops a $5M robot reporting a pure dividend
+// GAIN. NPV is unaffected: it charges the full outlay at year 0 and discounts
+// the OPERATING stream, so capital is counted exactly once.
+
+describe("computePurchaseDividendImpact — annual capital charge", () => {
+  const robot = {
+    ...EMPTY_PURCHASE_SCENARIO,
+    productName: "Robot",
+    incrementalCases: 200,
+    capitalOutlay: 1_500_000,
+    recurringAnnualCost: 120_000,
+  }
+
+  it("splits the operating impact from the net, by the annual charge", () => {
+    const i = computePurchaseDividendImpact(PROFORMA, robot)
+    expect(i.operatingDividendImpact).toBeCloseTo(354_838.4, 0)
+    expect(i.annualCapitalCharge).toBe(300_000) // 1.5M over the 5-yr horizon
+    expect(i.annualDividendImpact).toBeCloseTo(54_838.4, 0)
+    expect(i.annualDividendAfter - i.annualDividendBefore).toBeCloseTo(
+      i.annualDividendImpact,
+      0,
+    )
+  })
+
+  it("NPV is unchanged — capital is charged once, at year 0", () => {
+    // Same figure as before the capital-charge change; the operating stream
+    // (not the net) is what gets discounted.
+    expect(computePurchaseDividendImpact(PROFORMA, robot).netPresentValue).toBeCloseTo(
+      -79_723.78,
+      0,
+    )
+  })
+
+  it("capitalUsefulLifeYears spreads the charge over its own life", () => {
+    const i = computePurchaseDividendImpact(PROFORMA, {
+      ...robot,
+      capitalUsefulLifeYears: 10,
+    })
+    expect(i.annualCapitalCharge).toBe(150_000)
+    expect(i.annualDividendImpact).toBeCloseTo(204_838.4, 0)
+  })
+
+  it("a capital charge exceeding the operating gain flips the verdict", () => {
+    // The whole point: pre-change this reported +$354,838 accretive no matter
+    // how large the outlay.
+    const i = computePurchaseDividendImpact(PROFORMA, {
+      ...robot,
+      capitalOutlay: 5_000_000,
+    })
+    expect(i.annualCapitalCharge).toBe(1_000_000)
+    expect(i.annualDividendImpact).toBeCloseTo(-645_161.6, 0)
+    expect(i.verdict).toBe("dilutive")
+  })
+
+  it("no outlay means no charge, and net equals operating", () => {
+    const i = computePurchaseDividendImpact(PROFORMA, DEFAULT_SCENARIO)
+    expect(i.annualCapitalCharge).toBe(0)
+    expect(i.annualDividendImpact).toBe(i.operatingDividendImpact)
+  })
+})

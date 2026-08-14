@@ -110,6 +110,8 @@ export const queryKeys = {
       ["vendor-carve-out", contractId] as const,
     vendorPricing: (contractId: string) =>
       ["vendor-contract-pricing", contractId] as const,
+    dcfBundle: (contractId: string) =>
+      ["contracts", "dcfBundle", contractId] as const,
     vendorPeriods: (contractId: string) =>
       ["vendor-contract-periods", contractId] as const,
   },

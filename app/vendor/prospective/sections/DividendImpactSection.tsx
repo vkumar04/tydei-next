@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
   Card,
@@ -41,6 +41,7 @@ import {
   EMPTY_PURCHASE_SCENARIO,
   computePurchaseDividendImpact,
   lineItemsToProforma,
+  resolveCapitalUsefulLifeYears,
   type ProformaLineItems,
   type PurchaseScenario,
 } from "@/lib/financial-analysis/proforma-pnl"
@@ -56,7 +57,10 @@ import {
   type PayorProcedureGroup,
   type PayorQuarter,
 } from "@/lib/payor-volume/parse-payor-volume-rows"
-import type { SavedDividendProposal } from "@/lib/actions/dividend-proposals"
+import {
+  getDividendProposal,
+  type SavedDividendProposal,
+} from "@/lib/actions/dividend-proposals"
 import {
   usePayorVolumeDatasets,
   useProformaStatements,
@@ -107,9 +111,15 @@ const DEFAULT_PURCHASE: PurchaseScenario = {
 export function DividendImpactSection({
   vendorId,
   facilities,
+  openProposalId,
+  onProposalOpened,
 }: {
   vendorId: string
   facilities: { id: string; name: string }[]
+  /** A saved proposal to load, set when opened from the Opportunities list. */
+  openProposalId?: string | null
+  /** Called once the load has been applied (or has failed), clearing the request. */
+  onProposalOpened?: () => void
 }) {
   const [lineItems, setLineItems] = useState<ProformaLineItems>(
     DEFAULT_PROFORMA_LINE_ITEMS,
@@ -148,7 +158,8 @@ export function DividendImpactSection({
   const { data: facilityOptions = [], isLoading: datasetsLoading } =
     usePayorVolumeDatasets(vendorId)
   const { data: proformaStatements = [] } = useProformaStatements(vendorId)
-  const { data: rateSets = [] } = useMedicareRateSets(vendorId)
+  const { data: rateSets = [], isLoading: ratesLoading } =
+    useMedicareRateSets(vendorId)
   const { data: rateOverrides = [] } = useMedicareRateOverrides(vendorId)
 
   // The uploaded rate table currently applied; undefined = built-in.
@@ -399,6 +410,40 @@ export function DividendImpactSection({
     setCurrentProposalName(p.name)
   }
 
+  // Load a proposal requested from the Opportunities list. Gated on the
+  // datasets and rate sets being settled: loadProposal reconciles the saved
+  // payor groups and rate set against them, so firing mid-fetch would report
+  // every group as "no longer in the dataset" and warn spuriously.
+  const readyToLoad = !datasetsLoading && !ratesLoading
+  useEffect(() => {
+    if (!openProposalId || !readyToLoad) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const full = await getDividendProposal(openProposalId)
+        if (cancelled) return
+        if (full) {
+          loadProposal(full)
+          // Confirm the arrival: the user clicked on a different tab, so
+          // without this the scenario silently swaps under them.
+          toast.success(`Loaded “${full.name}”`)
+        } else {
+          toast.error("This proposal could not be loaded")
+        }
+      } catch {
+        if (!cancelled) toast.error("This proposal could not be loaded")
+      } finally {
+        if (!cancelled) onProposalOpened?.()
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // loadProposal closes over live query data; re-running on its identity
+    // would reload on every refetch. The id is the intent.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openProposalId, readyToLoad])
+
   const snapshot: DividendProposalSnapshot = {
     // The DERIVED selection, not the raw state — with auto-fallback the two
     // differ, and the proposal must record the dataset actually modeled.
@@ -411,6 +456,10 @@ export function DividendImpactSection({
       // reproduce its saved economics even if the grounding dataset later
       // changes or disappears (loadProposal falls back to these numbers).
       purchase: effectivePurchase,
+      // Snapshot the assumption set these figures were computed under, same
+      // rationale as medicareRateOverrides below: a linked surface must not
+      // have to guess the growth/discount convention behind the saved NPV.
+      assumptions: impact.assumptions,
       payorGroupNames,
       quarterEdits,
       percentOfMedicare,
@@ -1006,9 +1055,13 @@ export function DividendImpactSection({
           positive={impact.noiImpact === 0 ? null : impact.noiImpact > 0}
         />
         <DeltaTile
-          label="Annual Dividend (80% of EBITDA)"
+          label="Annual Dividend (net of capital)"
           value={`${impact.annualDividendImpact > 0 ? "+" : ""}${formatCompactCurrency(impact.annualDividendImpact, { kDecimals: 1 })}`}
-          sub={`${formatCompactCurrency(impact.annualDividendBefore, { kDecimals: 1 })} → ${formatCompactCurrency(impact.annualDividendAfter, { kDecimals: 1 })}`}
+          sub={
+            impact.annualCapitalCharge > 0
+              ? `${formatCompactCurrency(impact.operatingDividendImpact, { kDecimals: 1 })} operating − ${formatCompactCurrency(impact.annualCapitalCharge, { kDecimals: 1 })} capital/yr`
+              : `${formatCompactCurrency(impact.annualDividendBefore, { kDecimals: 1 })} → ${formatCompactCurrency(impact.annualDividendAfter, { kDecimals: 1 })}`
+          }
           icon={Landmark}
           positive={
             impact.annualDividendImpact === 0
@@ -1113,6 +1166,28 @@ export function DividendImpactSection({
                   after={impact.after.netOperatingIncome}
                   bold
                 />
+                {impact.annualCapitalCharge > 0 ? (
+                  <TableRow>
+                    <TableCell className="pl-8 text-muted-foreground">
+                      Annual capital charge
+                      <span className="ml-1 text-[11px]">
+                        ({formatCurrency(impact.capitalOutlay)} ÷{" "}
+                        {resolveCapitalUsefulLifeYears(
+                          effectivePurchase,
+                          impact.assumptions,
+                        )}{" "}
+                        yrs)
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">—</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatCurrency(impact.annualCapitalCharge)}
+                    </TableCell>
+                    <TableCell className={`text-right tabular-nums ${BAD_TONE}`}>
+                      −{formatCurrency(impact.annualCapitalCharge)}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
                 <PnlRow
                   label="Annual Dividend (Distributable CF)"
                   before={impact.annualDividendBefore}

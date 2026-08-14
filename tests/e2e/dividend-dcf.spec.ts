@@ -410,3 +410,41 @@ test("rate editor rows lay out in columns — inputs stack, nothing overflows", 
   // …and must not reach into the CPT column.
   expect(g.noteInput.right).toBeLessThanOrEqual(g.cptCell.x + 1)
 })
+
+test("a saved DCF proposal is listed on Opportunities and opens in the DCF tab", async ({
+  page,
+}) => {
+  // Charles 2026-08-13: saved proposals belong on the Opportunities list, and
+  // clicking one must show the DIVIDEND/DCF representation — not the
+  // contract-proposal detail dialog, which is a different object entirely.
+  const name = `E2E Opportunity DCF ${Date.now()}`
+  await openDividendTab(page)
+  await page.getByRole("button", { name: /save proposal/i }).click()
+  await page.getByLabel("Proposal name", { exact: true }).fill(name)
+  await page.getByRole("button", { name: "Save", exact: true }).click()
+  await expect(page.getByText(`Saved “${name}”`)).toBeVisible({ timeout: 15_000 })
+
+  // It appears under its own heading on Opportunities.
+  await page.getByRole("tab", { name: /opportunities/i }).click()
+  await expect(page.getByText("Dividend / DCF proposals")).toBeVisible()
+  const card = page.getByRole("button", {
+    name: `Open ${name} in the Dividend / DCF tab`,
+  })
+  await expect(card).toBeVisible()
+
+  // Clicking switches to the Dividend/DCF tab and restores the proposal…
+  await card.click()
+  await expect(
+    page.getByRole("heading", { name: /dividend & dcf impact report/i }),
+  ).toBeVisible()
+  await expect(page.getByText(`Loaded “${name}”`)).toBeVisible({ timeout: 15_000 })
+  // The header badge proves the scenario actually restored, not just toasted.
+  await expect(page.getByText(name).first()).toBeVisible()
+  // …and NOT the old contract-proposal detail dialog.
+  await expect(page.getByRole("heading", { name: /proposal details/i })).toHaveCount(0)
+
+  // Clean up.
+  await page.getByRole("button", { name: /^saved/i }).click()
+  await page.getByRole("button", { name: `Delete ${name}` }).click()
+  await expect(page.getByText("Proposal deleted")).toBeVisible()
+})

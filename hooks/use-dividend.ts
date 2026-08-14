@@ -1,6 +1,6 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
@@ -11,6 +11,10 @@ import {
 import { listPayorVolumeDatasets } from "@/lib/actions/payor-volume"
 import { listProformaStatements } from "@/lib/actions/proforma-statements"
 import { listMedicareRateSets } from "@/lib/actions/medicare-rate-sets"
+import {
+  linkDcfProposalToContract,
+  unlinkDcfProposalFromContract,
+} from "@/lib/actions/contract-dcf-links"
 import {
   listMedicareRateOverrides,
   saveMedicareRateOverrides,
@@ -100,5 +104,34 @@ export function useResetMedicareRateOverrides() {
         ? "Nothing to reset"
         : `Reset ${r.removed} rate${r.removed === 1 ? "" : "s"} to defaults`,
     error: "Failed to reset the Medicare rates",
+  })
+}
+
+/** Link a saved DCF proposal to a contract (contract DCF Analysis tab). */
+export function useLinkDcfProposal() {
+  const qc = useQueryClient()
+  return useToastMutation(linkDcfProposalToContract, {
+    invalidate: [queryKeys.prospective.all],
+    success: "Proposal linked to this contract",
+    error: "Failed to link the proposal",
+    onSuccess: (_d, args) => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.contracts.dcfBundle(args.contractId),
+      })
+    },
+  })
+}
+
+export function useUnlinkDcfProposal() {
+  const qc = useQueryClient()
+  return useToastMutation(unlinkDcfProposalFromContract, {
+    invalidate: [queryKeys.prospective.all],
+    success: "Proposal unlinked",
+    error: "Failed to unlink the proposal",
+    onSuccess: (_d, args) => {
+      qc.invalidateQueries({
+        queryKey: queryKeys.contracts.dcfBundle(args.contractId),
+      })
+    },
   })
 }

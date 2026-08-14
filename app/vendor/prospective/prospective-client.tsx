@@ -6,6 +6,7 @@ import { Gauge, Landmark, Scale } from "lucide-react"
 
 import { ProspectiveHero } from "@/components/vendor/prospective/prospective-hero"
 import { useVendorProposals } from "@/hooks/use-prospective"
+import { useDividendProposals } from "@/hooks/use-dividend"
 
 import { ProposalCards } from "./sections/ProposalCards"
 import { ProposalStepper } from "./sections/ProposalStepper"
@@ -40,6 +41,10 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
   // called updateProposal on the proposal just created — silently overwriting
   // it instead of creating a second one (Charles 2026-07-27).
   const [builderSessionId, setBuilderSessionId] = useState(0)
+  // A saved Dividend/DCF proposal the user clicked on the Opportunities list.
+  // The Dividend tab consumes it and calls back once loaded, so a second click
+  // on the same proposal re-opens it rather than being swallowed.
+  const [dcfProposalToOpen, setDcfProposalToOpen] = useState<string | null>(null)
 
   // ONE way in for every "open a saved proposal" entry point: the builder
   // rehydrates (editingProposalId) AND the Deal Scorer / Opportunity Engine
@@ -55,6 +60,16 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
     setOppHandoff(null)
     setShowBuilder(true)
     setActiveTab("proposals")
+  }
+
+  const { data: dividendProposals = [] } = useDividendProposals(vendorId)
+
+  // Opening a DCF proposal shows it in the DIVIDEND/DCF representation, not
+  // the contract-proposal detail dialog — they are different objects with
+  // different maths (Charles 2026-08-13).
+  const openSavedDcfProposal = (proposalId: string) => {
+    setDcfProposalToOpen(proposalId)
+    setActiveTab("dividend")
   }
 
   const totalProposals = proposals?.length ?? 0
@@ -105,6 +120,8 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
               setActiveTab("proposals")
             }}
             onEditProposal={openSavedProposal}
+            dividendProposals={dividendProposals}
+            onOpenDividendProposal={openSavedDcfProposal}
             onAnalyzeInOpportunityEngine={(deal) => {
               // Mutually exclusive with a builder-save preselect (V-C1).
               setPreselectedProposalId(null)
@@ -163,7 +180,12 @@ export function VendorProspectiveClient({ vendorId, facilities }: VendorProspect
           forceMount
           className="mt-4 space-y-4 data-[state=inactive]:hidden"
         >
-          <DividendImpactSection vendorId={vendorId} facilities={facilities} />
+          <DividendImpactSection
+            vendorId={vendorId}
+            facilities={facilities}
+            openProposalId={dcfProposalToOpen}
+            onProposalOpened={() => setDcfProposalToOpen(null)}
+          />
         </TabsContent>
       </Tabs>
     </div>

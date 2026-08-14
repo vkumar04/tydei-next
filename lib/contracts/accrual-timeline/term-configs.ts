@@ -8,7 +8,7 @@ import type {
   TermAccrualConfig,
 } from "@/lib/contracts/accrual"
 import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
-import { scaleRebateValueForEngine } from "@/lib/rebates/calculate"
+import { toEngineRebateUnits } from "@/lib/rebates/calculate"
 import type { AccrualContract } from "./types"
 
 // Charles W1.S — scale `rebateValue` by 100 at the Prisma boundary for
@@ -40,35 +40,23 @@ import type { AccrualContract } from "./types"
 // rate so it doesn't display absurd percentages — accrual on those
 // termTypes is computed via the dedicated VOLUME / per-use writers
 // in `lib/contracts/recompute/`, not this timeline.
-const isFixedDollarRebateType = (rt: string | null | undefined): boolean =>
-  rt === "fixed_rebate" ||
-  rt === "fixed_rebate_per_unit" ||
-  rt === "per_procedure_rebate"
+// The rules above now live with the unit convention they enforce,
+// `toEngineRebateUnits` in lib/rebates/calculate.ts, so every Prisma→engine
+// tier mapper shares them. Unchanged in substance.
 
 export function buildTermConfigs(
   termsWithTiers: AccrualContract["terms"],
 ): TermAccrualConfig[] {
   const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
     const tiers: TierLike[] = term.tiers.map((t) => {
-      const isFixed = isFixedDollarRebateType(t.rebateType)
-      const isTrueFixedRebate = t.rebateType === "fixed_rebate"
+      const units = toEngineRebateUnits(t.rebateValue, t.rebateType)
       return {
         tierNumber: t.tierNumber,
         tierName: t.tierName ?? null,
         spendMin: Number(t.spendMin),
         spendMax: t.spendMax ? Number(t.spendMax) : null,
-        // Force 0 for any non-percent rebate type so the Rate column
-        // never renders a dollar amount as a percent. Percent tiers
-        // keep the existing × 100 fraction-to-percent scaling.
-        rebateValue: isFixed
-          ? 0
-          : scaleRebateValueForEngine(t.rebateValue, t.rebateType),
-        // Only `fixed_rebate` is truly a flat-dollar tier; route its
-        // dollars through `fixedRebateAmount` so the engine pays it on
-        // tier qualification. Per-unit / per-procedure types remain
-        // null — those are unit-driven, not flat, and shouldn't be
-        // paid out here.
-        fixedRebateAmount: isTrueFixedRebate ? Number(t.rebateValue) : null,
+        rebateValue: units.rebateValue,
+        fixedRebateAmount: units.fixedRebateAmount,
       }
     })
     const evaluationPeriod: EvaluationPeriod =
