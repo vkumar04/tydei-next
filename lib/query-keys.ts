@@ -362,6 +362,8 @@ export const queryKeys = {
     // the existing `prospective.all` invalidations refresh them too.
     dividendProposals: (vendorId: string) =>
       ["prospective", "dividendProposals", vendorId] as const,
+    dividendProposal: (proposalId: string) =>
+      ["prospective", "dividendProposals", "detail", proposalId] as const,
     payorVolumeDatasets: (vendorId: string) =>
       ["prospective", "payorVolumeDatasets", vendorId] as const,
     proformaStatements: (vendorId: string) =>

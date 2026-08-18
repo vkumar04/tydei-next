@@ -28,6 +28,8 @@ import { Switch } from "@/components/ui/switch"
 import { ArrowLeft, Save, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
+import { ContractDcfTab } from "@/components/vendor/contracts/contract-dcf-tab"
+import { getPendingContractDcfBundle } from "@/lib/actions/contract-dcf-links"
 import type { UpdatePendingContractInput } from "@/lib/validators/pending-contracts"
 import { ContractTermsCard } from "./submission/contract-terms-card"
 import type { TermFormValues } from "@/lib/validators/contract-terms"
@@ -433,6 +435,14 @@ export function PendingContractEditClient({ pendingContractId }: PendingContract
           </CardContent>
         </Card>
       )}
+
+      {/* Analysis is not gated on editability: a submission awaiting review is
+          exactly when a vendor wants to know what the deal is worth. */}
+      <ContractDcfTab
+        contractId={contract.id}
+        fetcher={getPendingContractDcfBundle}
+        persistLinks={false}
+      />
 
       {contract.reviewNotes && (
         <Card className="border-blue-500/50 bg-blue-50/50 dark:bg-blue-950/20">

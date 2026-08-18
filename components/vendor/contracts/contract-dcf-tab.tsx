@@ -39,11 +39,13 @@ import { queryKeys } from "@/lib/query-keys"
 import { formatCurrency, formatCompactCurrency } from "@/lib/formatting"
 import {
   getContractDcfBundle,
+  type ContractDcfBundle,
   type LinkedDcfProposal,
   type ContractRebateLadder,
 } from "@/lib/actions/contract-dcf-links"
 import {
   useDividendProposals,
+  useDividendProposalPayloads,
   useLinkDcfProposal,
   useUnlinkDcfProposal,
 } from "@/hooks/use-dividend"
@@ -283,8 +285,21 @@ function LinkedProposalCard({
  * projects, year by year, the owner dividend they produce once this contract's
  * rebate ladder is layered on. The growth slider is the prospective lever;
  * everything re-derives from it and from live contract data.
+ *
+ * `persistLinks: false` serves an unapproved submission. ContractDcfLink is a
+ * hard FK to Contract, so nothing can be saved against a PendingContract — the
+ * vendor picks a proposal ad hoc and the selection lives in component state.
+ * The projection itself is identical either way.
  */
-export function ContractDcfTab({ contractId }: { contractId: string }) {
+export function ContractDcfTab({
+  contractId,
+  fetcher,
+  persistLinks = true,
+}: {
+  contractId: string
+  fetcher?: (id: string) => Promise<ContractDcfBundle>
+  persistLinks?: boolean
+}) {
   // null = no override: every card runs at its own proposal's cashFlowGrowthPct,
   // the state in which this tab's NPV equals the Dividend/DCF tab's exactly.
   const [growthOverride, setGrowthOverride] = useState<number | null>(null)
@@ -293,18 +308,43 @@ export function ContractDcfTab({ contractId }: { contractId: string }) {
   )
   const growthValue = growthOverride ?? defaultGrowthPercent
   const [pickerOpen, setPickerOpen] = useState(false)
+  /** Ad-hoc selection when links cannot be persisted (unapproved submission). */
+  const [localIds, setLocalIds] = useState<string[]>([])
 
   const { data: bundle, isLoading } = useQuery({
     queryKey: queryKeys.contracts.dcfBundle(contractId),
-    queryFn: () => getContractDcfBundle(contractId),
+    queryFn: () => (fetcher ?? getContractDcfBundle)(contractId),
   })
   const { data: allProposals = [] } = useDividendProposals("")
+  const { data: localProposals = [] } = useDividendProposalPayloads(
+    persistLinks ? [] : localIds,
+  )
   const linkMutation = useLinkDcfProposal()
   const unlinkMutation = useUnlinkDcfProposal()
 
-  const linked = bundle?.linked ?? []
+  const linked = persistLinks ? (bundle?.linked ?? []) : localProposals
   const linkedIds = new Set(linked.map((l) => l.id))
   const available = allProposals.filter((p) => !linkedIds.has(p.id))
+
+  const attach = (proposalId: string) => {
+    if (persistLinks) {
+      linkMutation.mutate(
+        { contractId, proposalId },
+        { onSuccess: () => setPickerOpen(false) },
+      )
+      return
+    }
+    setLocalIds((ids) => (ids.includes(proposalId) ? ids : [...ids, proposalId]))
+    setPickerOpen(false)
+  }
+
+  const detach = (proposalId: string) => {
+    if (persistLinks) {
+      unlinkMutation.mutate({ contractId, proposalId })
+      return
+    }
+    setLocalIds((ids) => ids.filter((id) => id !== proposalId))
+  }
 
   return (
     <div className="space-y-4">
@@ -314,7 +354,9 @@ export function ContractDcfTab({ contractId }: { contractId: string }) {
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
                 <Calculator className="h-5 w-5 text-muted-foreground" />
-                DCF proposals linked to this contract
+                {persistLinks
+                  ? "DCF proposals linked to this contract"
+                  : "DCF analysis for this submission"}
               </CardTitle>
               <CardDescription>
                 See how this contract&apos;s rebate ladder feeds the projected
@@ -331,7 +373,7 @@ export function ContractDcfTab({ contractId }: { contractId: string }) {
               onClick={() => setPickerOpen(true)}
             >
               <Link2 className="h-4 w-4" />
-              Link a proposal
+              {persistLinks ? "Link a proposal" : "Add a proposal"}
             </Button>
           </div>
         </CardHeader>
@@ -387,8 +429,9 @@ export function ContractDcfTab({ contractId }: { contractId: string }) {
       ) : linked.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No DCF proposals linked yet. Link one to see how this contract
-            affects its projected dividend.
+            {persistLinks
+              ? "No DCF proposals linked yet. Link one to see how this contract affects its projected dividend."
+              : "Add a saved DCF proposal to project it against this submission's rebate ladder. Selections are not saved until the contract is approved."}
           </CardContent>
         </Card>
       ) : (
@@ -400,9 +443,7 @@ export function ContractDcfTab({ contractId }: { contractId: string }) {
             baseAnnualSpend={bundle?.baseAnnualSpend ?? 0}
             growthOverride={growthOverride}
             unlinking={unlinkMutation.isPending}
-            onUnlink={(proposalId) =>
-              unlinkMutation.mutate({ contractId, proposalId })
-            }
+            onUnlink={detach}
           />
         ))
       )}
@@ -410,7 +451,9 @@ export function ContractDcfTab({ contractId }: { contractId: string }) {
       <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Link a DCF proposal</DialogTitle>
+            <DialogTitle>
+              {persistLinks ? "Link a DCF proposal" : "Add a DCF proposal"}
+            </DialogTitle>
             <DialogDescription>
               Saved Dividend/DCF proposals. Linking one projects it against this
               contract&apos;s rebate ladder.
@@ -429,12 +472,7 @@ export function ContractDcfTab({ contractId }: { contractId: string }) {
                   key={p.id}
                   type="button"
                   disabled={linkMutation.isPending}
-                  onClick={() =>
-                    linkMutation.mutate(
-                      { contractId, proposalId: p.id },
-                      { onSuccess: () => setPickerOpen(false) },
-                    )
-                  }
+                  onClick={() => attach(p.id)}
                   className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-left hover:bg-muted"
                 >
                   <div className="min-w-0">

@@ -5,15 +5,18 @@ import { requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
 import { serialize } from "@/lib/serialize"
-import { toEngineRebateUnits } from "@/lib/rebates/calculate"
-import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
-import { annualizePeriodCap } from "@/lib/contracts/rebate-accrual-schedule"
-import type { AccrualTier } from "@/lib/contracts/rebate-accrual-schedule"
+import {
+  buildContractRebateLadder,
+  contractTermYears,
+  resolveBaseAnnualSpend,
+} from "@/lib/contracts/dcf-ladder"
+import { extractPendingTerms } from "@/lib/contracts/pending-extract"
 import {
   contractDcfLinkInputSchema,
   dividendProposalPayloadSchema,
 } from "@/lib/validators/dividend-proposals"
 import type { DividendProposalPayload } from "@/lib/validators/dividend-proposals"
+import type { ContractRebateLadder } from "@/lib/contracts/dcf-ladder"
 import { resolveDividendProposalSummary } from "@/lib/financial-analysis/dividend-proposal-summary"
 import type { DividendVerdict } from "@/lib/financial-analysis/proforma-pnl"
 
@@ -30,29 +33,9 @@ export interface LinkedDcfProposal {
   payload: DividendProposalPayload
 }
 
-/**
- * The contract's spend-dollar rebate ladder in ENGINE units — percent in
- * `rebateValue`, flat dollars in `fixedRebateAmount`, mapped by
- * `toEngineRebateUnits` — ready for `projectRebateAccrualSchedule`.
- *
- * Only spend-dollar ladders qualify — market-share and volume terms key off a
- * different metric entirely, and carve-out/tie-in placeholder tiers are not a
- * real ladder. `hasSpendDollarTierLadder` gates the THRESHOLD unit; the rebate
- * VALUE unit is `toEngineRebateUnits`' job.
- */
-export interface ContractRebateLadder {
-  tiers: AccrualTier[]
-  rebateMethod: "cumulative" | "marginal"
-  boundaryRule: "exclusive" | "inclusive"
-  termName: string | null
-  /** `ContractTerm.spendBaseline` in annual dollars; null when unset. Only
-   *  reduces the rebate base when `growthOnly`. */
-  spendBaseline: number | null
-  growthOnly: boolean
-  /** `ContractTerm.periodCap` converted to dollars per projection year. A
-   *  ceiling on the spend the ladder may earn on, not on the rebate. */
-  annualSpendCap: number | null
-}
+// The from-form re-export is erased by the prod transform; a local
+// `export type { X }` clause is not, and would kill every action in this file.
+export type { ContractRebateLadder } from "@/lib/contracts/dcf-ladder"
 
 export interface ContractDcfBundle {
   linked: LinkedDcfProposal[]
@@ -146,69 +129,64 @@ export async function getContractDcfBundle(
     })
   }
 
-  // Divisor for the total-value spend fallback below, and the spread for a
-  // `lifetime` period cap.
-  const termStart = new Date(contract.effectiveDate).getTime()
-  const termEnd = new Date(contract.expirationDate).getTime()
-  const termYears =
-    termEnd > termStart
-      ? (termEnd - termStart) / (1000 * 60 * 60 * 24 * 365.25)
-      : 1
-
-  // First term carrying a real, payable spend-dollar ladder wins.
-  let ladder: ContractRebateLadder | null = null
-  for (const term of contract.terms) {
-    const shaped = {
-      termType: term.termType,
-      tiers: term.tiers.map((t) => ({ rebateValue: t.rebateValue })),
-    }
-    if (!hasSpendDollarTierLadder(shaped)) continue
-
-    const tiers: AccrualTier[] = term.tiers.map((t) => {
-      const units = toEngineRebateUnits(t.rebateValue, t.rebateType)
-      return {
-        spendMin: Number(t.spendMin),
-        spendMax: t.spendMax === null ? null : Number(t.spendMax),
-        rebateValue: units.rebateValue,
-        fixedRebateAmount: units.fixedRebateAmount,
-      }
-    })
-
-    // fixed_rebate_per_unit / per_procedure_rebate earn units × rate and pay
-    // nothing on a spend-driven projection, so a term made only of those maps
-    // to an all-zero ladder. Fall through rather than render badges earning $0.
-    const payable = tiers.some(
-      (t) => t.rebateValue > 0 || (t.fixedRebateAmount ?? 0) > 0,
-    )
-    if (!payable) continue
-
-    ladder = {
-      tiers,
-      rebateMethod: term.rebateMethod === "marginal" ? "marginal" : "cumulative",
-      boundaryRule: term.boundaryRule === "inclusive" ? "inclusive" : "exclusive",
-      termName: term.termName ?? null,
-      // `== null`, not `===`: these are Decimal? columns and an absent value can
-      // arrive as undefined, which Number() turns into NaN.
-      spendBaseline: term.spendBaseline == null ? null : Number(term.spendBaseline),
-      growthOnly: term.growthOnly ?? false,
-      annualSpendCap: annualizePeriodCap(
-        term.periodCap == null ? null : Number(term.periodCap),
-        term.evaluationPeriod,
-        termYears,
-      ),
-    }
-    break
-  }
-
-  // Year-1 spend basis: the stated annual value, else total ÷ term length.
-  const annual = Number(contract.annualValue)
-  let baseAnnualSpend = annual
-  if (!(baseAnnualSpend > 0)) {
-    const total = Number(contract.totalValue)
-    baseAnnualSpend = termYears > 0 && total > 0 ? total / termYears : 0
-  }
+  const termYears = contractTermYears(
+    contract.effectiveDate,
+    contract.expirationDate,
+  )
+  const ladder = buildContractRebateLadder(contract.terms, termYears)
+  const baseAnnualSpend = resolveBaseAnnualSpend(
+    contract.annualValue,
+    contract.totalValue,
+    termYears,
+  )
 
   return serialize({ linked, ladder, baseAnnualSpend })
+}
+
+/**
+ * The same bundle for a submission that is not an approved Contract yet.
+ *
+ * A PendingContract has no ContractTerm/ContractTier rows, but the submission
+ * form persists the whole ladder into its `terms` JSON, so a real projection is
+ * available before approval — which is the point: a vendor should be able to
+ * see what a deal is worth while it is still being negotiated.
+ *
+ * `linked` is always empty. ContractDcfLink.contractId is a hard FK to Contract,
+ * so a proposal cannot be PERSISTED against a submission; the tab lets the
+ * vendor pick one ad hoc instead.
+ */
+export async function getPendingContractDcfBundle(
+  pendingIdInput: string,
+): Promise<ContractDcfBundle> {
+  const { vendor } = await requireVendor()
+  const pendingId =
+    contractDcfLinkInputSchema.shape.contractId.parse(pendingIdInput)
+
+  const pending = await prisma.pendingContract.findFirst({
+    where: { id: pendingId, vendorId: vendor.id },
+    select: {
+      terms: true,
+      totalValue: true,
+      annualValue: true,
+      effectiveDate: true,
+      expirationDate: true,
+    },
+  })
+  if (!pending) throw new Error("Submission not found")
+
+  const termYears = contractTermYears(
+    pending.effectiveDate,
+    pending.expirationDate,
+  )
+  const terms = extractPendingTerms(pending.terms, pending.effectiveDate)
+  const ladder = buildContractRebateLadder(terms, termYears)
+  const baseAnnualSpend = resolveBaseAnnualSpend(
+    pending.annualValue,
+    pending.totalValue,
+    termYears,
+  )
+
+  return serialize({ linked: [], ladder, baseAnnualSpend })
 }
 
 export async function linkDcfProposalToContract(input: {

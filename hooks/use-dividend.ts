@@ -1,13 +1,15 @@
 "use client"
 
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { queryKeys } from "@/lib/query-keys"
 import { useToastMutation } from "@/hooks/use-toast-mutation"
 import {
   listDividendProposals,
+  getDividendProposal,
   saveDividendProposal,
   deleteDividendProposal,
 } from "@/lib/actions/dividend-proposals"
+import type { LinkedDcfProposal } from "@/lib/actions/contract-dcf-links"
 import { listPayorVolumeDatasets } from "@/lib/actions/payor-volume"
 import { listProformaStatements } from "@/lib/actions/proforma-statements"
 import { listMedicareRateSets } from "@/lib/actions/medicare-rate-sets"
@@ -30,6 +32,35 @@ export function useDividendProposals(vendorId: string) {
     queryKey: queryKeys.prospective.dividendProposals(vendorId),
     queryFn: () => listDividendProposals(),
   })
+}
+
+/**
+ * Full payloads for an ad-hoc set of proposal ids, shaped like the `linked`
+ * entries `getContractDcfBundle` returns. Used where a link cannot be
+ * persisted (an unapproved submission), so the selection lives in component
+ * state rather than in ContractDcfLink.
+ */
+export function useDividendProposalPayloads(ids: string[]) {
+  const results = useQueries({
+    queries: ids.map((id) => ({
+      queryKey: queryKeys.prospective.dividendProposal(id),
+      queryFn: () => getDividendProposal(id),
+    })),
+  })
+  const data: LinkedDcfProposal[] = results.flatMap((r) =>
+    r.data
+      ? [
+          {
+            id: r.data.id,
+            name: r.data.name,
+            facilityLabel: r.data.facilityLabel,
+            verdict: r.data.verdict,
+            payload: r.data.payload,
+          },
+        ]
+      : [],
+  )
+  return { data, isLoading: results.some((r) => r.isLoading) }
 }
 
 export function usePayorVolumeDatasets(vendorId: string) {
