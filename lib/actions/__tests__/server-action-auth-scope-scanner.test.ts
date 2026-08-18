@@ -323,16 +323,11 @@ const BASELINE_HITS = new Set<string>([
   // findFirstOrThrow on {id, contractId} immediately above it.
   "lib/actions/contract-periods.ts:484",
   "lib/actions/contract-periods.ts:790",
-  // contracts/proposals.ts: every read is followed by explicit
+  // contracts/proposals.ts: converted from line-pinned baseline entries to
+  // inline `auth-scope-scanner-skip:` comments — the line numbers shifted
+  // every time the file was edited and the stale entries failed the suite.
+  // Kept for reference: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
-  "lib/actions/contracts/proposals.ts:96",
-  "lib/actions/contracts/proposals.ts:120",
-  "lib/actions/contracts/proposals.ts:163",
-  "lib/actions/contracts/proposals.ts:174",
-  "lib/actions/contracts/proposals.ts:211",
-  "lib/actions/contracts/proposals.ts:224",
-  "lib/actions/contracts/proposals.ts:267",
-  "lib/actions/contracts/proposals.ts:283",
   // contracts.ts: post-update facility-set re-read + manual ownership
   // (2026-07-28: the deleteContractDocument pair migrated from line-exact
   // baseline entries to inline `auth-scope-scanner-skip:` comments. The baseline

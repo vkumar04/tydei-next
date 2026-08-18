@@ -1,5 +1,29 @@
 import { z } from "zod"
 
+const money = z.number().finite().gte(0).lte(1e9)
+
+/** One pricing row a vendor proposes: a new SKU, or a new price for one the
+ *  contract already carries. Classification is `matchProposedPricing`'s job —
+ *  the wire payload never asserts add-vs-update, so a stale client cannot
+ *  mislabel a reprice as an add. */
+export const proposedPricingItemSchema = z.object({
+  vendorItemNo: z.string().trim().min(1).max(120),
+  description: z.string().max(500).optional(),
+  category: z.string().max(200).optional(),
+  unitPrice: money,
+  uom: z.string().max(20).optional(),
+})
+
+export type ProposedPricingItemInput = z.infer<typeof proposedPricingItemSchema>
+
+/** Structured payload carried in the existing `proposedTerms` Json column, so
+ *  richer proposals need no migration. */
+export const proposedTermsSchema = z.object({
+  pricingItems: z.array(proposedPricingItemSchema).max(5_000).optional(),
+})
+
+export type ProposedTermsInput = z.infer<typeof proposedTermsSchema>
+
 export const createChangeProposalSchema = z.object({
   contractId: z.string().min(1, "Contract is required"),
   vendorId: z.string().min(1),
@@ -12,7 +36,7 @@ export const createChangeProposalSchema = z.object({
     currentValue: z.string(),
     proposedValue: z.string(),
   })),
-  proposedTerms: z.unknown().optional(),
+  proposedTerms: proposedTermsSchema.optional(),
   vendorMessage: z.string().optional(),
 })
 

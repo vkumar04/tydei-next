@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react"
 import { Plus, Trash2, Sparkles } from "lucide-react"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
+import { ProposedPricingEditor } from "@/components/vendor/contracts/proposed-pricing-editor"
+import type { ProposedPricingItem } from "@/lib/contracts/pricing-match"
 import type { AmendmentChange } from "@/app/api/ai/extract-amendment/route"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -77,6 +79,7 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
   const [changes, setChanges] = useState<Change[]>([newRow()])
   const [message, setMessage] = useState("")
   const [extractorOpen, setExtractorOpen] = useState(false)
+  const [pricingItems, setPricingItems] = useState<ProposedPricingItem[]>([])
   const [isPending, startTransition] = useTransition()
 
   const addChange = () => setChanges((rows) => [...rows, newRow()])
@@ -132,6 +135,7 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
           currentValue,
           proposedValue,
         })),
+        proposedTerms: pricingItems.length ? { pricingItems } : undefined,
         vendorMessage: message || undefined,
       })
     })
@@ -209,6 +213,12 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
             </div>
           ))}
         </div>
+
+        <ProposedPricingEditor
+          contractId={contract.id}
+          items={pricingItems}
+          onChange={setPricingItems}
+        />
 
         <AmendmentExtractor
           contractId={contract.id}

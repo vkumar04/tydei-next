@@ -6,6 +6,9 @@ import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
+import { matchProposedPricing } from "@/lib/contracts/pricing-match"
+import { extractProposedPricingItems } from "@/lib/contracts/proposed-pricing"
+import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 
 /**
  * Charles 2026-04-25 (audit follow-up — Vendor mirror Phase 3):
@@ -93,6 +96,8 @@ export async function approveContractChangeProposal(
   const { facility, user } = await requireFacility()
   await requireCanMutate()
 
+  // auth-scope-scanner-skip: authorized immediately below by the explicit
+  // `proposal.contract.facilityId !== facility.id` throw.
   const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
     where: { id: proposalId },
     include: { contract: { select: { id: true, facilityId: true } } },
@@ -110,6 +115,20 @@ export async function approveContractChangeProposal(
     proposal.changes as Prisma.JsonValue,
   )
 
+  // Proposed pricing is APPLIED, not advisory. term_change and friends only
+  // flip status (see extractContractUpdateData), and a reviewer who clicks
+  // Approve on a price list has every reason to believe the prices changed.
+  const proposedPricing = extractProposedPricingItems(proposal.proposedTerms)
+  const existingPricing = proposedPricing.length
+    ? await prisma.contractPricing.findMany({
+        where: { contractId: proposal.contractId },
+        select: { id: true, vendorItemNo: true, description: true, category: true, unitPrice: true },
+      })
+    : []
+  const pricingMatch = proposedPricing.length
+    ? matchProposedPricing(proposedPricing, existingPricing)
+    : null
+
   await prisma.$transaction(async (tx) => {
     if (contractUpdateData && Object.keys(contractUpdateData).length > 0) {
       await tx.contract.update({
@@ -117,6 +136,34 @@ export async function approveContractChangeProposal(
         data: contractUpdateData,
       })
     }
+    if (pricingMatch) {
+      for (const change of pricingMatch.updated) {
+        // auth-scope-scanner-skip: id comes from matchProposedPricing over rows
+        // loaded with where:{contractId} on the already facility-authorized contract.
+        await tx.contractPricing.update({
+          where: { id: change.existingId! },
+          data: {
+            unitPrice: change.item.unitPrice,
+            ...(change.item.description ? { description: change.item.description } : {}),
+          },
+        })
+      }
+      if (pricingMatch.added.length > 0) {
+        await tx.contractPricing.createMany({
+          data: pricingMatch.added.map((c) => ({
+            contractId: proposal.contractId,
+            vendorItemNo: c.item.vendorItemNo,
+            description: c.item.description,
+            category: c.item.category,
+            unitPrice: c.item.unitPrice,
+            uom: c.item.uom ?? "EA",
+          })),
+          skipDuplicates: true,
+        })
+      }
+    }
+    // auth-scope-scanner-skip: row authorized above by the facility-equality
+    // check on the fetched proposal.
     await tx.contractChangeProposal.update({
       where: { id: proposalId },
       data: {
@@ -126,6 +173,19 @@ export async function approveContractChangeProposal(
       },
     })
   })
+
+  // Contract prices moving is exactly what flips COG rows between on_contract
+  // and price_variance, so the match statuses are stale until this runs.
+  if (pricingMatch && (pricingMatch.added.length || pricingMatch.updated.length)) {
+    try {
+      await recomputeMatchStatusesForVendor(proposal.vendorId, facility.id)
+    } catch (err) {
+      console.error("[approveContractChangeProposal] COG recompute failed", err, {
+        facilityId: facility.id,
+        proposalId,
+      })
+    }
+  }
 
   await logAudit({
     userId: user.id,
@@ -160,6 +220,8 @@ export async function rejectContractChangeProposal(
   const { facility, user } = await requireFacility()
   await requireCanMutate()
 
+  // auth-scope-scanner-skip: authorized immediately below by the explicit
+  // `proposal.contract.facilityId !== facility.id` throw.
   const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
     where: { id: proposalId },
     include: { contract: { select: { facilityId: true } } },
@@ -171,6 +233,8 @@ export async function rejectContractChangeProposal(
     throw new Error(`Cannot reject proposal in status ${proposal.status}`)
   }
 
+  // auth-scope-scanner-skip: row authorized above by the facility-equality
+  // check on the fetched proposal.
   await prisma.contractChangeProposal.update({
     where: { id: proposalId },
     data: {
@@ -208,6 +272,8 @@ export async function requestProposalRevision(
   const { facility, user } = await requireFacility()
   await requireCanMutate()
 
+  // auth-scope-scanner-skip: authorized immediately below by the explicit
+  // `proposal.contract.facilityId !== facility.id` throw.
   const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
     where: { id: proposalId },
     include: { contract: { select: { facilityId: true } } },
@@ -221,6 +287,8 @@ export async function requestProposalRevision(
     )
   }
 
+  // auth-scope-scanner-skip: row authorized above by the facility-equality
+  // check on the fetched proposal.
   await prisma.contractChangeProposal.update({
     where: { id: proposalId },
     data: {
@@ -264,6 +332,8 @@ export async function counterContractChangeProposal(
   const { facility, user } = await requireFacility()
   await requireCanMutate()
 
+  // auth-scope-scanner-skip: authorized immediately below by the explicit
+  // `proposal.contract.facilityId !== facility.id` throw.
   const proposal = await prisma.contractChangeProposal.findUniqueOrThrow({
     where: { id: proposalId },
     include: { contract: { select: { facilityId: true } } },
@@ -280,6 +350,8 @@ export async function counterContractChangeProposal(
     throw new Error("Counter-proposal requires a note (min 10 chars)")
   }
 
+  // auth-scope-scanner-skip: row authorized above by the facility-equality
+  // check on the fetched proposal.
   await prisma.contractChangeProposal.update({
     where: { id: proposalId },
     data: {
