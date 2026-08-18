@@ -16,7 +16,27 @@ import {
   requestProposalRevision,
 } from "@/lib/actions/contracts/proposals"
 import { CounterProposeDialog } from "@/components/contracts/counter-propose-dialog"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { ProposedPricingDiff } from "@/components/contracts/proposed-pricing-diff"
+import {
+  extractProposedDocuments,
+  extractProposedPricingItems,
+} from "@/lib/contracts/proposed-pricing"
+import { ProposalDocumentsList } from "@/components/contracts/proposal-documents-list"
 import { queryKeys } from "@/lib/query-keys"
+
+interface ProposedFieldChange {
+  field: string
+  currentValue: string
+  proposedValue: string
+}
 
 type ProposalRow = Awaited<
   ReturnType<typeof getPendingProposalsForContract>
@@ -97,7 +117,13 @@ export function ContractChangeProposalsCard({
       </CardHeader>
       <CardContent className="space-y-4">
         {proposals.map((p: ProposalRow) => {
-          const payload = p.proposedTerms ?? p.changes
+          // `proposedTerms ?? changes` used to HIDE the field changes whenever a
+          // structured payload existed. They are different things — render both.
+          const fieldChanges = Array.isArray(p.changes)
+            ? (p.changes as unknown as ProposedFieldChange[])
+            : []
+          const pricingItems = extractProposedPricingItems(p.proposedTerms)
+          const documents = extractProposedDocuments(p.proposedTerms)
           const currentNote = notes[p.id] ?? ""
           return (
             <div key={p.id} className="space-y-2 rounded-md border p-3">
@@ -117,9 +143,49 @@ export function ContractChangeProposalsCard({
                   {p.vendorMessage}
                 </p>
               ) : null}
-              <pre className="max-h-60 overflow-auto rounded-md bg-muted p-2 text-xs">
-                {JSON.stringify(payload, null, 2)}
-              </pre>
+              {fieldChanges.length > 0 && (
+                <div className="overflow-x-auto rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Field</TableHead>
+                        <TableHead>Current</TableHead>
+                        <TableHead>Proposed</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {fieldChanges.map((c, i) => (
+                        <TableRow key={`${c.field}-${i}`}>
+                          <TableCell className="text-xs font-medium">
+                            {c.field || "—"}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {c.currentValue || "—"}
+                          </TableCell>
+                          <TableCell className="text-xs">
+                            {c.proposedValue || "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              <ProposedPricingDiff
+                contractId={contractId}
+                items={pricingItems}
+              />
+
+              <ProposalDocumentsList documents={documents} />
+
+              {fieldChanges.length === 0 &&
+                pricingItems.length === 0 &&
+                documents.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  This proposal carries no field changes, pricing, or documents.
+                </p>
+              )}
               <Textarea
                 placeholder="Notes (required for reject / revision)"
                 value={currentNote}

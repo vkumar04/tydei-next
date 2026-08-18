@@ -6,6 +6,7 @@ import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import type { CreateChangeProposalInput, ReviewChangeProposalInput } from "@/lib/validators/change-proposals"
 import { createChangeProposalSchema, reviewChangeProposalSchema } from "@/lib/validators/change-proposals"
 import { serialize } from "@/lib/serialize"
+import { keyBelongsToTenant } from "@/lib/uploads/key-policy"
 
 // ─── Get Single Proposal ────────────────────────────────────────
 
@@ -103,9 +104,24 @@ export async function createChangeProposal(input: CreateChangeProposalInput) {
   // arbitrary contract. Now: ignore client-supplied vendor identity
   // and verify the target contract actually belongs to the
   // authenticated vendor before writing.
-  const { vendor } = await requireVendor()
+  const { vendor, user } = await requireVendor()
   await requireCanMutate()
   const data = createChangeProposalSchema.parse(input)
+
+  // Every attached key must have been minted by THIS caller. Without it a
+  // vendor could write any guessable storage key into their own proposal and
+  // assertKeyVisibleToUser would later presign it for them — cross-tenant file
+  // read via self-authorization (the class fixed twice before, see
+  // pending-contracts.assertDocumentKeysOwned). The amendment route mints under
+  // `amendments/<userId>/`, so the user id is an allowed provenance segment
+  // alongside the vendor id.
+  for (const doc of data.proposedTerms?.documents ?? []) {
+    if (!keyBelongsToTenant(doc.url, [vendor.id, user.id])) {
+      throw new Error(
+        `Attached document "${doc.name.slice(0, 80)}" was not uploaded by this account — re-upload it and attach it again.`,
+      )
+    }
+  }
 
   const contract = await prisma.contract.findUnique({
     where: { id: data.contractId },
@@ -174,6 +190,8 @@ export async function reviewChangeProposal(
       break
   }
 
+  // auth-scope-scanner-skip: post-mutation re-read — each branch above is a
+  // facility-gated action that already authorized this id.
   const updated = await prisma.contractChangeProposal.findUniqueOrThrow({
     where: { id },
   })

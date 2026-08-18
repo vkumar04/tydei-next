@@ -11,6 +11,7 @@
 
 import {
   proposedTermsSchema,
+  type ProposedDocumentInput,
   type ProposedPricingItemInput,
 } from "@/lib/validators/change-proposals"
 
@@ -20,4 +21,12 @@ export function extractProposedPricingItems(
   const parsed = proposedTermsSchema.safeParse(proposedTerms)
   if (!parsed.success) return []
   return parsed.data.pricingItems ?? []
+}
+
+export function extractProposedDocuments(
+  proposedTerms: unknown,
+): ProposedDocumentInput[] {
+  const parsed = proposedTermsSchema.safeParse(proposedTerms)
+  if (!parsed.success) return []
+  return parsed.data.documents ?? []
 }

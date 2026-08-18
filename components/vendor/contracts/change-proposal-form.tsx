@@ -5,6 +5,8 @@ import { Plus, Trash2, Sparkles } from "lucide-react"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
 import { ProposedPricingEditor } from "@/components/vendor/contracts/proposed-pricing-editor"
 import type { ProposedPricingItem } from "@/lib/contracts/pricing-match"
+import type { ProposedDocumentInput } from "@/lib/validators/change-proposals"
+import { ProposalDocumentsList } from "@/components/contracts/proposal-documents-list"
 import type { AmendmentChange } from "@/app/api/ai/extract-amendment/route"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -80,6 +82,7 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
   const [message, setMessage] = useState("")
   const [extractorOpen, setExtractorOpen] = useState(false)
   const [pricingItems, setPricingItems] = useState<ProposedPricingItem[]>([])
+  const [documents, setDocuments] = useState<ProposedDocumentInput[]>([])
   const [isPending, startTransition] = useTransition()
 
   const addChange = () => setChanges((rows) => [...rows, newRow()])
@@ -100,7 +103,15 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
   const seedFromAmendment = (
     extracted: AmendmentChange[],
     effectiveDate: string | null,
+    document: ProposedDocumentInput | null,
   ) => {
+    // Attach the source document so the reviewer can read the evidence rather
+    // than take the extracted diff on faith.
+    if (document) {
+      setDocuments((docs) =>
+        docs.some((d) => d.url === document.url) ? docs : [...docs, document],
+      )
+    }
     const rows = extracted
       .filter((c) => c.type !== "removed")
       .map((c) =>
@@ -130,12 +141,25 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
         facilityId: contract.facilityId,
         facilityName: contract.facilityName,
         proposalType,
-        changes: changes.map(({ field, currentValue, proposedValue }) => ({
-          field,
-          currentValue,
-          proposedValue,
-        })),
-        proposedTerms: pricingItems.length ? { pricingItems } : undefined,
+        // The form always seeds one blank row; submitting it renders as an
+        // empty "— — —" line on the reviewer's card.
+        changes: changes
+          .filter(
+            (c) =>
+              c.field.trim() || c.currentValue.trim() || c.proposedValue.trim(),
+          )
+          .map(({ field, currentValue, proposedValue }) => ({
+            field,
+            currentValue,
+            proposedValue,
+          })),
+        proposedTerms:
+          pricingItems.length || documents.length
+            ? {
+                ...(pricingItems.length ? { pricingItems } : {}),
+                ...(documents.length ? { documents } : {}),
+              }
+            : undefined,
         vendorMessage: message || undefined,
       })
     })
@@ -213,6 +237,8 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
             </div>
           ))}
         </div>
+
+        <ProposalDocumentsList documents={documents} />
 
         <ProposedPricingEditor
           contractId={contract.id}

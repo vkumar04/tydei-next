@@ -16,10 +16,22 @@ export const proposedPricingItemSchema = z.object({
 
 export type ProposedPricingItemInput = z.infer<typeof proposedPricingItemSchema>
 
+/** A document backing the proposal — the amendment PDF the AI read, say.
+ *  `url` is a storage key, and a client-supplied key is never trusted on its
+ *  own: the write path checks it was minted by the caller (keyBelongsToTenant),
+ *  and the download path re-authorizes it (assertKeyVisibleToUser). */
+export const proposedDocumentSchema = z.object({
+  name: z.string().trim().min(1).max(300),
+  url: z.string().trim().min(1).max(500),
+})
+
+export type ProposedDocumentInput = z.infer<typeof proposedDocumentSchema>
+
 /** Structured payload carried in the existing `proposedTerms` Json column, so
  *  richer proposals need no migration. */
 export const proposedTermsSchema = z.object({
   pricingItems: z.array(proposedPricingItemSchema).max(5_000).optional(),
+  documents: z.array(proposedDocumentSchema).max(20).optional(),
 })
 
 export type ProposedTermsInput = z.infer<typeof proposedTermsSchema>

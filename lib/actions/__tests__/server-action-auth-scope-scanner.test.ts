@@ -297,8 +297,6 @@ const BASELINE_HITS = new Set<string>([
   // normalizeCategoryKey import (DRY cleanup) shifted both by one line.
   "lib/actions/categories.ts:151",
   "lib/actions/categories.ts:196",
-  // change-proposals.ts: post-mutation re-read
-  "lib/actions/change-proposals.ts:177",
   // contract-periods.ts: post-period-mutation re-reads. Lines drift
   // (bumped 2026-05-05 after the auto-match-oldest fallback fix —
   // see Bug #2: the action now does two `findFirst`s in sequence so

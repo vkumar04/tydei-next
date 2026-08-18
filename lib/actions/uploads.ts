@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
 import { uploadRequestSchema, type UploadRequest } from "@/lib/validators/uploads"
+import { extractProposedDocuments } from "@/lib/contracts/proposed-pricing"
 import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 import { generatePresignedUploadUrl, generatePresignedDownloadUrl, deleteObject } from "@/lib/s3"
 
@@ -73,6 +74,24 @@ async function assertKeyVisibleToUser(key: string): Promise<void> {
       if (d === null || typeof d !== "object") continue
       const r = d as { url?: unknown; key?: unknown }
       if (r.url === key || r.key === key) return
+    }
+  }
+
+  // Change-proposal attachments (the amendment doc a vendor read with AI).
+  // BOTH parties are scoped in: the vendor who attached it needs it back, and
+  // the reviewing facility needs to read the evidence it is being asked to
+  // approve. Exact key match only — the free-text `name` never authorizes.
+  const proposalRows = await prisma.contractChangeProposal.findMany({
+    where: facilityId
+      ? { facilityId }
+      : vendorId
+        ? { vendorId }
+        : { id: "__none__" },
+    select: { proposedTerms: true },
+  })
+  for (const row of proposalRows) {
+    for (const d of extractProposedDocuments(row.proposedTerms)) {
+      if (d.url === key) return
     }
   }
 

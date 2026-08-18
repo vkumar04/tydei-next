@@ -58,6 +58,7 @@ interface AmendmentExtractorProps {
   onProposeChanges?: (
     changes: AmendmentChange[],
     effectiveDate: string | null,
+    document: { name: string; url: string } | null,
   ) => void
 }
 
@@ -294,6 +295,8 @@ export function AmendmentExtractor({
   const [effectiveDate, setEffectiveDate] = useState<string | null>(null)
   const [error, setError] = useState("")
   const [fileName, setFileName] = useState("")
+  /** Storage key of the uploaded amendment, so propose mode can attach it. */
+  const [s3Key, setS3Key] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -376,10 +379,12 @@ export function AmendmentExtractor({
       const data = (await res.json()) as {
         changes: AmendmentChange[]
         effectiveDate: string | null
+        s3Key?: string
       }
       setProgress(100)
       setChanges(data.changes)
       setEffectiveDate(data.effectiveDate)
+      setS3Key(data.s3Key ?? null)
       setStage("review")
     } catch (err) {
       setError(
@@ -504,6 +509,7 @@ export function AmendmentExtractor({
     setEffectiveDate(null)
     setError("")
     setFileName("")
+    setS3Key(null)
     setSupersedesOriginal(false)
     setUpdateExpiration(false)
     setApplyToPOs(false)
@@ -913,7 +919,11 @@ export function AmendmentExtractor({
                     {onProposeChanges ? (
                       <Button
                         onClick={() => {
-                          onProposeChanges(changes, effectiveDate)
+                          onProposeChanges(
+                            changes,
+                            effectiveDate,
+                            s3Key ? { name: fileName, url: s3Key } : null,
+                          )
                           handleOpenChange(false)
                         }}
                       >
