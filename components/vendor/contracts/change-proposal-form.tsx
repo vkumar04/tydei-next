@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, Sparkles } from "lucide-react"
+import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
+import type { AmendmentChange } from "@/app/api/ai/extract-amendment/route"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -17,10 +19,21 @@ import { Field } from "@/components/shared/forms/field"
 import type { CreateChangeProposalInput } from "@/lib/validators/change-proposals"
 
 interface Change {
+  /** Stable row identity — index keys reuse the wrong row's state on delete. */
+  id: string
   field: string
   currentValue: string
   proposedValue: string
 }
+
+let rowSeq = 0
+const newRow = (patch: Partial<Change> = {}): Change => ({
+  id: `row-${rowSeq++}`,
+  field: "",
+  currentValue: "",
+  proposedValue: "",
+  ...patch,
+})
 
 /**
  * Charles 2026-04-25 audit re-pass: must mirror
@@ -61,17 +74,49 @@ interface ChangeProposalFormProps {
 
 export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormProps) {
   const [proposalType, setProposalType] = useState<"term_change" | "new_term" | "remove_term" | "contract_edit">("term_change")
-  const [changes, setChanges] = useState<Change[]>([{ field: "", currentValue: "", proposedValue: "" }])
+  const [changes, setChanges] = useState<Change[]>([newRow()])
   const [message, setMessage] = useState("")
+  const [extractorOpen, setExtractorOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  const addChange = () => setChanges([...changes, { field: "", currentValue: "", proposedValue: "" }])
+  const addChange = () => setChanges((rows) => [...rows, newRow()])
 
-  const updateChange = (index: number, key: keyof Change, value: string) => {
-    setChanges(changes.map((c, i) => (i === index ? { ...c, [key]: value } : c)))
+  const updateChange = (id: string, key: keyof Change, value: string) => {
+    setChanges((rows) =>
+      rows.map((c) => (c.id === id ? { ...c, [key]: value } : c)),
+    )
   }
 
-  const removeChange = (index: number) => setChanges(changes.filter((_, i) => i !== index))
+  const removeChange = (id: string) =>
+    setChanges((rows) => rows.filter((c) => c.id !== id))
+
+  // AI-extracted amendment → proposal rows. `contract_edit` is the only type
+  // approval actually applies, and only for whitelisted fields, so fall back to
+  // term_change when the document touches anything outside that set rather than
+  // letting the field Select silently drop it.
+  const seedFromAmendment = (
+    extracted: AmendmentChange[],
+    effectiveDate: string | null,
+  ) => {
+    const rows = extracted
+      .filter((c) => c.type !== "removed")
+      .map((c) =>
+        newRow({
+          field: c.field,
+          currentValue: c.oldValue,
+          proposedValue: c.newValue,
+        }),
+      )
+    if (rows.length === 0) return
+
+    const allowed = new Set(CONTRACT_EDIT_FIELD_OPTIONS.map((o) => o.value))
+    setProposalType(rows.every((r) => allowed.has(r.field)) ? "contract_edit" : "term_change")
+    setChanges(rows)
+    setMessage((m) =>
+      m ||
+      `Proposed from an amendment document${effectiveDate ? `, effective ${effectiveDate}` : ""}.`,
+    )
+  }
 
   const handleSubmit = () => {
     startTransition(async () => {
@@ -82,7 +127,11 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
         facilityId: contract.facilityId,
         facilityName: contract.facilityName,
         proposalType,
-        changes,
+        changes: changes.map(({ field, currentValue, proposedValue }) => ({
+          field,
+          currentValue,
+          proposedValue,
+        })),
         vendorMessage: message || undefined,
       })
     })
@@ -109,16 +158,26 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-medium">Changes (Before / After)</h4>
-            <Button type="button" variant="outline" size="sm" onClick={addChange}>
-              <Plus className="size-3.5" /> Add
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setExtractorOpen(true)}
+              >
+                <Sparkles className="size-3.5" /> Read amendment doc
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={addChange}>
+                <Plus className="size-3.5" /> Add
+              </Button>
+            </div>
           </div>
-          {changes.map((change, i) => (
-            <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
+          {changes.map((change) => (
+            <div key={change.id} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2">
               {proposalType === "contract_edit" ? (
                 <Select
                   value={change.field}
-                  onValueChange={(v) => updateChange(i, "field", v)}
+                  onValueChange={(v) => updateChange(change.id, "field", v)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Field" />
@@ -132,24 +191,32 @@ export function ChangeProposalForm({ contract, onSubmit }: ChangeProposalFormPro
                   </SelectContent>
                 </Select>
               ) : (
-                <Input placeholder="Field" value={change.field} onChange={(e) => updateChange(i, "field", e.target.value)} />
+                <Input placeholder="Field" value={change.field} onChange={(e) => updateChange(change.id, "field", e.target.value)} />
               )}
               <Input
                 placeholder="Current value"
                 value={change.currentValue}
-                onChange={(e) => updateChange(i, "currentValue", e.target.value)}
+                onChange={(e) => updateChange(change.id, "currentValue", e.target.value)}
               />
               <Input
                 placeholder="Proposed value"
                 value={change.proposedValue}
-                onChange={(e) => updateChange(i, "proposedValue", e.target.value)}
+                onChange={(e) => updateChange(change.id, "proposedValue", e.target.value)}
               />
-              <Button type="button" variant="ghost" size="icon-xs" onClick={() => removeChange(i)} disabled={changes.length === 1}>
+              <Button type="button" variant="ghost" size="icon-xs" onClick={() => removeChange(change.id)} disabled={changes.length === 1}>
                 <Trash2 className="size-3.5" />
               </Button>
             </div>
           ))}
         </div>
+
+        <AmendmentExtractor
+          contractId={contract.id}
+          open={extractorOpen}
+          onOpenChange={setExtractorOpen}
+          onApplied={() => setExtractorOpen(false)}
+          onProposeChanges={seedFromAmendment}
+        />
 
         <Field label="Message (optional)">
           <Textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} />

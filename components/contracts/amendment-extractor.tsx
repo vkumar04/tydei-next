@@ -49,6 +49,16 @@ interface AmendmentExtractorProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onApplied: () => void
+  /**
+   * Propose mode. A vendor cannot write the facility's contract, so instead of
+   * applying, hand the extracted changes back to the caller to seed a
+   * ChangeProposal. Supplying this swaps the review action and skips
+   * `handleApply` (and `updateContract`) entirely.
+   */
+  onProposeChanges?: (
+    changes: AmendmentChange[],
+    effectiveDate: string | null,
+  ) => void
 }
 
 // v0 3-stage amendment flow mapping:
@@ -275,6 +285,7 @@ export function AmendmentExtractor({
   open,
   onOpenChange,
   onApplied,
+  onProposeChanges,
 }: AmendmentExtractorProps) {
   const [stage, setStage] = useState<Stage>("upload")
   const [progress, setProgress] = useState(0)
@@ -899,9 +910,20 @@ export function AmendmentExtractor({
                     >
                       <X className="size-4" /> Cancel
                     </Button>
-                    <Button onClick={handleApply}>
-                      <Check className="size-4" /> Apply Changes
-                    </Button>
+                    {onProposeChanges ? (
+                      <Button
+                        onClick={() => {
+                          onProposeChanges(changes, effectiveDate)
+                          handleOpenChange(false)
+                        }}
+                      >
+                        <Check className="size-4" /> Use in proposal
+                      </Button>
+                    ) : (
+                      <Button onClick={handleApply}>
+                        <Check className="size-4" /> Apply Changes
+                      </Button>
+                    )}
                   </div>
                 </div>
               </>

@@ -12,6 +12,7 @@ import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { contractOwnershipWhereVendor } from "@/lib/actions/contracts-vendor-auth"
 
 const MAX_BYTES = 25 * 1024 * 1024
 
@@ -82,26 +83,29 @@ export async function POST(request: Request) {
       return Response.json({ error: "No contractId provided" }, { status: 400 })
     }
 
-    // Tenant isolation: resolve the caller's facility and scope the contract
-    // read to it. Without this, a forged `contractId` leaks another tenant's
+    // Tenant isolation: resolve the caller's tenant and scope the contract read
+    // to it. Without this, a forged `contractId` leaks another tenant's
     // confidential terms/tiers/pricing through the amendment diff (2026-06-18
-    // pre-prod IDOR audit). `contractOwnershipWhere` also matches contracts
-    // shared via contractFacilities.
+    // pre-prod IDOR audit). Vendors reach this route too; their extracted
+    // changes pre-fill a ChangeProposal rather than writing the contract.
     const member = await prisma.member.findFirst({
       where: { userId: session.user.id },
-      include: { organization: { include: { facility: true } } },
+      include: { organization: { include: { facility: true, vendor: true } } },
     })
     const facility = member?.organization?.facility
-    if (!facility) {
+    const vendor = member?.organization?.vendor
+    if (!facility && !vendor) {
       return Response.json(
-        { error: "No facility associated with this account" },
+        { error: "No facility or vendor associated with this account" },
         { status: 403 },
       )
     }
 
-    // ── Fetch current contract with terms + tiers (facility-scoped) ──
+    // ── Fetch current contract with terms + tiers (tenant-scoped) ──
     const contract = await prisma.contract.findFirst({
-      where: contractOwnershipWhere(contractId, facility.id),
+      where: facility
+        ? contractOwnershipWhere(contractId, facility.id)
+        : contractOwnershipWhereVendor(contractId, vendor!.id),
       include: {
         vendor: { select: { name: true } },
         productCategory: { select: { name: true } },
@@ -240,8 +244,8 @@ Return valid JSON only — no markdown fences.`,
 
     try {
       await recordClaudeUsage({
-        facilityId: facility.id,
-        vendorId: null,
+        facilityId: facility?.id ?? null,
+        vendorId: vendor?.id ?? null,
         userId: session.user.id,
         userName: session.user.name ?? session.user.email ?? "Unknown",
         action: "full_contract_analysis",
