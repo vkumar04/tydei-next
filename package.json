@@ -94,8 +94,7 @@
     "react-email": "^6.9.5",
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
-    "vitest": "^5.0.0",
-    "zod-prisma-types": "^3.3.11"
+    "vitest": "^5.0.0"
   },
   "overrides": {
     "pg": "^8.23.0",

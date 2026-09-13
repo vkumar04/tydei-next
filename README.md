@@ -13,7 +13,7 @@ Healthcare contract management SaaS with dual portals for facilities and vendors
 | Auth | Better Auth (prismaAdapter, org plugin, stripe plugin) |
 | Email | Resend |
 | Styling | Tailwind CSS v4 + shadcn/ui (new-york) |
-| Validation | Zod + zod-prisma-types |
+| Validation | Zod |
 | Forms | react-hook-form + @hookform/resolvers/zod |
 | Data Fetching | TanStack Query |
 | Tables | TanStack Table |
@@ -199,7 +199,6 @@ tydei-next/
 │   ├── ai/                  # AI config, prompts, tools, schemas
 │   ├── alerts/              # Alert generation logic
 │   ├── analysis/            # MACRS depreciation, forecasting
-│   ├── generated/zod/       # Auto-generated Zod types from Prisma
 │   ├── auth-server.ts       # Better Auth server config
 │   ├── auth.ts              # Better Auth client
 │   ├── db.ts                # Prisma client singleton
