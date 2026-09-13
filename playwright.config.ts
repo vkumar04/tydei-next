@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test"
 
+const baseURL = `http://localhost:${process.env.PORT ?? "3000"}`
+
 /**
  * Playwright is split into two projects:
  *
@@ -25,13 +27,13 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
   webServer: {
     command: "bun run dev",
-    url: "http://localhost:3000",
+    url: baseURL,
     reuseExistingServer: true,
     timeout: 30_000,
   },
