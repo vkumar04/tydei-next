@@ -13,10 +13,7 @@
  */
 
 import { prisma } from "../lib/db"
-import {
-  ContractTypeSchema,
-  RebateMethodSchema,
-} from "../lib/generated/zod"
+import { ContractType, RebateMethod } from "../lib/generated/prisma/enums"
 
 type Invariant = {
   name: string
@@ -71,22 +68,15 @@ const PAYMENT_TIMING_DOMAIN = [
   "annual",
 ] as const
 
-// We derive the enum domains from the generated Zod schemas (produced by
-// `zod-prisma-types` directly off `prisma/schema.prisma`). This keeps the
-// qa-sanity assertions in lock-step with the schema: adding an enum value
-// to prisma/schema.prisma regenerates the zod export on the next
-// `prisma generate`, and this script will then require seed coverage of
-// the new value. Prisma 7 ships its runtime DMMF without enum metadata,
-// so poking `_runtimeDataModel.enums` is not a reliable alternative.
 const SCHEMA_ENUMS = {
-  RebateMethod: RebateMethodSchema.options,
-  ContractType: ContractTypeSchema.options,
+  RebateMethod: Object.values(RebateMethod),
+  ContractType: Object.values(ContractType),
 } as const
 
 function schemaEnumValues(enumName: keyof typeof SCHEMA_ENUMS): readonly string[] {
   const values = SCHEMA_ENUMS[enumName]
   if (!values) {
-    throw new Error(`No Zod schema registered for enum "${enumName}"`)
+    throw new Error(`No enum values registered for "${enumName}"`)
   }
   return values
 }

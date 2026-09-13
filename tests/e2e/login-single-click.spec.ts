@@ -67,12 +67,12 @@ test.describe("login", () => {
     await expect(page).toHaveURL(/\/dashboard\/contracts/, { timeout: 20_000 })
   })
 
-  test("ignores an off-site callbackUrl (open-redirect guard)", async ({ page }) => {
+  test("ignores an off-site callbackUrl (open-redirect guard)", async ({ page, baseURL }) => {
     await page.goto("/login?callbackUrl=https%3A%2F%2Fevil.example.com")
     await signIn(page, FACILITY)
 
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 })
-    expect(page.url()).toContain("localhost:3000")
+    expect(new URL(page.url()).host).toBe(new URL(baseURL!).host)
   })
 
   test("a protected page bounces to login and returns you there after sign-in", async ({
