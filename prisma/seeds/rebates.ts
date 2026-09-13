@@ -40,7 +40,6 @@ export async function seedRebates(
       const collectedRatio = q === 0 ? 0 : rand(0.6, 0.95)
       const collected = Math.round(earned * collectedRatio * 100) / 100
       const unearned = Math.round((earned - collected) * rand(0.1, 0.4) * 100) / 100
-      const isCollected = q > 0 && Math.random() > 0.2
 
       records.push({
         contractId: cfg.contractId,
@@ -50,7 +49,7 @@ export async function seedRebates(
         rebateUnearned: unearned,
         payPeriodStart: quarterStart(q),
         payPeriodEnd: quarterEnd(q),
-        collectionDate: isCollected
+        collectionDate: collected > 0
           ? new Date(now.getFullYear(), now.getMonth() - q * 3 + 4, Math.ceil(Math.random() * 28))
           : null,
         notes: q === 0 ? "Current quarter — pending collection" : null,

@@ -1,5 +1,5 @@
 import type { PrismaClient, Prisma } from "@/lib/generated/prisma/client"
-import { applyTiers, computeRebate } from "@/lib/rebates/calculate"
+import { computeRebateFromPrismaTiers, DEFAULT_COLLECTION_RATE } from "@/lib/rebates/calculate"
 import { contractTypeEarnsRebates } from "@/lib/contract-definitions"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 
@@ -52,6 +52,10 @@ function randomDateBetween(start: Date, end: Date): Date {
   const e = end.getTime()
   const t = s + Math.random() * (e - s)
   return new Date(t)
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100
 }
 
 export async function seedCOGForContracts(prisma: PrismaClient) {
@@ -174,12 +178,12 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
         // Tier is determined by CUMULATIVE spend-to-date. Rebate is
         // earned on THIS period's spend at that tier's rate. Shared
         // calculator keeps seed/dashboard/detail tier logic identical.
-        const cumulative = spendPerPeriod * (m + 1)
-        const { tierAchieved, rebatePercent } = applyTiers(cumulative, tiers)
         const periodSpend = spendPerPeriod
-        const { rebateEarned, rebateCollected } = computeRebate(periodSpend, [
-          { tierNumber: tierAchieved, spendMin: 0, rebateValue: rebatePercent },
-        ])
+        const previous = m === 0 ? 0 : computeRebateFromPrismaTiers(spendPerPeriod * m, tiers).rebateEarned
+        const cumulative = computeRebateFromPrismaTiers(spendPerPeriod * (m + 1), tiers)
+        const tierAchieved = cumulative.tierAchieved
+        const rebateEarned = round2(Math.max(0, cumulative.rebateEarned - previous))
+        const rebateCollected = round2(rebateEarned * DEFAULT_COLLECTION_RATE)
 
         if (primaryTerm && accruesRebates) {
           const period = await prisma.contractPeriod.create({
@@ -206,7 +210,7 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
                 rebateCollected,
                 payPeriodStart: ps,
                 payPeriodEnd: pe,
-                collectionDate: rebateCollected >= rebateEarned ? pe : null,
+                collectionDate: rebateCollected > 0 ? pe : null,
               },
             })
             totalRebatesCreated++

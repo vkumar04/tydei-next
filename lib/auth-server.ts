@@ -83,6 +83,16 @@ export async function _hookBeforeUpdateMemberRole(newRole: string): Promise<void
     throw new APIError("BAD_REQUEST", { message: "Invalid role" })
   }
 }
+export async function _hookAfterSessionCreate(userId: string): Promise<void> {
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastLoginAt: new Date() },
+    })
+  } catch (err) {
+    console.error("[auth-server.afterSessionCreate]", err, { userId })
+  }
+}
 export async function _hookBeforeRemoveMember(args: {
   memberRole: string
   memberId: string
@@ -275,6 +285,9 @@ export const auth = betterAuth({
             })
           }
           return { data: session }
+        },
+        after: async (session) => {
+          await _hookAfterSessionCreate(session.userId)
         },
       },
     },
