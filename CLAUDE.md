@@ -48,7 +48,13 @@ Run all of these before saying "ship it":
 
 1. `bunx tsc --noEmit` → 0 errors
 2. `bunx vitest run --exclude '**/.claude/**' --exclude '**/.worktrees/**'` → green
-3. `rm -rf .next && bun run dev` → smoke the surfaces you touched
+3. `rm -rf .next && bun run dev` → smoke the surfaces you touched through the
+   Playwright MCP (`.mcp.json`, server `playwright`): sign in, click through,
+   read the accessibility snapshot, check console errors. Do not use the Chrome
+   extension tools or hand-written Playwright scripts for this.
+4. `bun run test:e2e && bun run test:visual` → both Playwright projects green.
+   Set `PORT` (plus `BETTER_AUTH_URL` / `NEXT_PUBLIC_SITE_URL` to match) when
+   3000 is taken.
 
 After file renames or server-action-heavy changes, `.next/` can cache stale
 action hashes (`Server Action '<hash>' was not found on the server`). Fix with
