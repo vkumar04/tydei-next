@@ -1,7 +1,8 @@
 import { test as setup } from "@playwright/test"
+import { browserSignIn } from "../support/sign-in"
 
 /**
- * Authenticate once and save cookies for all visual tests.
+ * Authenticate once per role and save cookies for all visual tests.
  * Run with: bunx playwright test --project=visual-setup
  *
  * 2026-07-27: rewritten to use BROWSER login instead of `request.post` — the
@@ -15,15 +16,39 @@ import { test as setup } from "@playwright/test"
  * never landed in the browser context and the saved state.json held no cookies.
  * Every test using that state then ran UNAUTHENTICATED, was redirected to
  * /login, and asserted against the login page instead of the route under test.
+ *
+ * 2026-09-21: vendor and admin states added so smoke-cache-components.test.ts
+ * can stop signing in from inside its tests. `state.json` stays as the
+ * facility alias — facility-pages, contract-detail and smoke-charles read it.
  */
-setup("authenticate", async ({ page, context }) => {
-  await page.goto("/login")
-  // Label-based lookup — the placeholder is "you@example.com", which does NOT
-  // match /email/i. The associated <Label> is the stable selector.
-  await page.getByLabel(/^email$/i).fill("demo-facility@tydei.com")
-  await page.getByLabel(/^password$/i).fill("demo-facility-2024")
-  await page.getByRole("button", { name: /sign in|log in/i }).click()
-  await page.waitForURL(/\/dashboard/, { timeout: 15_000 })
 
+setup("authenticate as facility user", async ({ page, context }) => {
+  await browserSignIn(
+    page,
+    "demo-facility@tydei.com",
+    "demo-facility-2024",
+    /\/dashboard/,
+  )
   await context.storageState({ path: "tests/visual/.auth/state.json" })
+  await context.storageState({ path: "tests/visual/.auth/facility.json" })
+})
+
+setup("authenticate as vendor user", async ({ page, context }) => {
+  await browserSignIn(
+    page,
+    "demo-vendor@tydei.com",
+    "demo-vendor-2024",
+    /\/vendor/,
+  )
+  await context.storageState({ path: "tests/visual/.auth/vendor.json" })
+})
+
+setup("authenticate as admin user", async ({ page, context }) => {
+  await browserSignIn(
+    page,
+    "demo-admin@tydei.com",
+    "demo-admin-2024",
+    /\/admin/,
+  )
+  await context.storageState({ path: "tests/visual/.auth/admin.json" })
 })

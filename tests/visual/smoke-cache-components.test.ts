@@ -1,9 +1,4 @@
-import {
-  test,
-  expect,
-  type BrowserContext,
-  type Page,
-} from "@playwright/test"
+import { test, expect, type Page } from "@playwright/test"
 import { Client } from "pg"
 import { readFileSync } from "node:fs"
 import path from "node:path"
@@ -113,62 +108,33 @@ async function lookupIds(): Promise<Record<string, string | null>> {
  * (no tie_in_bundle under Lighthouse Surgical Center) and the vendor
  * pending-contract edit (Stryker has no PendingContract rows).
  *
- * Uses an in-test login helper rather than a storageState fixture
- * because this file needs all three roles and tests/visual/auth.setup.ts
- * only saves the facility one. (The comment that used to sit here said
- * the .auth/ states were unusable because of a request.post cookie-jar
- * bug — that was fixed on 2026-07-27 when auth.setup.ts switched to a
- * browser login; the other specs in this directory use its state.json.)
- * See `loginAs` below for why it logs in once per role, not once per test.
+ * Roles come from the per-role storage states that
+ * tests/visual/auth.setup.ts writes. This file used to sign in from inside
+ * its own tests because auth.setup.ts saved only the facility state; it now
+ * saves all three.
  */
 
-// ─── Login + smoke helpers ─────────────────────────────────────
-
-const CREDS = {
-  facility: ["demo-facility@tydei.com", "demo-facility-2024", /\/dashboard/],
-  vendor: ["demo-vendor@tydei.com", "demo-vendor-2024", /\/vendor/],
-  admin: ["demo-admin@tydei.com", "demo-admin-2024", /\/admin/],
-} as const
-
-type Role = keyof typeof CREDS
-
-type Cookies = Awaited<ReturnType<BrowserContext["cookies"]>>
+// ─── Smoke helper ──────────────────────────────────────────────
 
 /**
- * One real browser login per role per worker; every later test in the file
- * replays that role's cookies into its own fresh context.
- *
  * 2026-07-28: this file used to log in once per test — ~54 sign-ins in a
  * six-minute serial run. better-auth caps /sign-in/email at 10 per 60s per
  * IP (lib/auth-server.ts `rateLimit.customRules`, added in the 2026-06-18
  * pre-prod audit), so runs of this project were dotted with 429s that
- * surfaced as `waitForURL` timeouts — seven of them in the last full run,
- * on routes that render perfectly well. The limiter is correct; the spec
- * was DOSing it.
+ * surfaced as `waitForURL` timeouts. That was cut to one login per role.
+ *
+ * 2026-09-21: cut to zero. One-per-role still shared the 60s window with
+ * whatever ran before it, so `test:visual` straight after `test:e2e` hit a
+ * 429 on the admin login and failed the first three admin routes — a failed
+ * login cached nothing, so each following admin test retried and burned
+ * another attempt. Every sign-in now happens once, in visual-setup, and the
+ * role describes below replay its storage state.
  */
-const sessions = new Map<Role, Cookies>()
-
-async function loginAs(
-  page: Page,
-  context: BrowserContext,
-  role: Role,
-): Promise<void> {
-  const cached = sessions.get(role)
-  if (cached) {
-    await context.addCookies(cached)
-    return
-  }
-  const [email, password, expectedUrl] = CREDS[role]
-  await page.goto("/login")
-  // 2026-07-27: was getByPlaceholder(/email/i), which never matched — the
-  // placeholder is "you@example.com". The <Label> is the stable selector, same
-  // as tests/e2e/auth.setup.ts.
-  await page.getByLabel(/^email$/i).fill(email)
-  await page.getByLabel(/^password$/i).fill(password)
-  await page.getByRole("button", { name: /sign in|log in/i }).click()
-  await page.waitForURL(expectedUrl, { timeout: 15_000 })
-  sessions.set(role, await context.cookies())
-}
+const STATE = {
+  facility: "tests/visual/.auth/facility.json",
+  vendor: "tests/visual/.auth/vendor.json",
+  admin: "tests/visual/.auth/admin.json",
+} as const
 
 async function smoke(page: Page, route: string): Promise<void> {
   const response = await page.goto(route, { timeout: 30_000 })
@@ -268,53 +234,48 @@ const FACILITY_STATIC = [
 ]
 
 test.describe("facility static routes", () => {
+  test.use({ storageState: STATE.facility })
+
   for (const route of FACILITY_STATIC) {
-    test(`facility ${route} renders without 500`, async ({ page, context }) => {
-      await loginAs(page, context, "facility")
+    test(`facility ${route} renders without 500`, async ({ page }) => {
       await smoke(page, route)
     })
   }
 })
 
 test.describe("facility dynamic routes", () => {
-  test("contract detail [id]", async ({ page, context }) => {
+  test.use({ storageState: STATE.facility })
+
+  test("contract detail [id]", async ({ page }) => {
     if (!ids.facility.contractId) test.skip(true, "no facility contract in seed")
-    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/contracts/${ids.facility.contractId}`)
   })
-  test("contract edit [id]/edit", async ({ page, context }) => {
+  test("contract edit [id]/edit", async ({ page }) => {
     if (!ids.facility.contractId) test.skip(true, "no facility contract in seed")
-    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/contracts/${ids.facility.contractId}/edit`)
   })
-  test("contract terms [id]/terms", async ({ page, context }) => {
+  test("contract terms [id]/terms", async ({ page }) => {
     if (!ids.facility.contractId) test.skip(true, "no facility contract in seed")
-    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/contracts/${ids.facility.contractId}/terms`)
   })
-  test("bundle detail [id]", async ({ page, context }) => {
+  test("bundle detail [id]", async ({ page }) => {
     if (!ids.facility.bundleId) test.skip(true, "no bundle in seed")
-    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/contracts/bundles/${ids.facility.bundleId}`)
   })
-  test("bundle edit [id]/edit", async ({ page, context }) => {
+  test("bundle edit [id]/edit", async ({ page }) => {
     if (!ids.facility.bundleId) test.skip(true, "no bundle in seed")
-    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/contracts/bundles/${ids.facility.bundleId}/edit`)
   })
-  test("alert detail [id]", async ({ page, context }) => {
+  test("alert detail [id]", async ({ page }) => {
     if (!ids.facility.alertId) test.skip(true, "no alert in seed")
-    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/alerts/${ids.facility.alertId}`)
   })
-  test("invoice validation [id]", async ({ page, context }) => {
+  test("invoice validation [id]", async ({ page }) => {
     if (!ids.facility.invoiceId) test.skip(true, "no invoice in seed")
-    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/invoice-validation/${ids.facility.invoiceId}`)
   })
-  test("purchase order detail [id]", async ({ page, context }) => {
+  test("purchase order detail [id]", async ({ page }) => {
     if (!ids.facility.purchaseOrderId) test.skip(true, "no PO in seed")
-    await loginAs(page, context, "facility")
     await smoke(page, `/dashboard/purchase-orders/${ids.facility.purchaseOrderId}`)
   })
 })
@@ -339,28 +300,28 @@ const VENDOR_STATIC = [
 ]
 
 test.describe("vendor static routes", () => {
+  test.use({ storageState: STATE.vendor })
+
   for (const route of VENDOR_STATIC) {
-    test(`vendor ${route} renders without 500`, async ({ page, context }) => {
-      await loginAs(page, context, "vendor")
+    test(`vendor ${route} renders without 500`, async ({ page }) => {
       await smoke(page, route)
     })
   }
 })
 
 test.describe("vendor dynamic routes", () => {
-  test("vendor contract detail [id]", async ({ page, context }) => {
+  test.use({ storageState: STATE.vendor })
+
+  test("vendor contract detail [id]", async ({ page }) => {
     if (!ids.vendor.contractId) test.skip(true, "no vendor contract in seed")
-    await loginAs(page, context, "vendor")
     await smoke(page, `/vendor/contracts/${ids.vendor.contractId}`)
   })
-  test("vendor contract edit [id]/edit", async ({ page, context }) => {
+  test("vendor contract edit [id]/edit", async ({ page }) => {
     if (!ids.vendor.contractId) test.skip(true, "no vendor contract in seed")
-    await loginAs(page, context, "vendor")
     await smoke(page, `/vendor/contracts/${ids.vendor.contractId}/edit`)
   })
-  test("vendor pending-contract edit [id]/edit", async ({ page, context }) => {
+  test("vendor pending-contract edit [id]/edit", async ({ page }) => {
     if (!ids.vendor.pendingContractId) test.skip(true, "no pending contract in seed")
-    await loginAs(page, context, "vendor")
     await smoke(page, `/vendor/contracts/pending/${ids.vendor.pendingContractId}/edit`)
   })
 })
@@ -378,9 +339,10 @@ const ADMIN_ROUTES = [
 ]
 
 test.describe("admin routes", () => {
+  test.use({ storageState: STATE.admin })
+
   for (const route of ADMIN_ROUTES) {
-    test(`admin ${route} renders without 500`, async ({ page, context }) => {
-      await loginAs(page, context, "admin")
+    test(`admin ${route} renders without 500`, async ({ page }) => {
       await smoke(page, route)
     })
   }

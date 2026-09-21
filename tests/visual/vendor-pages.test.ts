@@ -1,10 +1,4 @@
-import {
-  test,
-  expect,
-  type BrowserContext,
-  type Locator,
-  type Page,
-} from "@playwright/test"
+import { test, expect, type Locator, type Page } from "@playwright/test"
 
 /**
  * Vendor portal visual content tests.
@@ -24,33 +18,17 @@ import {
  *  2. Self-inflicted rate limiting — every test used to run a full browser
  *     login. better-auth caps /sign-in/email at 10 per 60s per IP
  *     (lib/auth-server.ts `rateLimit.customRules`), so the back half of
- *     this file reliably 429'd and failed in `waitForURL`. One login per
- *     worker now; the rest replay its cookies.
+ *     this file reliably 429'd and failed in `waitForURL`. That was cut to
+ *     one login per worker.
+ *
+ * 2026-09-21: cut to zero — one-per-worker still shared the 60s window with
+ * whatever ran before it, so `test:visual` straight after `test:e2e` 429'd
+ * here. The sign-in happens once, in visual-setup.
  */
 
-// ─── Auth (one real login per worker) ───────────────────────────
+// ─── Auth ───────────────────────────────────────────────────────
 
-type Cookies = Awaited<ReturnType<BrowserContext["cookies"]>>
-
-let vendorCookies: Cookies | null = null
-
-async function loginAsVendor(
-  page: Page,
-  context: BrowserContext,
-): Promise<void> {
-  if (vendorCookies) {
-    await context.addCookies(vendorCookies)
-    return
-  }
-  await page.goto("/login")
-  // 2026-07-27: was getByPlaceholder(/email/i), which never matched — the
-  // placeholder is "you@example.com". The <Label> is the stable selector.
-  await page.getByLabel(/^email$/i).fill("demo-vendor@tydei.com")
-  await page.getByLabel(/^password$/i).fill("demo-vendor-2024")
-  await page.getByRole("button", { name: /sign in|log in/i }).click()
-  await page.waitForURL(/vendor/, { timeout: 15_000 })
-  vendorCookies = await context.cookies()
-}
+test.use({ storageState: "tests/visual/.auth/vendor.json" })
 
 // ─── Helpers ────────────────────────────────────────────────────
 
@@ -107,8 +85,7 @@ function heroStatValue(page: Page, label: string): Locator {
 
 // ─── Vendor Dashboard ───────────────────────────────────────────
 
-test("vendor dashboard has stat cards", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor dashboard has stat cards", async ({ page }) => {
   await page.goto("/vendor")
   await expect(
     page.getByRole("heading", { name: "Vendor Dashboard" }),
@@ -128,7 +105,6 @@ test("vendor contracts list has stat cards + tabs", async ({
   page,
   context,
 }) => {
-  await loginAsVendor(page, context)
   await page.goto("/vendor/contracts")
   await expect(
     page.getByRole("heading", { name: "My Contracts" }),
@@ -149,16 +125,14 @@ test("vendor contracts list has stat cards + tabs", async ({
   ])
 })
 
-test("vendor new contract has 3 entry modes", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor new contract has 3 entry modes", async ({ page }) => {
   await page.goto("/vendor/contracts/new")
   await expectTabs(page, ["AI Assistant", "Upload PDF", "Manual Entry"])
 })
 
 // ─── Vendor Prospective ─────────────────────────────────────────
 
-test("vendor prospective has 3 tabs", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor prospective has 3 tabs", async ({ page }) => {
   await page.goto("/vendor/prospective")
   await expectText(page, ["Prospective Analysis"])
   // Assert on the tabs themselves, not any visible text — the previous
@@ -182,7 +156,6 @@ test("vendor market share has charts + breakdown", async ({
   page,
   context,
 }) => {
-  await loginAsVendor(page, context)
   await page.goto("/vendor/market-share")
   await expect(
     page.getByRole("heading", { name: "Market Share Analysis" }),
@@ -193,8 +166,7 @@ test("vendor market share has charts + breakdown", async ({
 
 // ─── Vendor Performance ─────────────────────────────────────────
 
-test("vendor performance page loads", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor performance page loads", async ({ page }) => {
   await page.goto("/vendor/performance")
   await expectHeroStats(page, [
     "Total Spend",
@@ -212,8 +184,7 @@ test("vendor performance page loads", async ({ page, context }) => {
 
 // ─── Vendor Purchase Orders ─────────────────────────────────────
 
-test("vendor purchase orders page loads", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor purchase orders page loads", async ({ page }) => {
   await page.goto("/vendor/purchase-orders")
   await expect(
     page.getByRole("heading", { name: "Purchase Orders" }),
@@ -228,8 +199,7 @@ test("vendor purchase orders page loads", async ({ page, context }) => {
 
 // ─── Vendor Invoices ────────────────────────────────────────────
 
-test("vendor invoices page loads", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor invoices page loads", async ({ page }) => {
   await page.goto("/vendor/invoices")
   // `exact` matters: the hero headline is also a heading and reads
   // "No invoices submitted yet." while the query is in flight, which a
@@ -247,8 +217,7 @@ test("vendor invoices page loads", async ({ page, context }) => {
 
 // ─── Vendor Renewals ────────────────────────────────────────────
 
-test("vendor renewals page loads", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor renewals page loads", async ({ page }) => {
   await page.goto("/vendor/renewals")
   await expect(
     page.getByRole("heading", { name: "Contract Renewals" }),
@@ -311,8 +280,7 @@ test("vendor renewals page loads", async ({ page, context }) => {
  */
 test(
   "vendor renewals headline describes the whole portfolio, not the 365-day window",
-  async ({ page, context }) => {
-    await loginAsVendor(page, context)
+  async ({ page }) => {
 
     await page.goto("/vendor/contracts")
     // HeroStat swaps the value <p> for a <Skeleton> while the query is in
@@ -348,8 +316,7 @@ test(
 
 // ─── Vendor Settings ────────────────────────────────────────────
 
-test("vendor settings page loads", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor settings page loads", async ({ page }) => {
   await page.goto("/vendor/settings")
   await expectText(page, ["Vendor workspace"])
   await expectTabs(page, [
@@ -368,8 +335,7 @@ test("vendor settings page loads", async ({ page, context }) => {
 
 // ─── Vendor Alerts ──────────────────────────────────────────────
 
-test("vendor alerts page loads", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor alerts page loads", async ({ page }) => {
   await page.goto("/vendor/alerts")
   await expectHeroStats(page, [
     "Unresolved",
@@ -381,8 +347,7 @@ test("vendor alerts page loads", async ({ page, context }) => {
 
 // ─── Vendor AI Agent ────────────────────────────────────────────
 
-test("vendor ai agent page loads", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor ai agent page loads", async ({ page }) => {
   await page.goto("/vendor/ai-agent")
   await expect(
     page.getByRole("heading", { name: "AI Vendor Assistant" }),
@@ -391,8 +356,7 @@ test("vendor ai agent page loads", async ({ page, context }) => {
 
 // ─── Vendor Reports ─────────────────────────────────────────────
 
-test("vendor reports page loads", async ({ page, context }) => {
-  await loginAsVendor(page, context)
+test("vendor reports page loads", async ({ page }) => {
   await page.goto("/vendor/reports")
   await expectHeroStats(page, [
     "Generated (MTD)",
