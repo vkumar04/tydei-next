@@ -40,6 +40,7 @@ export default defineConfig({
   projects: [
     {
       name: "visual-setup",
+      timeout: 180_000,
       testMatch: /visual\/auth\.setup\.ts/,
     },
     {
@@ -50,6 +51,7 @@ export default defineConfig({
     },
     {
       name: "e2e-setup",
+      timeout: 180_000,
       testMatch: /e2e\/auth\.setup\.ts/,
     },
     {

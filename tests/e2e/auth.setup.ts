@@ -1,4 +1,5 @@
-import { test as setup, type Page } from "@playwright/test"
+import { test as setup } from "@playwright/test"
+import { browserSignIn } from "../support/sign-in"
 
 /**
  * E2E auth setup — runs once before the E2E project, saves three
@@ -11,26 +12,14 @@ import { test as setup, type Page } from "@playwright/test"
  * so the cookie set by sign-in never landed in the browser context and
  * saved state.json files had empty cookies. Tests using these states
  * silently ran unauthenticated and hit the login page.
+ *
+ * 2026-09-21: the login itself moved to tests/support/sign-in.ts, which
+ * waits out better-auth's 10-per-60s sign-in limiter instead of letting a
+ * 429 surface as an unexplained `waitForURL` timeout.
  */
 
-async function browserLogin(
-  page: Page,
-  email: string,
-  password: string,
-  expectedUrlPattern: RegExp,
-): Promise<void> {
-  await page.goto("/login")
-  // Use label-based lookup — the placeholder is "you@example.com",
-  // which doesn't match /email/i. The associated <Label> says "Email"
-  // / "Password" and is the stable selector.
-  await page.getByLabel(/^email$/i).fill(email)
-  await page.getByLabel(/^password$/i).fill(password)
-  await page.getByRole("button", { name: /sign in|log in/i }).click()
-  await page.waitForURL(expectedUrlPattern, { timeout: 15_000 })
-}
-
 setup("authenticate as facility user", async ({ page, context }) => {
-  await browserLogin(
+  await browserSignIn(
     page,
     "demo-facility@tydei.com",
     "demo-facility-2024",
@@ -40,7 +29,7 @@ setup("authenticate as facility user", async ({ page, context }) => {
 })
 
 setup("authenticate as vendor user", async ({ page, context }) => {
-  await browserLogin(
+  await browserSignIn(
     page,
     "demo-vendor@tydei.com",
     "demo-vendor-2024",
@@ -50,7 +39,7 @@ setup("authenticate as vendor user", async ({ page, context }) => {
 })
 
 setup("authenticate as admin user", async ({ page, context }) => {
-  await browserLogin(
+  await browserSignIn(
     page,
     "demo-admin@tydei.com",
     "demo-admin-2024",

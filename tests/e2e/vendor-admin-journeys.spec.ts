@@ -117,7 +117,13 @@ test.describe("vendor portal surfaces render their own content", () => {
       // also appear lowercase inside the hero headline ("3 unresolved · 1
       // high priority") and getByText is case-insensitive by default, so
       // either would be a strict-mode violation the moment an alert exists.
-      loaded: (page) => page.getByText("Medium Priority"),
+      //
+      // 2026-09-21: `exact` added. The severity-group heading renders
+      // "Medium priority" (alerts-severity-group.tsx) once a medium alert
+      // exists, which the default case-insensitive match also picked up.
+      // Only the production build rendered both in the initial HTML, so
+      // this passed every dev run and failed against `bun run start`.
+      loaded: (page) => page.getByText("Medium Priority", { exact: true }),
     },
   ]
 
