@@ -28,9 +28,6 @@ import {
 } from "@/lib/divisions/category-scope"
 import { clamp01 } from "@/lib/math/clamp"
 
-// The ContractType enum has 6 members — used to scale multi-BU penetration.
-const CONTRACT_TYPE_UNIVERSE = 6
-
 export interface VendorOpportunityData {
   currentAsp: number
   currentRevenue: number

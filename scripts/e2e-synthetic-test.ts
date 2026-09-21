@@ -814,10 +814,10 @@ async function seedScenario(scenario: Scenario): Promise<void> {
     c.primaryFacilityId = facByName.get(c.primaryFacilityId)!
     c.extraFacilityIds = c.extraFacilityIds.map((n) => facByName.get(n)!)
   })
-  scenario.facilities.forEach((f) => {
+  scenario.facilities.forEach((_f) => {
     /* id already filled */
   })
-  scenario.vendors.forEach((v) => {
+  scenario.vendors.forEach((_v) => {
     /* id already filled */
   })
 }

@@ -52,7 +52,6 @@ export interface Edi810ParseResult {
 /** CCYYMMDD → yyyy-mm-dd, or null if it doesn't look like a date. */
 function parseBigDate(raw: string | undefined): string | null {
   if (!raw || !/^\d{8}$/.test(raw)) return null
-  const year = Number(raw.slice(0, 4))
   const month = Number(raw.slice(4, 6))
   const day = Number(raw.slice(6, 8))
   if (month < 1 || month > 12 || day < 1 || day > 31) return null

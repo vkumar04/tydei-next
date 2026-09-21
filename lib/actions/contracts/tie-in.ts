@@ -948,22 +948,7 @@ async function _projectCapital(
   const termMonths = Math.max(...lineItems.map((i) => i.termMonths))
   if (financedPrincipal <= 0 || termMonths <= 0) return empty
 
-  // Remaining balance — computed the same way as getContractCapitalSchedule
-  // so the two surfaces never disagree. The aggregator returns the
-  // densest cadence so periodDate / monthsRemaining stay aligned.
-  const agg = aggregatePerItemSchedules(lineItems)
-  const entries = agg.entries
-  const period = agg.period
-  const start = new Date(contract.effectiveDate)
-  const monthsStep = monthsPerPeriod(period)
   const today = new Date()
-  const scheduleDates = entries.map((e) => ({
-    principalDue: e.principalDue,
-    periodDate: addMonths(start, e.periodNumber * monthsStep),
-  }))
-  const elapsedPeriods = scheduleDates.filter(
-    (r) => r.periodDate.getTime() <= today.getTime(),
-  ).length
   // Charles iMessage 2026-04-20 math audit: paidToDate routes through
   // the canonical `sumRebateAppliedToCapital` so this projection agrees
   // with `getContractCapitalSchedule`. Legacy behavior summed elapsed

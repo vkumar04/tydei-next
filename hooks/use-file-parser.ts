@@ -38,7 +38,7 @@ function parseCsvText(text: string): ParsedData {
   }
 
   const headers = splitCsvLine(lines[0]!)
-  if (headers.length === 0 || headers.every((h) => h === ""))
+  if (headers.every((h) => h === ""))
     throw new Error("No headers found in first row")
 
   const rows: Record<string, string>[] = []

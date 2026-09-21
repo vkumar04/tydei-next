@@ -151,11 +151,6 @@ export async function seedCOGForContracts(prisma: PrismaClient) {
           ),
         ),
       )
-      const rows_sorted = [...rows].sort(
-        (a, b) =>
-          (a.transactionDate instanceof Date ? a.transactionDate : new Date(a.transactionDate as string)).getTime() -
-          (b.transactionDate instanceof Date ? b.transactionDate : new Date(b.transactionDate as string)).getTime(),
-      )
       const spendPerPeriod = perFacility / monthCount
 
       const primaryTerm = contract.terms[0]

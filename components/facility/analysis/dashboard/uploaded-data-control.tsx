@@ -1,6 +1,6 @@
 "use client"
 
-import { FileUp, X, Database } from "lucide-react"
+import { FileUp, Database } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { PricingFileDropzone } from "@/components/shared/uploads/pricing-file-dropzone"

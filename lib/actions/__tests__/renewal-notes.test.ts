@@ -210,7 +210,7 @@ describe("createRenewalNote", () => {
 
     // authorId must be a non-empty string, matching the NOT NULL column.
     expect(typeof lastCreateData?.authorId).toBe("string")
-    expect((lastCreateData?.authorId as string).length).toBeGreaterThan(0)
+    expect((lastCreateData!.authorId as string).length).toBeGreaterThan(0)
     expect(lastCreateData?.authorId).toBe("user-1")
   })
 

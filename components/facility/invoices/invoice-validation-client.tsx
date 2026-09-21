@@ -174,12 +174,6 @@ export function InvoiceValidationClient({
     approveInvoice.mutate(invoiceId)
   }
 
-  const handleBulkDispute = () => {
-    // Bulk dispute surface deferred to vendor-transactions spec;
-    // single-invoice flow drives the canonical dispute dialog.
-    toast.info("Bulk dispute coming soon — use per-row flag for now.")
-    setSelectedInvoices([])
-  }
 
   const handleExport = () => {
     if (searchFiltered.length === 0) {

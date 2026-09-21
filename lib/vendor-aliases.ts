@@ -129,7 +129,7 @@ function normalizeVendorName(name: string): string {
 function levenshteinDistance(a: string, b: string): number {
   const m = a.length
   const n = b.length
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0))
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array.from({ length: n + 1 }, () => 0))
 
   for (let i = 0; i <= m; i++) dp[i][0] = i
   for (let j = 0; j <= n; j++) dp[0][j] = j

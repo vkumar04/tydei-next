@@ -130,11 +130,6 @@ describe("computeTierProgressProjection", () => {
     // engineer spendNeeded of exactly 0 by picking currentSpend one unit
     // below nextThreshold on a fractional-cent boundary. Simpler: use a
     // currentSpend that leaves spendNeeded = 0 because it's clamped.
-    // Use velocity = spendNeeded = 0 edge instead by choosing a custom ladder.
-    const ladder: TierRow[] = [
-      { tierNumber: 1, thresholdMin: 0, thresholdMax: 100, rebateValue: 1 },
-      { tierNumber: 2, thresholdMin: 100, thresholdMax: null, rebateValue: 2 },
-    ]
     // currentSpend 99.999... rounds to 100 isn't possible with float
     // reliably. Instead, test the "monthsToReach = 0" shape by having
     // spendNeeded = 0 (e.g., currentSpend sits at the boundary of the

@@ -27,10 +27,9 @@ import {
 import { useContract, useDeleteContract } from "@/hooks/use-contracts"
 import type { getContract } from "@/lib/actions/contracts/get-contract"
 import { getContractPeriods } from "@/lib/actions/contract-periods"
-import { formatCurrency, formatCalendarDate, formatPercent } from "@/lib/formatting"
+import { formatCurrency, formatCalendarDate } from "@/lib/formatting"
 import { calculateTierProgress } from "@/lib/contracts/tier-progress"
 import { computeProjectedRebate } from "@/lib/contracts/projected-rebate"
-import { formatTierRebateLabel } from "@/lib/contracts/tier-rebate-label"
 import { toDisplayRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import { hasSpendDollarTierLadder } from "@/lib/contracts/tier-metric"
 import type { TierLike, RebateMethodName } from "@/lib/rebates/calculate"
@@ -77,24 +76,14 @@ const ServiceSlaCard = dynamic(
     ),
   { ssr: false },
 )
-import { ContractTieInCard } from "@/components/contracts/contract-tie-in-card"
-import { ContractBundleMembershipsCard } from "@/components/contracts/contract-bundle-memberships-card"
-import { ContractPerformanceCard } from "@/components/contracts/contract-performance-card"
-import { ContractCapitalProjectionCard } from "@/components/contracts/contract-capital-projection-card"
-import { ContractAmortizationCard } from "@/components/contracts/contract-amortization-card"
 import { TieInRebateSplit } from "@/components/contracts/tie-in-rebate-split"
-import { OffContractSpendCard } from "@/components/contracts/off-contract-spend-card"
-import { CategoryMarketShareCard } from "@/components/contracts/category-market-share-card"
-import { ContractChangeProposalsCard } from "@/components/contracts/contract-change-proposals-card"
 import { OverviewTab } from "@/components/contracts/tabs/overview-tab"
 import { PerformanceSummary } from "@/components/contracts/tabs/_performance-summary"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
 import { AmendmentExtractor } from "@/components/contracts/amendment-extractor"
 import { RenewalBriefDialog } from "@/components/contracts/renewal-brief-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   Select,
   SelectContent,

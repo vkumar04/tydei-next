@@ -114,7 +114,7 @@ export function computeCapitalROI(input: CapitalROIInput): CapitalROIResult {
 
   const amortizedOutflow = payUpfront ? 0 : years > 0 ? capitalCost / years : 0
 
-  const cashflows: number[] = new Array(years + 1)
+  const cashflows: number[] = Array.from({ length: years + 1 }, () => 0)
   cashflows[0] = payUpfront ? -capitalCost : 0
 
   let totalTaxSavings = 0

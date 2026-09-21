@@ -122,7 +122,7 @@ async function main() {
     },
     include: { tiers: true },
   })
-  const distalTerm = await prisma.contractTerm.create({
+  await prisma.contractTerm.create({
     data: {
       contractId: contract.id,
       termName: "Distal Extremities Spend Rebate",
@@ -212,7 +212,6 @@ async function main() {
   console.log(`      QAS Retroactive: ${fmt(retro.rebateEarned)} at tier ${retro.tierAchieved}`)
   console.log(`      QAS Marginal:    ${fmt(marg.rebateEarned)} at tier ${marg.tierAchieved}`)
   // Expected: 40 rows × avg $550 × 2 = $44,000 on spend. Under tier 1 ($200k), both methods should = 5%
-  const expectedTier1Only = onSpend <= 200_000 && retro.tierAchieved === 1 && marg.tierAchieved === 1
   note(
     "  both methods agree when only tier 1 is reached",
     onSpend <= 200_000 ? (Math.abs(retro.rebateEarned - marg.rebateEarned) < 0.01 ? "OK" : "BUG") : "OK",
@@ -240,8 +239,14 @@ async function main() {
   const warns = FINDINGS.filter((f) => f.level === "WARN")
   const oks = FINDINGS.filter((f) => f.level === "OK")
   console.log(`Findings: ${oks.length} OK, ${warns.length} WARN, ${bugs.length} BUG`)
-  if (bugs.length > 0) console.log("\n🐛 Bugs:"), bugs.forEach((f) => console.log(`  ${f.test} — ${f.detail}`))
-  if (warns.length > 0) console.log("\n⚠️  Warnings:"), warns.forEach((f) => console.log(`  ${f.test} — ${f.detail}`))
+  if (bugs.length > 0) {
+    console.log("\n🐛 Bugs:")
+    bugs.forEach((f) => console.log(`  ${f.test} — ${f.detail}`))
+  }
+  if (warns.length > 0) {
+    console.log("\n⚠️  Warnings:")
+    warns.forEach((f) => console.log(`  ${f.test} — ${f.detail}`))
+  }
 
   await prisma.$disconnect()
   process.exit(bugs.length > 0 ? 1 : 0)

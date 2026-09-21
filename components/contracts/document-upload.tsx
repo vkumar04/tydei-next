@@ -22,7 +22,7 @@ const DOC_TYPES = [
   { value: "pricing", label: "Pricing Schedule" },
 ]
 
-export function DocumentUpload({ contractId, onUploaded, open, onOpenChange }: DocumentUploadProps) {
+export function DocumentUpload({ onUploaded, open, onOpenChange }: DocumentUploadProps) {
   const [docType, setDocType] = useState("main")
 
   async function handleUpload(file: File) {

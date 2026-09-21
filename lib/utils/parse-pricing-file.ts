@@ -13,7 +13,7 @@ import { parseCsvRow } from "@/lib/csv/parse-row"
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "")
 
 // ─── Header alias resolver ───────────────────────────────────────
-function findHeader(normHeaders: string[], rawHeaders: string[], ...aliases: string[]): number {
+function findHeader(normHeaders: string[], _rawHeaders: string[], ...aliases: string[]): number {
   return aliases.map(norm).reduce<number>(
     (found, a) => (found >= 0 ? found : normHeaders.indexOf(a)),
     -1,

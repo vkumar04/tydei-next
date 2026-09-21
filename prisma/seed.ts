@@ -45,10 +45,10 @@ async function main() {
 
   await clean(prisma)
 
-  const { healthSystems, facilities } = await seedHealthSystems(prisma)
+  const { facilities } = await seedHealthSystems(prisma)
   const { vendors } = await seedVendors(prisma)
   const { categories } = await seedCategories(prisma)
-  const { users, organizations } = await seedUsers(prisma, { facilities, vendors })
+  const { users } = await seedUsers(prisma, { facilities, vendors })
   const { contracts } = await seedContracts(prisma, { facilities, vendors, categories, users })
 
   // Depends on contracts + facilities

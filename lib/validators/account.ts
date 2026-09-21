@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { emailSchema, optionalEmailSchema } from "@/lib/validators/email"
+import { emailSchema } from "@/lib/validators/email"
 
 // ─── Per-user Account / Profile ──────────────────────────────────
 //

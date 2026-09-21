@@ -202,7 +202,7 @@ describe("getCOGStats — Total Savings (Charles W1.M)", () => {
       transactionDate: new Date("2026-01-15"),
     }))
 
-    const stats = await getCOGStats("fac-1")
+    const stats = await getCOGStats()
 
     expect(stats.totalItems).toBe(100)
     expect(stats.totalSpend).toBeCloseTo(30_618_404, 0)
@@ -247,7 +247,7 @@ describe("getCOGStats — Total Savings (Charles W1.M)", () => {
       },
     ]
 
-    const stats = await getCOGStats("fac-1")
+    const stats = await getCOGStats()
 
     expect(stats.matchedCount).toBe(2)
     // 250 + (-120) = 130 — sign convention preserved, no multiplier.
@@ -273,7 +273,7 @@ describe("getCOGStats — Total Savings (Charles W1.M)", () => {
       },
     ]
 
-    const stats = await getCOGStats("fac-1")
+    const stats = await getCOGStats()
 
     expect(stats.totalSavings).toBe(0)
     expect(stats.totalSavings).not.toBe(stats.potentialEstimate)
@@ -322,7 +322,7 @@ describe("getCOGStats — vendor merging (Vick 2026-06-07)", () => {
     ]
     vendorTable.push({ id: "v-other", name: "Medtronic", displayName: null })
 
-    const stats = await getCOGStats("fac-1")
+    const stats = await getCOGStats()
 
     // Two distinct real vendors, not three.
     expect(stats.uniqueVendors).toBe(2)
@@ -359,7 +359,7 @@ describe("getCOGStats — vendor merging (Vick 2026-06-07)", () => {
       },
     ]
 
-    const stats = await getCOGStats("fac-1")
+    const stats = await getCOGStats()
 
     expect(stats.uniqueVendors).toBe(1)
     expect(stats.topVendors).toHaveLength(1)

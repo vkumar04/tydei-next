@@ -22,8 +22,8 @@ export function levenshtein(a: string, b: string): number {
   if (m === 0) return n
 
   // Two-row rolling buffer to keep memory O(min(n, m))
-  let prev = new Array<number>(m + 1)
-  let curr = new Array<number>(m + 1)
+  let prev = Array.from({ length: m + 1 }, () => 0)
+  let curr = Array.from({ length: m + 1 }, () => 0)
   for (let j = 0; j <= m; j++) prev[j] = j
 
   for (let i = 1; i <= n; i++) {

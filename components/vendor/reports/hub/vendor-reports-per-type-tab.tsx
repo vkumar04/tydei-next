@@ -95,7 +95,7 @@ const TAB_TO_DETAIL_TYPE: Record<PerTypeTab, string> = {
   pricing: "usage",
 }
 
-const DETAIL_METRIC: "totalSpend" = "totalSpend"
+const DETAIL_METRIC = "totalSpend" as const
 
 interface ContractAggregate {
   id: string
