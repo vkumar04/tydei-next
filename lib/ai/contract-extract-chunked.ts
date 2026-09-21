@@ -53,7 +53,7 @@ async function mapWithConcurrency<T, R>(
   limit: number,
   fn: (item: T, index: number) => Promise<R>,
 ): Promise<PromiseSettledResult<R>[]> {
-  const results: PromiseSettledResult<R>[] = new Array(items.length)
+  const results: PromiseSettledResult<R>[] = Array.from({ length: items.length })
   let cursor = 0
   const worker = async (): Promise<void> => {
     while (true) {

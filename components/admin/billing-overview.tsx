@@ -14,7 +14,6 @@ interface BillingOverviewProps {
 
 export function BillingOverview({
   mrr,
-  subscriptions,
   paidAmount = 0,
   pendingAmount = 0,
   overdueAmount = 0,

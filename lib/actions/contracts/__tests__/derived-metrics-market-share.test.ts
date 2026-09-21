@@ -22,7 +22,6 @@ vi.mock("@/lib/actions/auth", () => ({
   })),
 }))
 
-const FACILITY_ID = "f1"
 const VENDOR_ID = "v_stryker"
 const OTHER_VENDOR = "v_other"
 

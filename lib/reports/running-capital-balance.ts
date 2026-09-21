@@ -28,7 +28,7 @@ export function computeRunningCapitalBalances(
     .map((_, i) => i)
     .sort((a, b) => periods[a].periodStart.localeCompare(periods[b].periodStart))
 
-  const ending = new Array<number>(periods.length).fill(capitalRemainingBalance)
+  const ending = Array.from({ length: periods.length }, () => capitalRemainingBalance)
   let running = capitalRemainingBalance
   // Walk newest → oldest: newest ends at the current remaining balance; each
   // older period ended higher by the paydown(s) that happened after it.

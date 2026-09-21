@@ -43,14 +43,14 @@ export function linearRegression(values: number[]): {
 
 export function seasonalDecompose(values: number[], seasonLength = 12): number[] {
   if (values.length < seasonLength) {
-    return new Array(seasonLength).fill(0)
+    return Array.from({ length: seasonLength }, () => 0)
   }
 
   const { slope, intercept } = linearRegression(values)
   const detrended = values.map((v, i) => v - (slope * i + intercept))
 
-  const seasonal = new Array(seasonLength).fill(0)
-  const counts = new Array(seasonLength).fill(0)
+  const seasonal = Array.from({ length: seasonLength }, () => 0)
+  const counts = Array.from({ length: seasonLength }, () => 0)
 
   for (let i = 0; i < detrended.length; i++) {
     const idx = i % seasonLength

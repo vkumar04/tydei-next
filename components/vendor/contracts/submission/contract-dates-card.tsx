@@ -44,7 +44,6 @@ export function ContractDatesCard({
   onExpirationDateChange,
   performancePeriod,
   onPerformancePeriodChange,
-  rebatePayPeriod,
   onRebatePayPeriodChange,
 }: ContractDatesCardProps) {
   return (

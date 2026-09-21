@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { emailSchema, optionalEmailSchema } from "@/lib/validators/email"
+import { optionalEmailSchema } from "@/lib/validators/email"
 import { createPaginationSchema } from "./pagination"
 import { VendorTierSchema } from "@/lib/validators"
 

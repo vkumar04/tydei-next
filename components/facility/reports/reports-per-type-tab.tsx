@@ -108,7 +108,7 @@ const TAB_TO_DETAIL_TYPE: Record<PerTypeTab, string> = {
 
 // Mirrors data-report-tab-content.tsx: every contract-type tab charts
 // monthly spend.
-const DETAIL_METRIC: "totalSpend" = "totalSpend"
+const DETAIL_METRIC = "totalSpend" as const
 
 interface ContractAggregate {
   id: string

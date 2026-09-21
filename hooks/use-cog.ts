@@ -49,7 +49,7 @@ export function useCOGImportHistory(facilityId: string) {
 export function useCOGStats(facilityId: string) {
   return useQuery({
     queryKey: queryKeys.cogRecords.stats(facilityId),
-    queryFn: () => getCOGStats(facilityId),
+    queryFn: () => getCOGStats(),
   })
 }
 

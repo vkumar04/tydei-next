@@ -54,7 +54,7 @@ export function useConsumeCredits() {
 
   return useMutation({
     mutationFn: useAICredits,
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.ai.creditsBase,
       })

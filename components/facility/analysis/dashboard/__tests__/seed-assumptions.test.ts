@@ -191,7 +191,6 @@ describe("no case data — spend must still produce coherent revenue", () => {
     const { mode, avgReimbursementPerCase } = seedRevenue(noCases())
     expect(mode).toBe("manual")
     expect(avgReimbursementPerCase).toBe(0)
-    expect(avgReimbursementPerCase * 0).toBe(0)
   })
 })
 

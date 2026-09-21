@@ -335,7 +335,7 @@ export async function getCOGImportHistory(_facilityId?: string) {
  *     benchmark only, surfaced as a muted secondary line. It is never
  *     presented as the headline Total Savings figure.
  */
-export async function getCOGStats(facilityId: string) {
+export async function getCOGStats() {
   const { facility } = await requireFacility()
 
   const [

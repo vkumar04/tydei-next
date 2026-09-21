@@ -9,8 +9,7 @@ import { serialize } from "@/lib/serialize"
 import { logAudit } from "@/lib/audit"
 import { runAlertSynthesisForFacility } from "@/lib/alerts/synthesize-persist"
 import { excludeSpendTargetAlerts } from "@/lib/alerts/spend-target-filter"
-import { excludeVendorProposalAlerts } from "@/lib/alerts/vendor-proposal-filter"
-import { openAlertWhere, inboxAlertScope, type AlertScope } from "@/lib/alerts/alert-scope"
+import { openAlertWhere, type AlertScope } from "@/lib/alerts/alert-scope"
 import { aggregateAlertCounts } from "@/lib/alerts/alert-counts"
 import {
   planBulkAction,

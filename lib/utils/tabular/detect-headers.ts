@@ -97,7 +97,7 @@ export function matrixToHeadersAndRows(
   if (headerRowIdx === -1) headerRowIdx = 0
 
   const rawHeaderRow = matrix[headerRowIdx] ?? []
-  if (rawHeaderRow.length === 0 || rawHeaderRow.every((h) => h === "")) {
+  if (rawHeaderRow.every((h) => h === "")) {
     throw new Error(
       "No headers found in the first 15 rows. Make sure your file has a row with column labels like 'Item No', 'Description', 'Price'.",
     )

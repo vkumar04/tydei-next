@@ -4,7 +4,6 @@ const {
   findManyMock,
   findUniqueOrThrowMock,
   proposalUpdateMock,
-  contractUpdateMock,
   txProposalUpdateMock,
   transactionMock,
 } = vi.hoisted(() => {

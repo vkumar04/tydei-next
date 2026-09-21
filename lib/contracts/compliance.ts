@@ -65,7 +65,7 @@ function emptyViolationCounts(): Record<ComplianceViolation, number> {
 export function evaluatePurchaseCompliance(
   purchase: CompliancePurchase,
   activeContracts: ComplianceContract[],
-  asOf: Date = new Date(),
+  _asOf: Date = new Date(),
 ): PurchaseComplianceResult {
   const reasons: ComplianceViolation[] = []
 

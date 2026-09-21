@@ -106,7 +106,7 @@ export const ProposalBuilder = forwardRef<
     !editingProposalId &&
     (myDivisions?.restricted ?? false) &&
     (myDivisions?.divisions.length ?? 0) >= 2
-  const [score, setScore] = useState<DealScore | null>(null)
+  const [score] = useState<DealScore | null>(null)
 
   const [customFacilities, setCustomFacilities] = useState<ProspectiveFacility[]>([])
   const [customCategories, setCustomCategories] = useState<string[]>([])

@@ -20,7 +20,7 @@ function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length
   if (m === 0) return n
   if (n === 0) return m
-  const d: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0))
+  const d: number[][] = Array.from({ length: m + 1 }, () => Array.from({ length: n + 1 }, () => 0))
   for (let i = 0; i <= m; i++) d[i][0] = i
   for (let j = 0; j <= n; j++) d[0][j] = j
   for (let i = 1; i <= m; i++) {

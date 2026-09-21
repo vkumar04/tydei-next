@@ -267,7 +267,7 @@ async function _createContractImpl(
         tiers,
         scopedItemNumbers,
         scopedCategoryId: _scopedCategoryId,
-        scopedCategoryIds,
+        scopedCategoryIds: _scopedCategoryIds,
         customAmortizationRows: _customAmortizationRows,
         capitalCost: _termCapitalCost,
         interestRate: _termInterestRate,
