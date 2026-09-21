@@ -101,10 +101,7 @@ test("vendor dashboard has stat cards", async ({ page }) => {
 
 // ─── Vendor Contracts ───────────────────────────────────────────
 
-test("vendor contracts list has stat cards + tabs", async ({
-  page,
-  context,
-}) => {
+test("vendor contracts list has stat cards + tabs", async ({ page }) => {
   await page.goto("/vendor/contracts")
   await expect(
     page.getByRole("heading", { name: "My Contracts" }),
@@ -152,10 +149,7 @@ test("vendor prospective has 3 tabs", async ({ page }) => {
 
 // ─── Vendor Market Share ────────────────────────────────────────
 
-test("vendor market share has charts + breakdown", async ({
-  page,
-  context,
-}) => {
+test("vendor market share has charts + breakdown", async ({ page }) => {
   await page.goto("/vendor/market-share")
   await expect(
     page.getByRole("heading", { name: "Market Share Analysis" }),
