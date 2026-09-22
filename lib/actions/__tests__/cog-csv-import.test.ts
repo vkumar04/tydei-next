@@ -102,6 +102,7 @@ describe("ingestCOGRecordsCSV", () => {
 
     expect(result).toEqual({
       imported: 0,
+      overwritten: 0,
       skipped: 0,
       errors: 0,
       matched: 0,

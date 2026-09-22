@@ -179,7 +179,8 @@ describe("bulkImportCOGRecords — duplicateStrategy: 'overwrite'", () => {
       duplicateStrategy: "overwrite",
     })
 
-    expect(result.imported).toBe(2) // 1 overwrite + 1 new
+    expect(result.imported).toBe(1)
+    expect(result.overwritten).toBe(1)
     expect(updateCalls).toHaveLength(1)
     expect(updateCalls[0].id).toBe("existing-1")
     expect(Number(updateCalls[0].data.unitCost)).toBe(999)

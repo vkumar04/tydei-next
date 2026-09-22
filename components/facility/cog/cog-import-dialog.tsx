@@ -84,6 +84,7 @@ export function COGImportDialog({
   const importMutation = useImportCOGRecords()
   const [result, setResult] = useState<{
     imported: number
+    overwritten: number
     skipped: number
     errors: number
     matched?: number
@@ -728,12 +729,18 @@ export function COGImportDialog({
         {result && (
           <div className="space-y-4 py-4">
             <p className="font-medium">Import Complete</p>
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-4 gap-4 text-center">
               <div>
                 <p className="text-2xl font-bold text-emerald-600">
                   {result.imported}
                 </p>
                 <p className="text-xs text-muted-foreground">Imported</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-sky-600 dark:text-sky-400">
+                  {result.overwritten}
+                </p>
+                <p className="text-xs text-muted-foreground">Overwritten</p>
               </div>
               <div>
                 <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">
@@ -762,7 +769,7 @@ export function COGImportDialog({
                 <CardContent className="flex-1 space-y-1">
                   <p className="text-2xl font-bold leading-tight">{result.imported}</p>
                   <p className="text-xs text-muted-foreground">
-                    {result.skipped} skipped · {result.errors} errors
+                    {result.overwritten} overwritten · {result.skipped} skipped · {result.errors} errors
                   </p>
                 </CardContent>
               </Card>
@@ -786,7 +793,7 @@ export function COGImportDialog({
                     {((result.onContractRate ?? 0) * 100).toFixed(1)}%
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {result.matched ?? 0} of {result.imported} imported
+                    {result.matched ?? 0} of {result.imported + result.overwritten} processed
                   </p>
                 </CardContent>
               </Card>
