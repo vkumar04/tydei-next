@@ -15,6 +15,7 @@ import { parseCSV, parseMoney, parseDate, mapColumnsWithAI, get } from "./shared
 
 type COGImportResult = {
   imported: number
+  overwritten: number
   skipped: number
   errors: number
   matched?: number
@@ -45,6 +46,7 @@ export async function ingestCOGRecordsRows(
   if (rows.length === 0)
     return {
       imported: 0,
+      overwritten: 0,
       skipped: 0,
       errors: 0,
       matched: 0,
@@ -163,6 +165,7 @@ export async function ingestCOGRecordsRows(
   if (records.length === 0) {
     return {
       imported: 0,
+      overwritten: 0,
       skipped: rows.length,
       errors: 0,
       matched: 0,

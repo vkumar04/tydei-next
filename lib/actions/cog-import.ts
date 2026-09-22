@@ -67,6 +67,7 @@ async function runBulkImport(
   data: BulkImportInput,
 ) {
   let imported = 0
+  let overwritten = 0
   let skipped = 0
   let errors = 0
 
@@ -271,7 +272,7 @@ async function runBulkImport(
               }),
             ),
           )
-          imported += toOverwrite.length
+          overwritten += toOverwrite.length
         } catch (err) {
           // Charles W2.C-B: never swallow the Prisma exception. The
           // error counter is visible to the user; the server log is
@@ -318,7 +319,7 @@ async function runBulkImport(
     userId: session.user.id,
     action: "cog.imported",
     entityType: "cogRecord",
-    metadata: { imported, skipped, errors, totalRecords: data.records.length },
+    metadata: { imported, overwritten, skipped, errors, totalRecords: data.records.length },
   })
 
   // ─── Post-import enrichment (subsystem 3 wiring) ─────────────
@@ -332,7 +333,7 @@ async function runBulkImport(
   // the user to retry via the contract-detail Refresh button instead
   // of silently displaying stale numbers.
   const recomputeFailures: { step: string; reason: string }[] = []
-  if (imported > 0) {
+  if (imported + overwritten > 0) {
     const vendorIds = new Set<string>()
     for (const record of data.records) {
       const vid = resolveVendorId(record)
@@ -574,6 +575,7 @@ async function runBulkImport(
 
   return serialize({
     imported,
+    overwritten,
     skipped,
     errors,
     matched: matchedCount,
