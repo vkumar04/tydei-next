@@ -1,0 +1,6 @@
+Supplier Part #,Material Desc,Mfg Catalog No,MSRP,Negotiated Unit Price,Contract Start,Contract End,Product Line,Pkg
+GLD-001,Golden Hip Stem,GLD-001,150.00,100.00,2026-01-01,2028-12-31,Orthopedics,EA
+GLD-002,Golden Acetabular Cup,GLD-002,300.00,250.00,2026-01-01,2028-12-31,Orthopedics,EA
+GLD-003,Golden Bone Screw,GLD-003,60.00,40.00,2026-01-01,2028-12-31,Orthopedics,EA
+GLD-004,Golden Suture Anchor,GLD-004,80.00,62.00,2026-01-01,2028-12-31,Sports Medicine,EA
+GLD-005,Golden Gauze Pack,GLD-005,14.00,10.00,2026-01-01,2028-12-31,Consumables,CS
