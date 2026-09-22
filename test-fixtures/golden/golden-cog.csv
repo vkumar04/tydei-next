@@ -1,0 +1,8 @@
+Vendor / Supplier Name,Transaction Date,Vendor Item Number,Item Description,Quantity Ordered,Unit Price,Conversion Factor Ordered,Extended Cost
+Stryker,2026-08-01,GLD-001,Golden Hip Stem,10,100.00,,
+Stryker,2026-08-02,GLD-002,Golden Acetabular Cup,4,245.00,,
+Stryker,2026-08-03,GLD-003,Golden Bone Screw,20,50.00,,
+Stryker,2026-08-04,GLD-004,Golden Suture Anchor,5,60.00,,
+Stryker,2026-08-05,GLD-005,Golden Gauze Pack,3,10.00,12,
+Stryker,2026-08-06,GLD-006,Golden Drape Kit,2,5.00,,999.00
+Stryker,2026-08-07,GLD-999,Golden Unlisted Item,2,75.00,,

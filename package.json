@@ -19,6 +19,7 @@
     "db:studio": "prisma studio --config prisma/prisma.config.ts",
     "qa:sanity": "bun run scripts/qa-sanity.ts",
     "qa:seed": "bun run scripts/qa-sanity.ts",
+    "qa:golden": "bun run scripts/qa-golden-calculations.ts",
     "qa:dom-diff": "bun run scripts/dual-app-dom-diff.ts",
     "smoke": "bun run scripts/pre-ship-smoke.ts",
     "lint:ai": "bun run scripts/lint-ai-action-error-paths.ts",
