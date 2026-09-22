@@ -232,7 +232,7 @@ async function runBulkImport(
       for (const record of batch) {
         const key = existingKey(
           record.inventoryNumber,
-          record.transactionDate,
+          new Date(record.transactionDate).toISOString().slice(0, 10),
           record.vendorItemNo ?? null,
         )
         const existingId = existingMap.get(key)
