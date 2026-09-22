@@ -324,7 +324,7 @@ export function COGImportDialog({
 
         {importState.step === "upload" && (
           <FileDropzone
-            accept={[".csv", ".xlsx", ".xls", ".pdf"]}
+            accept={[".csv", ".xlsx", ".xls"]}
             onFile={handleFile}
           />
         )}
