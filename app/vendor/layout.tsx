@@ -3,7 +3,7 @@ import { vendorNav } from "@/lib/constants"
 import { PortalShell } from "@/components/shared/shells/portal-shell"
 import { PortalUserMenu, UserMenuSkeleton } from "@/components/shared/shells/portal-user-menu"
 import { PortalAlertBell } from "@/components/shared/shells/portal-alert-bell"
-import { AlertBell } from "@/components/shared/shells/alert-bell"
+import { AlertBellPlaceholder } from "@/components/shared/shells/alert-bell"
 import { AccessGate } from "@/components/shared/auth/access-gate"
 import Loading from "./loading"
 
@@ -19,7 +19,7 @@ export default function VendorLayout({ children }: { children: React.ReactNode }
         </Suspense>
       }
       alertBell={
-        <Suspense fallback={<AlertBell role="vendor" />}>
+        <Suspense fallback={<AlertBellPlaceholder role="vendor" />}>
           <PortalAlertBell role="vendor" />
         </Suspense>
       }

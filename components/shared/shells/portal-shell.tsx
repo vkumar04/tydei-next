@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { Suspense, type ReactNode } from "react"
 import Link from "next/link"
 import type { NavItem, PortalRole, BadgeCounts } from "@/lib/types"
 import { Shield } from "lucide-react"
@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { SidebarNav } from "@/components/shared/shells/sidebar-nav"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { CommandSearch } from "@/components/shared/shells/command-search"
-import { NotificationBell } from "@/components/shared/notification-bell"
+import { NotificationBell, NotificationBellPlaceholder } from "@/components/shared/notification-bell"
 
 interface PortalShellProps {
   role: PortalRole
@@ -128,7 +128,9 @@ export function PortalShell({
             {/* In-app notifications (bell): pending-contract decisions
                 + change-proposal events. Distinct icon from AlertBell
                 so users can tell at a glance which one's lit. */}
-            <NotificationBell />
+            <Suspense fallback={<NotificationBellPlaceholder />}>
+              <NotificationBell />
+            </Suspense>
           </div>
         </header>
 

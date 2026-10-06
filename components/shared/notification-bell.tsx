@@ -207,3 +207,11 @@ export function NotificationBell() {
     </DropdownMenu>
   )
 }
+
+export function NotificationBellPlaceholder() {
+  return (
+    <Button variant="ghost" size="icon" className="relative size-9" aria-label="Notifications" disabled>
+      <Bell className="size-4" />
+    </Button>
+  )
+}

@@ -92,3 +92,14 @@ export function AlertBell({
     </Link>
   )
 }
+
+export function AlertBellPlaceholder({ role }: { role: PortalRole }) {
+  const alertsHref = role === "vendor" ? "/vendor/alerts" : "/dashboard/alerts"
+  return (
+    <Link href={alertsHref} aria-label="Alerts">
+      <Button variant="ghost" size="icon" className="relative h-9 w-9">
+        <TriangleAlert className="h-4 w-4" />
+      </Button>
+    </Link>
+  )
+}
