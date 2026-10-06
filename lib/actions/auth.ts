@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
+import { connection } from "next/server"
 import { auth } from "@/lib/auth-server"
 import { getPrincipal, getSession } from "@/lib/auth/principal"
 import { rateLimit } from "@/lib/rate-limit"
@@ -47,6 +48,7 @@ async function denyingARender(): Promise<boolean> {
 }
 
 export async function requireAuth() {
+  await connection()
   const session = await getSession()
 
   if (!session) {
@@ -58,6 +60,7 @@ export async function requireAuth() {
 }
 
 async function requirePrincipal(role: UserRole) {
+  await connection()
   const principal = await getPrincipal()
 
   if (!principal) {
