@@ -1,8 +1,6 @@
 "use server"
 
-import { headers } from "next/headers"
-import { auth } from "@/lib/auth-server"
-import { prisma } from "@/lib/db"
+import { getPrincipal } from "@/lib/auth/principal"
 import {
   can,
   type AccessContext,
@@ -38,24 +36,13 @@ import { AccessDeniedError } from "@/lib/auth/access-error"
  * so this only tightens the orphan case. Returns `null` when unauthenticated.
  */
 export async function getCurrentAccessContext(): Promise<AccessContext | null> {
-  const session = await auth.api.getSession({ headers: await headers() })
-  if (!session) return null
+  const principal = await getPrincipal()
+  if (!principal) return null
 
-  const [member, user] = await Promise.all([
-    prisma.member.findFirst({
-      where: { userId: session.user.id },
-      select: { accessTier: true },
-    }),
-    prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { role: true },
-    }),
-  ])
-
-  const isPlatformAdmin = user?.role === "admin"
-  const side: AccessSide = user?.role === "vendor" ? "vendor" : "facility"
+  const isPlatformAdmin = principal.role === "admin"
+  const side: AccessSide = principal.role === "vendor" ? "vendor" : "facility"
   const tier: AccessTier =
-    member?.accessTier ?? (isPlatformAdmin ? "super" : "user")
+    principal.accessTier ?? (isPlatformAdmin ? "super" : "user")
   return { tier, side }
 }
 

@@ -3,7 +3,7 @@
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth-server"
-import { prisma } from "@/lib/db"
+import { getPrincipal, getSession } from "@/lib/auth/principal"
 import { rateLimit } from "@/lib/rate-limit"
 import { clientIp } from "@/lib/actions/request-ip"
 import type { UserRole } from "@/lib/generated/prisma/client"
@@ -47,9 +47,7 @@ async function denyingARender(): Promise<boolean> {
 }
 
 export async function requireAuth() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const session = await getSession()
 
   if (!session) {
     if (await denyingARender()) redirect("/login")
@@ -59,16 +57,16 @@ export async function requireAuth() {
   return session
 }
 
-export async function requireRole(role: UserRole) {
-  const session = await requireAuth()
+async function requirePrincipal(role: UserRole) {
+  const principal = await getPrincipal()
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { role: true },
-  })
+  if (!principal) {
+    if (await denyingARender()) redirect("/login")
+    throw new AccessDeniedError("Your session has expired. Please sign in again.")
+  }
 
-  if (!user || user.role !== role) {
-    const userRole = user?.role ?? "facility"
+  if (principal.role !== role) {
+    const userRole = principal.role ?? "facility"
     if (await denyingARender()) redirect(roleConfig[userRole].defaultRedirect)
     throw new AccessDeniedError(
       "You don't have access to this area. If you think that's wrong, sign " +
@@ -76,25 +74,17 @@ export async function requireRole(role: UserRole) {
     )
   }
 
-  return session
+  return principal
+}
+
+export async function requireRole(role: UserRole) {
+  return (await requirePrincipal(role)).session
 }
 
 export async function requireFacility() {
-  const session = await requireRole("facility")
+  const { session, facility } = await requirePrincipal("facility")
 
-  const member = await prisma.member.findFirst({
-    where: { userId: session.user.id },
-    include: {
-      organization: {
-        include: { facility: true },
-      },
-    },
-  })
-
-  const facility = member?.organization?.facility
   if (!facility) {
-    // Authenticated with the right role but no facility linked — a data
-    // problem, not a credentials one. Same render/action split as above.
     if (await denyingARender()) redirect("/login")
     throw new AccessDeniedError(
       "Your account isn't linked to a facility yet. Contact your administrator.",
@@ -105,21 +95,9 @@ export async function requireFacility() {
 }
 
 export async function requireVendor() {
-  const session = await requireRole("vendor")
+  const { session, vendor } = await requirePrincipal("vendor")
 
-  const member = await prisma.member.findFirst({
-    where: { userId: session.user.id },
-    include: {
-      organization: {
-        include: { vendor: true },
-      },
-    },
-  })
-
-  const vendor = member?.organization?.vendor
   if (!vendor) {
-    // Authenticated with the right role but no vendor linked — a data
-    // problem, not a credentials one. Same render/action split as above.
     if (await denyingARender()) redirect("/login")
     throw new AccessDeniedError(
       "Your account isn't linked to a vendor yet. Contact your administrator.",

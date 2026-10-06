@@ -2,8 +2,6 @@ import type { Metadata } from "next"
 import { Mail, MessageSquare, Building2 } from "lucide-react"
 import { ContactForm } from "@/components/marketing/contact-form"
 
-export const instant = false
-
 export const metadata: Metadata = {
   title: "Contact",
   description:

@@ -4,8 +4,6 @@ import { Providers } from "@/components/providers"
 import { siteUrl } from "@/lib/site-url"
 import "./globals.css"
 
-export const instant = false
-
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
