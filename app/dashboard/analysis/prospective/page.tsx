@@ -3,6 +3,8 @@ import { getFacilityAnalysisData } from "@/lib/actions/facility-analysis-data"
 import { getVendors } from "@/lib/actions/vendors"
 import { AnalysisPageClient } from "@/components/facility/analysis/analysis-page-client"
 
+export const instant = false
+
 /**
  * Facility Analysis page — server shell.
  *

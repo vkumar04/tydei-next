@@ -4,6 +4,8 @@ import { getCurrentAccessContext } from "@/lib/actions/auth-permissions"
 import { can } from "@/lib/auth/permissions"
 import { SettingsClient } from "@/components/facility/settings/settings-client"
 
+export const instant = false
+
 export default async function SettingsPage() {
   const { facility } = await requireFacility()
 

@@ -1,6 +1,8 @@
 import { PendingContractEditClient } from "@/components/vendor/contracts/pending-contract-edit-client"
 import { requireVendor } from "@/lib/actions/auth"
 
+export const instant = false
+
 export default async function PendingContractEditPage({
   params,
 }: {

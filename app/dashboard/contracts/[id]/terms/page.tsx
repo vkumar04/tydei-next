@@ -1,6 +1,8 @@
 import { ContractTermsPageClient } from "@/components/facility/contracts/contract-terms-page-client"
 import { requireFacility } from "@/lib/actions/auth"
 
+export const instant = false
+
 export default async function ContractTermsPage({
   params,
 }: {

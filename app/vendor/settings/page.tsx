@@ -4,6 +4,8 @@ import { getCurrentAccessContext } from "@/lib/actions/auth-permissions"
 import { can } from "@/lib/auth/permissions"
 import { VendorSettingsClient } from "@/components/vendor/settings/vendor-settings-client"
 
+export const instant = false
+
 export default async function VendorSettingsPage() {
   const { vendor } = await requireVendor()
 

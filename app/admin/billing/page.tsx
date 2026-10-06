@@ -5,6 +5,8 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 
+export const instant = false
+
 export default async function AdminBillingPage() {
   await requireAdmin()
 

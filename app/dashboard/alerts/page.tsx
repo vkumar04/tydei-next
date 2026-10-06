@@ -5,6 +5,8 @@ import { AlertsListClient } from "@/components/shared/alerts/alerts-list-client"
 
 import AlertsLoading from "./loading"
 
+export const instant = false
+
 export default async function AlertsPage() {
   const session = await requireFacility()
 

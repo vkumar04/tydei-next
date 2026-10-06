@@ -5,6 +5,8 @@ import { AlertDetailClient } from "@/components/shared/alerts/alert-detail-clien
 
 import AlertDetailLoading from "./loading"
 
+export const instant = false
+
 interface AlertDetailPageProps {
   params: Promise<{ id: string }>
 }

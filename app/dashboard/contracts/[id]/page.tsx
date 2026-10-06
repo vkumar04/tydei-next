@@ -4,6 +4,8 @@ import { getContract } from "@/lib/actions/contracts/get-contract"
 import { getContractPerformanceBundle } from "@/lib/actions/analytics/contract-performance-bundle"
 import { ContractDetailClient } from "@/components/contracts/contract-detail-client"
 
+export const instant = false
+
 /**
  * Server component wrapper for the contract-detail page.
  *

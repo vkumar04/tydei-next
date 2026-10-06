@@ -4,6 +4,8 @@ import { EditContractClient } from "@/components/contracts/edit-contract-client"
 import { requireFacility } from "@/lib/actions/auth"
 import { mappedCategoryUniverse } from "@/lib/contracts/mapped-category-universe"
 
+export const instant = false
+
 export default async function EditContractPage({
   params,
 }: {

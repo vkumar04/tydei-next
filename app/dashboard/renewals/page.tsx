@@ -3,6 +3,8 @@ import { requireFacility } from "@/lib/actions/auth"
 import { RenewalsClient } from "@/components/facility/renewals/renewals-client"
 import RenewalsLoading from "./loading"
 
+export const instant = false
+
 /**
  * Facility renewals list page.
  *

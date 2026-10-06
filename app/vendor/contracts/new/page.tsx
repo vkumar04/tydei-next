@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
+export const instant = false
+
 export default async function NewVendorContractPage() {
   const { vendor } = await requireVendor()
 
