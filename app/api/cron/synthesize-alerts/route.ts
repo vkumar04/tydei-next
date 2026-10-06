@@ -14,6 +14,7 @@
  * environments that haven't opted in; 401 on a bad/missing token.
  */
 import { timingSafeEqual } from "node:crypto"
+import { connection } from "next/server"
 import { prisma } from "@/lib/db"
 import { runAlertSynthesisForFacility } from "@/lib/alerts/synthesize-persist"
 
@@ -25,6 +26,7 @@ function authorized(request: Request, secret: string): boolean {
 }
 
 export async function GET(request: Request) {
+  await connection()
   const secret = process.env.CRON_SECRET
   if (!secret) {
     return new Response("Not found", { status: 404 })

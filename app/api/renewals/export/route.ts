@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from "next/server"
+import { connection, NextResponse, type NextRequest } from "next/server"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
 import { prisma } from "@/lib/db"
@@ -20,6 +20,7 @@ import {
  * 365 days and may be overridden with `?windowDays=N`.
  */
 export async function GET(request: NextRequest) {
+  await connection()
   try {
     const session = await auth.api.getSession({ headers: await headers() })
     if (!session) {
