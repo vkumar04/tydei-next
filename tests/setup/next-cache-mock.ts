@@ -23,6 +23,10 @@ export const updateTag = vi.fn()
 // has no effect outside the Next runtime.
 export const cacheLife = vi.fn()
 export const cacheTag = vi.fn()
+export const refresh = vi.fn()
+export const io = vi.fn(async () => {})
+export const prefetch = vi.fn(async () => {})
+export const navigation = vi.fn(async () => {})
 
 // `unstable_cache` is invoked as `unstable_cache(fn, key, opts)()` —
 // the inner fn must still run, so the stub returns it unchanged. (Real

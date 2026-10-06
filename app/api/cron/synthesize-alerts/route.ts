@@ -17,8 +17,6 @@ import { timingSafeEqual } from "node:crypto"
 import { prisma } from "@/lib/db"
 import { runAlertSynthesisForFacility } from "@/lib/alerts/synthesize-persist"
 
-export const dynamic = "force-dynamic"
-
 /** Constant-time bearer-token check — avoids a timing side-channel on CRON_SECRET. */
 function authorized(request: Request, secret: string): boolean {
   const provided = Buffer.from(request.headers.get("authorization") ?? "")
