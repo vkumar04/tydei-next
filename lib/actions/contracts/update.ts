@@ -242,7 +242,7 @@ async function _updateContractImpl(
   }
 
   // Contract health-score feature removed 2026-04-23 (Bug 15).
-  revalidatePath("/dashboard/cog")
+  revalidatePath("/dashboard/cog-data")
   revalidatePath("/dashboard/contracts")
   revalidatePath(`/dashboard/contracts/${id}`)
   revalidatePath("/dashboard")

@@ -61,7 +61,7 @@ export async function deleteContract(id: string) {
       facilityId,
     })
   }
-  revalidatePath("/dashboard/cog")
+  revalidatePath("/dashboard/cog-data")
   revalidatePath("/dashboard/contracts")
   revalidatePath("/dashboard")
   await invalidateContractAnalytics(id)

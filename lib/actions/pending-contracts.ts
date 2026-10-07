@@ -455,7 +455,7 @@ async function materializePending(
       vendorId: pending.vendorId,
       facilityId,
     })
-    revalidatePath("/dashboard/cog")
+    revalidatePath("/dashboard/cog-data")
     revalidatePath("/dashboard/contracts")
     revalidatePath("/dashboard/alerts")
     revalidatePath("/dashboard")

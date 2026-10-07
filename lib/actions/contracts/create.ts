@@ -443,7 +443,7 @@ async function _createContractImpl(
   // A-F rollup was unclear in provenance ("what is this score based on?
   // not sure we need that") so the whole subsystem was ripped out.
 
-  revalidatePath("/dashboard/cog")
+  revalidatePath("/dashboard/cog-data")
   revalidatePath("/dashboard/contracts")
   revalidatePath("/dashboard")
   // New contract → invalidate facility-scoped analytics so spend
