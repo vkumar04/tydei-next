@@ -5,6 +5,7 @@ import Link from "next/link"
 import { TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useQuery } from "@tanstack/react-query"
+import { useSession } from "@/lib/auth"
 import { queryKeys } from "@/lib/query-keys"
 import { toast } from "sonner"
 import type { PortalRole } from "@/lib/types"
@@ -32,6 +33,8 @@ export function AlertBell({
   const portalType = role === "vendor" ? "vendor" : "facility"
   const entityId = (role === "vendor" ? vendorId : facilityId) ?? ""
   const scopedToAnEntity = role !== "admin" && !!entityId
+  const { data: session, isPending: sessionPending } = useSession()
+  const signedIn = sessionPending || !!session
 
   const { data: count } = useQuery({
     queryKey: queryKeys.alerts.unreadCount(portalType, entityId),
@@ -49,7 +52,7 @@ export function AlertBell({
     },
     refetchInterval: 30_000,
     initialData: initialCount,
-    enabled: scopedToAnEntity,
+    enabled: scopedToAnEntity && signedIn,
   })
 
   const prevCountRef = useRef(initialCount)

@@ -4,10 +4,10 @@ import { ErrorBoundaryCard } from "@/components/shared/error-boundary-card"
 
 export default function DashboardError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string }
-  reset: () => void
+  retry: () => void
 }) {
-  return <ErrorBoundaryCard error={error} reset={reset} segment="dashboard" />
+  return <ErrorBoundaryCard error={error} reset={retry} segment="dashboard" />
 }

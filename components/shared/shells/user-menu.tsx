@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { LogOut, Settings, ChevronDown } from "lucide-react"
 import { authClient } from "@/lib/auth"
@@ -23,6 +24,7 @@ interface UserMenuProps {
 
 export function UserMenu({ user, role }: UserMenuProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
 
   const initials = user.name
     .split(" ")
@@ -39,8 +41,14 @@ export function UserMenu({ user, role }: UserMenuProps) {
         : "/dashboard/settings"
 
   async function handleSignOut() {
-    await authClient.signOut()
-    router.push("/login")
+    await queryClient.cancelQueries()
+    await authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          router.push("/login")
+        },
+      },
+    })
   }
 
   return (

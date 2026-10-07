@@ -1,6 +1,8 @@
 import { AuthCard } from "@/components/auth/auth-card"
 import { SignUpForm } from "@/components/auth/sign-up-form"
 
+export const ensureStatic = "navigation"
+
 export default function SignUpPage() {
   return (
     <AuthCard
