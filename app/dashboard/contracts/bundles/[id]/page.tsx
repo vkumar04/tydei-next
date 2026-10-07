@@ -15,8 +15,6 @@ import { BundleDeleteButton } from "@/components/contracts/bundle-delete-button"
 import { requireFacility } from "@/lib/actions/auth"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
 
-export const instant = false
-
 const fmt = formatCurrency
 
 export default async function BundleDetailPage({

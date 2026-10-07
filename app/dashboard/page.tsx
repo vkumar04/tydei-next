@@ -17,8 +17,6 @@ import {
 } from "@/components/facility/dashboard/dashboard-client"
 import DashboardLoading from "./loading"
 
-export const instant = false
-
 const CHART_MONTHS = 12
 
 async function DashboardShell() {

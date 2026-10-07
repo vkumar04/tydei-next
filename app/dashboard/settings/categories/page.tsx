@@ -3,8 +3,6 @@ import { getCategoryUsage } from "@/lib/actions/categories/usage"
 import { CategoryMergeClient } from "@/components/facility/categories/category-merge-client"
 import { PageHeader } from "@/components/shared/page-header"
 
-export const instant = false
-
 export default async function CategoriesSettingsPage() {
   await requireFacility()
   const usage = await getCategoryUsage()

@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button"
 import { EditBundleForm } from "./edit-bundle-form"
 import { requireFacility } from "@/lib/actions/auth"
 
-export const instant = false
-
 export default async function EditBundlePage({
   params,
 }: {

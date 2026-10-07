@@ -1,13 +1,13 @@
+import { Suspense } from "react"
 import { headers } from "next/headers"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { AuthCard } from "@/components/auth/auth-card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { AcceptInvitationForm } from "@/components/auth/accept-invitation-form"
 import { Button } from "@/components/ui/button"
 import { auth } from "@/lib/auth-server"
-
-export const instant = false
 
 /**
  * Landing page for the invitation email's "Accept invitation" button.
@@ -26,7 +26,7 @@ export const instant = false
  * The accept itself is a client action (better-auth needs session cookies),
  * so this server component only resolves state and hands off.
  */
-export default async function AcceptInvitationPage({
+async function AcceptInvitationContent({
   searchParams,
 }: {
   searchParams: Promise<{ id?: string }>
@@ -122,5 +122,22 @@ export default async function AcceptInvitationPage({
         role={invitation.role}
       />
     </AuthCard>
+  )
+}
+
+export default function AcceptInvitationPage({ searchParams }: { searchParams: Promise<{ id?: string }> }) {
+  return (
+    <Suspense
+      fallback={
+        <AuthCard title="Invitation" description="Checking your invitation">
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </AuthCard>
+      }
+    >
+      <AcceptInvitationContent searchParams={searchParams} />
+    </Suspense>
   )
 }

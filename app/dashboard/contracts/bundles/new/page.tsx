@@ -4,8 +4,6 @@ import { prisma } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { NewBundleForm } from "./new-bundle-form"
 
-export const instant = false
-
 export default async function NewBundlePage() {
   const { facility } = await requireFacility()
 

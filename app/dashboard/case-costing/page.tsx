@@ -15,8 +15,6 @@ import { requireFacility } from "@/lib/actions/auth"
 import { CaseCostingClient } from "@/components/facility/case-costing/case-costing-client"
 import { CaseCostingExplainer } from "@/components/facility/case-costing/case-costing-explainer"
 
-export const instant = false
-
 export default async function CaseCostingPage() {
   const { facility } = await requireFacility()
 

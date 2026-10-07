@@ -1,8 +1,6 @@
 import { requireVendor } from "@/lib/actions/auth"
 import { VendorPurchaseOrdersClient } from "@/components/vendor/purchase-orders-client"
 
-export const instant = false
-
 export default async function VendorPurchaseOrdersPage() {
   const { vendor } = await requireVendor()
 
