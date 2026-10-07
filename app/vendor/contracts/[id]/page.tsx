@@ -4,6 +4,8 @@ import { getVendorContractDetail } from "@/lib/actions/vendor-contracts"
 import { getContractPerformanceBundle } from "@/lib/actions/analytics/contract-performance-bundle"
 import { VendorContractDetailClient } from "./vendor-contract-detail-client"
 
+export const instant = false
+
 interface Props {
   params: Promise<{ id: string }>
 }

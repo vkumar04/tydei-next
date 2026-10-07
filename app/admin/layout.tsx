@@ -2,6 +2,8 @@ import { requireRole } from "@/lib/actions/auth"
 import { adminNav } from "@/lib/constants"
 import { PortalShell } from "@/components/shared/shells/portal-shell"
 
+export const instant = false
+
 export default async function AdminLayout({
   children,
 }: {

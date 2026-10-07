@@ -3,6 +3,8 @@ import { requireFacility } from "@/lib/actions/auth"
 import { ReportsClient } from "@/components/facility/reports/reports-client"
 import { Skeleton } from "@/components/ui/skeleton"
 
+export const instant = false
+
 /**
  * Reports Hub — server component shell.
  *

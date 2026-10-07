@@ -3,6 +3,8 @@ import { AuthCard } from "@/components/auth/auth-card"
 import { LoginForm } from "@/components/auth/login-form"
 import { DEMO_LOGIN_ACCOUNTS, demoLoginsEnabled } from "@/lib/auth/demo-accounts"
 
+export const instant = false
+
 export default function LoginPage() {
   // Server-side gate: when demo logins are disabled the accounts (and their
   // credentials) are never passed down, so nothing ships to the browser.

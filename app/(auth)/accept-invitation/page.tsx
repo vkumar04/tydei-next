@@ -7,6 +7,8 @@ import { AcceptInvitationForm } from "@/components/auth/accept-invitation-form"
 import { Button } from "@/components/ui/button"
 import { auth } from "@/lib/auth-server"
 
+export const instant = false
+
 /**
  * Landing page for the invitation email's "Accept invitation" button.
  *

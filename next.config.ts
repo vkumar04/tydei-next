@@ -48,39 +48,8 @@ const config: NextConfig = {
       "./node_modules/mupdf/**",
     ],
   },
-  // 2026-04-26: cacheComponents was enabled but caused build failures
-  // during static-page generation — `cacheComponents: true` requires
-  // every uncached data access (e.g. `await requireFacility()`) to be
-  // inside a Suspense boundary, and every page.tsx in the app does
-  // it at the top level. Rollout deferred until a proper PPR plan
-  // wraps each route in Suspense or opts each into force-dynamic.
-  // The analytics-layer refactor (_cache.ts / _cached.ts /
-  // contract-score-impl.ts split) stays — it's independent of the
-  // flag and the cleaner module shape is worth keeping.
-  // 2026-05-25 audit: confirmed and concretely scoped. Re-running
-  // `bun run build` with this flag on fails with "Uncached data was
-  // accessed outside of <Suspense>" on every dashboard route. The
-  // work is bigger than the 21 page.tsx files that do top-level
-  // `await requireX()` — each portal layout also does it:
-  //   - app/dashboard/layout.tsx → requireFacility + getUnreadAlertCount
-  //   - app/admin/layout.tsx     → requireAdmin + (similar)
-  //   - app/vendor/layout.tsx    → requireVendor + (similar)
-  // Layouts run on every route under them, so a single un-Suspended
-  // layout breaks every page under it (which is what the prerender
-  // error stack traces showed — pointing at providers.tsx through
-  // the shared shell, not the page-specific data fetch).
-  // Re-enabling requires:
-  //   1. Refactor 3 portal layouts so requireX() + per-user reads
-  //      stream via Suspense (PortalShell needs to render its chrome
-  //      synchronously, with user/alert-count slots streamed in)
-  //   2. Refactor 21 page.tsx files to wrap top-level data access
-  //      in <Suspense> via a child PageContent() pattern
-  //   3. Restore `'use cache'` + cacheLife + cacheTag in
-  //      lib/actions/analytics/_cached.ts read helpers
-  //   4. Flip this flag
-  // Estimated 4–6 hours focused, not appropriate for a bundled audit
-  // PR. Worth a design doc when prioritised.
-  // cacheComponents: true,
+  cacheComponents: true,
+  partialPrefetching: true,
   experimental: {
     turbopackFileSystemCacheForBuild: false,
     // TypeScript 7 (Go-native) removed the JS compiler API Next's default

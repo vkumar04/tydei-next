@@ -5,6 +5,8 @@ import { PortalShell } from "@/components/shared/shells/portal-shell"
 import { AccessProvider } from "@/components/shared/auth/access-context"
 import { getOpenAlertCount } from "@/lib/actions/alerts"
 
+export const instant = false
+
 export default async function VendorLayout({
   children,
 }: {

@@ -1,6 +1,8 @@
 import { requireFacility } from "@/lib/actions/auth"
 import { POList } from "@/components/facility/purchase-orders/po-list"
 
+export const instant = false
+
 export default async function PurchaseOrdersPage() {
   const { facility } = await requireFacility()
 

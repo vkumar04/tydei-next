@@ -2,6 +2,8 @@ import { requireFacility } from "@/lib/actions/auth"
 import { prisma } from "@/lib/db"
 import { InvoiceValidationClient } from "@/components/facility/invoices/invoice-validation-client"
 
+export const instant = false
+
 export default async function InvoiceValidationPage() {
   const { facility } = await requireFacility()
 

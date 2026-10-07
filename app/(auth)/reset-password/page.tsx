@@ -2,6 +2,8 @@ import { redirect } from "next/navigation"
 import { AuthCard } from "@/components/auth/auth-card"
 import { ResetPasswordForm } from "@/components/auth/reset-password-form"
 
+export const instant = false
+
 interface ResetPasswordPageProps {
   searchParams: Promise<{ token?: string; invite?: string }>
 }
