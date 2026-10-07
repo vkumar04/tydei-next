@@ -134,12 +134,14 @@ export function VendorContractSubmission({
       fileName: file.name,
       contentType: file.type,
       folder: "contracts",
+      size: file.size,
     })
-    await fetch(uploadUrl, {
+    const put = await fetch(uploadUrl, {
       method: "PUT",
       body: file,
       headers: { "Content-Type": file.type },
     })
+    if (!put.ok) throw new Error(`Upload of ${file.name} failed (${put.status})`)
     setUploadedDocs((prev) => [...prev, { name: file.name, url: key }])
     return key
   }, [])
