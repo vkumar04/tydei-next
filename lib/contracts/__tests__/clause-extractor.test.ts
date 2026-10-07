@@ -75,10 +75,11 @@ describe("extractClauses", () => {
     expect(generateStructuredMock).toHaveBeenCalledTimes(1)
     const callArg = generateStructuredMock.mock.calls[0][0]
     expect(callArg.actionName).toBe("clause-extractor")
-    expect(callArg.messages[0].role).toBe("system")
-    expect(callArg.messages[1].role).toBe("user")
-    expect(callArg.messages[1].content).toContain("Acme USAGE_SPEND Renewal")
-    expect(callArg.messages[1].content).toContain(
+    expect(callArg.instructions).toEqual(expect.any(String))
+    expect(callArg.messages).toHaveLength(1)
+    expect(callArg.messages[0].role).toBe("user")
+    expect(callArg.messages[0].content).toContain("Acme USAGE_SPEND Renewal")
+    expect(callArg.messages[0].content).toContain(
       "Long PDF body about pricing",
     )
 
@@ -113,7 +114,7 @@ describe("extractClauses", () => {
     const result = await extractClauses({ pdfText: huge })
 
     expect(result.truncated).toBe(true)
-    const userMsg = generateStructuredMock.mock.calls[0][0].messages[1].content as string
+    const userMsg = generateStructuredMock.mock.calls[0][0].messages[0].content as string
     // Truncation marker should be present in the prompt.
     expect(userMsg).toContain("truncated to the first 50KB")
     // The prompt body should be capped at the configured max.

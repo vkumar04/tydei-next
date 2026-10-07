@@ -30,6 +30,7 @@ function usageByRef() {
 
 const USAGE = usageByRef()
 const USAGE_REVENUE = [...USAGE.values()].reduce((a, u) => a + u.revenue, 0)
+const USAGE_VOLUME = [...USAGE.values()].reduce((a, u) => a + u.qty, 0)
 const PRICED_VOLUME = prices.reduce((a, p) => a + USAGE.get(p.ref)!.qty, 0)
 const PROPOSED_VALUE = prices.reduce((a, p) => a + p.proposedPrice * USAGE.get(p.ref)!.qty, 0)
 
@@ -180,5 +181,5 @@ test("proposal builder: saved projected volume equals the merged usage volume", 
     )
     return (rows[0] as { v: number | null } | undefined)?.v ?? null
   })
-  expect(projectedVolume).toBe(PRICED_VOLUME)
+  expect(projectedVolume).toBe(USAGE_VOLUME)
 })

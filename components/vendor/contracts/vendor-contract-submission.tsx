@@ -1028,6 +1028,7 @@ export function VendorContractSubmission({
             pricingFileData={pricingFileData}
             uploadedDocs={uploadedDocs}
             submitting={submitting}
+            uploadingDocs={additionalDocs.some((d) => !d.key)}
             onClearPricingFile={handleClearPricingFile}
             onPricingFileSelect={processPricingFile}
             onDocUpload={handleDocUpload}

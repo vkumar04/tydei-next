@@ -38,6 +38,7 @@ export interface SubmissionSidebarProps {
   pricingFileData: PricingFileData | null
   uploadedDocs: UploadedDoc[]
   submitting: boolean
+  uploadingDocs?: boolean
   onClearPricingFile: () => void
   onPricingFileSelect: (file: File) => void
   onDocUpload: (file: File) => Promise<string>
@@ -50,6 +51,7 @@ export function SubmissionSidebar({
   pricingFileData,
   uploadedDocs,
   submitting,
+  uploadingDocs = false,
   onClearPricingFile,
   onPricingFileSelect,
   onDocUpload,
@@ -251,12 +253,17 @@ export function SubmissionSidebar({
           <Button
             type="submit"
             className="w-full"
-            disabled={submitting}
+            disabled={submitting || uploadingDocs}
           >
             {submitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Submitting...
+              </>
+            ) : uploadingDocs ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Uploading documents...
               </>
             ) : (
               <>

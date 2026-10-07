@@ -43,6 +43,7 @@ import { claudeModel, claudeSonnet } from "@/lib/ai/config"
 
 export interface GenerateStructuredInput<T> {
   schema: z.ZodSchema<T>
+  instructions?: string
   messages: ModelMessage[]
   /** For log lines so we can tell which call site fell back. */
   actionName: string
@@ -143,6 +144,7 @@ export async function generateStructured<T>(
 
   const callOpts = {
     output: Output.object({ schema: input.schema }),
+    instructions: input.instructions,
     messages: input.messages,
     providerOptions: ANTHROPIC_TOOL_MODE_OPTIONS,
     abortSignal: input.abortSignal,

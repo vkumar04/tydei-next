@@ -110,6 +110,8 @@ test.describe("Prospective analysis uploads compute the right numbers", () => {
     await expect(page.getByText("Proposal scored")).toBeVisible({ timeout: 300_000 })
     await expect(page.getByText(/^(Good deal|Negotiate|Decline)$/).first()).toBeVisible()
     await expect(page.getByText("12-month lookback projection")).toBeVisible()
+    await expect(page.getByText(/^Legal scan: \d+ clauses? checked$/)).toBeVisible({ timeout: 180_000 })
+    await expect(page.getByText(/Clause extractor failed/)).toHaveCount(0)
 
     const facilityId = await facilityIdByName()
     await expect
