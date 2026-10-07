@@ -174,7 +174,7 @@ export function UploadDocumentDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Upload Document</DialogTitle>
           <DialogDescription>
@@ -258,6 +258,7 @@ export function UploadDocumentDialog({
               onChange={(e) => setRawText(e.target.value)}
               placeholder="Paste contract text here. Use form-feed characters (U+000C) or <<<PAGE_BREAK>>> to mark page boundaries."
               rows={5}
+              className="max-h-48 overflow-y-auto"
             />
           </div>
 
