@@ -2,8 +2,6 @@ import { requireVendor } from "@/lib/actions/auth"
 import { getVendorRelatedFacilities } from "@/lib/actions/vendor-prospective"
 import { VendorProspectiveClient } from "./prospective-client"
 
-export const instant = false
-
 export default async function VendorProspectivePage() {
   const { vendor } = await requireVendor()
 

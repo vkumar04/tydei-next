@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation"
 import { requireFacility } from "@/lib/actions/auth"
 
-export const instant = false
-
 /**
  * 2026-04-26 (Charles prod feedback): the legacy /dashboard/analysis
  * surface required picking from the facility's CURRENT active contracts

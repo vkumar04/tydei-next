@@ -1,8 +1,6 @@
 import { requireVendor } from "@/lib/actions/auth"
 import { VendorInvoiceList } from "@/components/vendor/invoices/vendor-invoice-list"
 
-export const instant = false
-
 export default async function VendorInvoicesPage() {
   const { vendor } = await requireVendor()
 

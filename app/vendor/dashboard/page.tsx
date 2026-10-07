@@ -1,8 +1,6 @@
 import { requireVendor } from "@/lib/actions/auth"
 import { VendorDashboardClient } from "@/components/vendor/dashboard/vendor-dashboard-client"
 
-export const instant = false
-
 export default async function VendorDashboard() {
   const { vendor } = await requireVendor()
 

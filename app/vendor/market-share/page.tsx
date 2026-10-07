@@ -1,8 +1,6 @@
 import { requireVendor } from "@/lib/actions/auth"
 import { MarketShareClient } from "@/components/vendor/market-share/market-share-client"
 
-export const instant = false
-
 export default async function VendorMarketSharePage() {
   const { vendor } = await requireVendor()
 

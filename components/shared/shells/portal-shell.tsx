@@ -15,7 +15,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { SidebarNav } from "@/components/shared/shells/sidebar-nav"
+import { SidebarNav, SidebarNavList } from "@/components/shared/shells/sidebar-nav"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { CommandSearch } from "@/components/shared/shells/command-search"
 import { NotificationBell, NotificationBellPlaceholder } from "@/components/shared/notification-bell"
@@ -82,7 +82,9 @@ export function PortalShell({
         </SidebarHeader>
         <SidebarContent className="p-0">
           <ScrollArea className="flex-1 px-3 py-4">
-            <SidebarNav items={navItems} badgeCounts={badgeCounts} />
+            <Suspense fallback={<SidebarNavList items={navItems} badgeCounts={badgeCounts} pathname={null} />}>
+              <SidebarNav items={navItems} badgeCounts={badgeCounts} />
+            </Suspense>
           </ScrollArea>
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-4">

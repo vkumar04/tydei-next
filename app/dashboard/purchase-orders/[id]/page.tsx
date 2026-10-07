@@ -3,8 +3,6 @@ import { getPurchaseOrder } from "@/lib/actions/purchase-orders"
 import { PageHeader } from "@/components/shared/page-header"
 import { PODetailView } from "@/components/facility/purchase-orders/po-detail"
 
-export const instant = false
-
 interface Props {
   params: Promise<{ id: string }>
 }

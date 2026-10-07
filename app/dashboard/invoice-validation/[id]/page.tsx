@@ -3,8 +3,6 @@ import { getInvoice, validateInvoice } from "@/lib/actions/invoices"
 import { PageHeader } from "@/components/shared/page-header"
 import { InvoiceValidationDetail } from "@/components/facility/invoices/invoice-validation-detail"
 
-export const instant = false
-
 interface Props {
   params: Promise<{ id: string }>
 }

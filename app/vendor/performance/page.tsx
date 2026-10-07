@@ -1,8 +1,6 @@
 import { requireVendor } from "@/lib/actions/auth"
 import { PerformanceClient } from "@/components/vendor/performance/performance-client"
 
-export const instant = false
-
 export default async function VendorPerformancePage() {
   const { vendor } = await requireVendor()
 

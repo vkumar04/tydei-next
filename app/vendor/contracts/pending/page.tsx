@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft, Plus } from "lucide-react"
 
-export const instant = false
-
 export default async function VendorPendingContractsPage() {
   const { vendor } = await requireVendor()
 

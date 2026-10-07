@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { Plus, ClipboardList } from "lucide-react"
 
-export const instant = false
-
 export default async function VendorContractsPage() {
   const { vendor } = await requireVendor()
 

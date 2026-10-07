@@ -1,8 +1,6 @@
 import { VendorContractEditClient } from "@/components/vendor/contracts/vendor-contract-edit-client"
 import { requireVendor } from "@/lib/actions/auth"
 
-export const instant = false
-
 export default async function VendorContractEditPage({
   params,
 }: {

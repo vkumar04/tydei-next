@@ -4,8 +4,6 @@ import { queryKeys } from "@/lib/query-keys"
 import { getPriceDiscrepancies } from "@/lib/actions/reports"
 import { PriceDiscrepancyClient } from "./price-discrepancy-client"
 
-export const instant = false
-
 // Server prefetches the discrepancies on this request, ships dehydrated
 // state to the client, and the client's useQuery rehydrates without an
 // extra round-trip. First paint shows data instead of a Skeleton.

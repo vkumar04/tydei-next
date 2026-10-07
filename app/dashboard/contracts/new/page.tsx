@@ -4,8 +4,6 @@ import { NewContractClient } from "@/components/contracts/new-contract-client"
 import { requireFacility } from "@/lib/actions/auth"
 import { mappedCategoryUniverse } from "@/lib/contracts/mapped-category-universe"
 
-export const instant = false
-
 export default async function NewContractPage() {
   // Charles 2026-04-25 (audit follow-up — auth-gate scanner): every
   // /dashboard/* page must explicitly gate on `requireFacility()`

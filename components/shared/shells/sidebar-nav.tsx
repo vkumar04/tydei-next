@@ -14,9 +14,16 @@ interface SidebarNavProps {
   badgeCounts?: BadgeCounts
 }
 
-export function SidebarNav({ items, badgeCounts }: SidebarNavProps) {
+export function SidebarNav(props: SidebarNavProps) {
   const pathname = usePathname()
+  return <SidebarNavList {...props} pathname={pathname} />
+}
 
+export function SidebarNavList({
+  items,
+  badgeCounts,
+  pathname,
+}: SidebarNavProps & { pathname: string | null }) {
   return (
     <nav className="flex flex-col gap-1">
       <motion.div
@@ -27,11 +34,12 @@ export function SidebarNav({ items, badgeCounts }: SidebarNavProps) {
       >
         {items.map((item) => {
           const isActive =
-            pathname === item.href ||
+            pathname !== null &&
+            (pathname === item.href ||
             (item.href !== "/dashboard" &&
               item.href !== "/vendor/dashboard" &&
               item.href !== "/admin/dashboard" &&
-              pathname.startsWith(item.href))
+              pathname.startsWith(item.href)))
 
           const IconComponent = Icons[
             item.icon as keyof typeof Icons
