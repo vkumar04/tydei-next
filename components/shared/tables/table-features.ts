@@ -133,3 +133,7 @@ export type TableCellContext<TData extends RowData, TValue = unknown> = TanStack
   TData,
   TValue
 >
+
+export function sortingEnabledFor(rowCount: number): boolean {
+  return rowCount > 0
+}

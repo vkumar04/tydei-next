@@ -692,6 +692,11 @@ test.describe("cog data", () => {
       ).toBeVisible()
     }
 
+    await expect(
+      content(page).getByRole("cell", { name: /^PO-/ }).first(),
+      "COG rows must finish loading before the sort header is clickable",
+    ).toBeVisible({ timeout: LOAD })
+
     const description = page
       .getByRole("columnheader", { name: "Description", exact: true })
       .first()

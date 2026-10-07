@@ -14,6 +14,7 @@ import {
 import {
   dataTableFeatures,
   filterFnForVariant,
+  sortingEnabledFor,
   type DataTableFeatures,
   type ColumnDef,
 } from "@/components/shared/tables/table-features"
@@ -105,6 +106,7 @@ export function DataTable<TData extends RowData>({
     // turned on by default is disabled to keep selection semantics
     // byte-identical to the v8 tables.
     enableRowRangeSelection: false,
+    enableSorting: sortingEnabledFor(data.length),
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange,
