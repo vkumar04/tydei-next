@@ -18,6 +18,7 @@ import { revalidatePath } from "next/cache"
 import {
   invalidateContractAnalytics,
   invalidateFacilityAnalytics,
+  invalidateVendorAnalytics,
 } from "@/lib/actions/analytics/_cache"
 import { idempotencyGet, idempotencyPut } from "@/lib/idempotency"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
@@ -452,6 +453,7 @@ async function _createContractImpl(
     await invalidateFacilityAnalytics(contract.facilityId)
   }
   await invalidateContractAnalytics(contract.id)
+  await invalidateVendorAnalytics(contract.vendorId)
 
   const result = serialize(contract)
 

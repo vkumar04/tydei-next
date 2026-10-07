@@ -15,6 +15,9 @@
  */
 
 import { prisma } from "@/lib/db"
+import { cacheLife, cacheTag } from "next/cache"
+import { facilityAnalyticsTag } from "@/lib/actions/analytics/_cached"
+import { floorToHour } from "@/lib/dates/floor-to-hour"
 import { excludeNonInboxAlerts } from "@/lib/alerts/alert-scope"
 import { ContractStatus } from "@/lib/generated/prisma/client"
 import { requireFacility } from "@/lib/actions/auth"
@@ -111,8 +114,16 @@ function extractDollarImpact(
  */
 export async function getDashboardKPISummary(): Promise<DashboardKPISummary> {
   const { facility } = await requireFacility()
-  const facilityId = facility.id
-  const referenceDate = new Date()
+  return computeDashboardKPISummary(facility.id, floorToHour(new Date()))
+}
+
+async function computeDashboardKPISummary(
+  facilityId: string,
+  referenceDate: Date,
+): Promise<DashboardKPISummary> {
+  "use cache"
+  cacheTag(facilityAnalyticsTag(facilityId))
+  cacheLife("minutes")
 
   const facilityContractFilter = {
     ...contractsOwnedByFacility(facilityId),

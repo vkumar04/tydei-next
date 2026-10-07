@@ -9,6 +9,9 @@
  */
 
 import { prisma } from "@/lib/db"
+import { cacheLife, cacheTag } from "next/cache"
+import { facilityAnalyticsTag } from "@/lib/actions/analytics/_cached"
+import { floorToHour } from "@/lib/dates/floor-to-hour"
 import { requireFacility } from "@/lib/actions/auth"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import {
@@ -31,8 +34,19 @@ export async function getDashboardCharts(options?: {
   referenceDate?: Date
 }): Promise<DashboardChartsPayload> {
   const { facility } = await requireFacility()
-  const referenceDate = options?.referenceDate ?? new Date()
+  const referenceDate = options?.referenceDate ?? floorToHour(new Date())
   const months = options?.months ?? 12
+  return computeDashboardCharts(facility.id, months, referenceDate)
+}
+
+async function computeDashboardCharts(
+  facilityId: string,
+  months: number,
+  referenceDate: Date,
+): Promise<DashboardChartsPayload> {
+  "use cache"
+  cacheTag(facilityAnalyticsTag(facilityId))
+  cacheLife("minutes")
 
   // Pre-build the date window for spend/rebate queries.
   const windowStart = new Date(
@@ -45,7 +59,7 @@ export async function getDashboardCharts(options?: {
 
   const [contracts, cogRecords, rebates] = await Promise.all([
     prisma.contract.findMany({
-      where: contractsOwnedByFacility(facility.id),
+      where: contractsOwnedByFacility(facilityId),
       select: {
         status: true,
         effectiveDate: true,
@@ -54,7 +68,7 @@ export async function getDashboardCharts(options?: {
     }),
     prisma.cOGRecord.findMany({
       where: {
-        facilityId: facility.id,
+        facilityId: facilityId,
         transactionDate: { gte: windowStart, lte: referenceDate },
       },
       select: {
@@ -64,7 +78,7 @@ export async function getDashboardCharts(options?: {
     }),
     prisma.rebate.findMany({
       where: {
-        facilityId: facility.id,
+        facilityId: facilityId,
         payPeriodEnd: { gte: windowStart, lte: referenceDate },
       },
       select: {

@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { invalidateFacilityAnalytics } from "@/lib/actions/analytics/_cache"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import {
@@ -140,6 +141,7 @@ export async function createCOGRecord(input: CreateCOGRecordInput) {
     }
   }
 
+  await invalidateFacilityAnalytics(session.facility.id)
   return serialize(record)
 }
 
@@ -215,6 +217,7 @@ export async function deleteCOGRecord(id: string) {
   const { facility } = await requireFacility()
   await requireCanMutate()
   await prisma.cOGRecord.delete({ where: { id, facilityId: facility.id } })
+  await invalidateFacilityAnalytics(facility.id)
 }
 
 // ─── Bulk Delete ────────────────────────────────────────────────
@@ -225,6 +228,7 @@ export async function bulkDeleteCOGRecords(ids: string[]) {
   const result = await prisma.cOGRecord.deleteMany({
     where: { id: { in: ids }, facilityId: facility.id },
   })
+  await invalidateFacilityAnalytics(facility.id)
   return { deleted: result.count }
 }
 
@@ -236,6 +240,7 @@ export async function clearAllCOGRecords() {
   const result = await prisma.cOGRecord.deleteMany({
     where: { facilityId: facility.id },
   })
+  await invalidateFacilityAnalytics(facility.id)
   return { deleted: result.count }
 }
 
@@ -254,6 +259,7 @@ export async function deleteCOGFileByDate(dateStr: string) {
       createdAt: { gte: date, lt: nextDay },
     },
   })
+  await invalidateFacilityAnalytics(facility.id)
   return { deleted: result.count }
 }
 
@@ -279,6 +285,7 @@ export async function updateCOGRecord(
       ? data.unitCost * data.quantity
       : undefined
 
+  await invalidateFacilityAnalytics(facility.id)
   return serialize(
     await prisma.cOGRecord.update({
       where: { id, facilityId: facility.id },

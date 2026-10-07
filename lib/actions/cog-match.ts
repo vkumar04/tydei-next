@@ -18,6 +18,7 @@
  * contractId, etc.) are written by recomputeMatchStatusesForVendor.
  */
 import { prisma } from "@/lib/db"
+import { invalidateFacilityAnalytics } from "@/lib/actions/analytics/_cache"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { resolveVendorIdsBulk } from "@/lib/vendors/resolve"
@@ -128,6 +129,7 @@ export async function matchCOGToContracts(): Promise<{
     },
   })
 
+  await invalidateFacilityAnalytics(facility.id)
   return {
     totalRecords,
     vendorsMatched,

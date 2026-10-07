@@ -15,6 +15,8 @@
  */
 import { timingSafeEqual } from "node:crypto"
 import { connection } from "next/server"
+import { revalidateTag } from "next/cache"
+import { facilityAnalyticsTag } from "@/lib/actions/analytics/_cached"
 import { prisma } from "@/lib/db"
 import { runAlertSynthesisForFacility } from "@/lib/alerts/synthesize-persist"
 
@@ -48,6 +50,7 @@ export async function GET(request: Request) {
   for (const f of facilities) {
     try {
       const result = await runAlertSynthesisForFacility(f.id)
+      revalidateTag(facilityAnalyticsTag(f.id), { expire: 0 })
       created += result.created
       resolved += result.resolved
     } catch (err) {

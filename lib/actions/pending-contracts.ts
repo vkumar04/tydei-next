@@ -2,6 +2,7 @@
 
 import { ZodError } from "zod"
 import { prisma } from "@/lib/db"
+import { invalidateContractAnalytics, invalidateFacilityAnalytics, invalidateVendorAnalytics } from "@/lib/actions/analytics/_cache"
 import type { Prisma, PendingContract } from "@/lib/generated/prisma/client"
 import { requireVendor, requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
@@ -468,6 +469,9 @@ async function materializePending(
   // helps if the vendor reloads (which is the usual flow).
   revalidatePath("/vendor/contracts")
   revalidatePath(`/vendor/contracts/${contract.id}`)
+  await invalidateContractAnalytics(contract.id)
+  await invalidateVendorAnalytics(pending.vendorId)
+  if (facilityId) await invalidateFacilityAnalytics(facilityId)
   if (facilityId) {
     revalidatePath("/dashboard/contracts")
     revalidatePath(`/dashboard/contracts/${contract.id}`)

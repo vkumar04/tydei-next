@@ -18,6 +18,7 @@ import { revalidatePath } from "next/cache"
 import {
   invalidateContractAnalytics,
   invalidateFacilityAnalytics,
+  invalidateVendorAnalytics,
 } from "@/lib/actions/analytics/_cache"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeCaseSupplyContractStatus } from "@/lib/case-costing/recompute-supply"
@@ -247,6 +248,7 @@ async function _updateContractImpl(
   revalidatePath(`/dashboard/contracts/${id}`)
   revalidatePath("/dashboard")
   await invalidateContractAnalytics(id)
+  await invalidateVendorAnalytics(contract.vendorId)
   if (contract.facilityId) {
     await invalidateFacilityAnalytics(contract.facilityId)
   }
