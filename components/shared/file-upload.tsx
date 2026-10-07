@@ -16,17 +16,20 @@ export function FileUpload({ onUpload, accept, label = "Upload file", existingUr
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [url, setUrl] = useState(existingUrl ?? "")
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   async function handleFile(file: File) {
+    setError(null)
     setUploading(true)
     setProgress(30)
     try {
       const result = await onUpload(file)
       setProgress(100)
       setUrl(result)
-    } catch {
+    } catch (err) {
       setProgress(0)
+      setError(err instanceof Error ? err.message : `Upload of ${file.name} failed`)
     } finally {
       setUploading(false)
     }
@@ -48,16 +51,21 @@ export function FileUpload({ onUpload, accept, label = "Upload file", existingUr
         <div className="flex items-center gap-2 rounded-md border p-2">
           <FileText className="size-4 text-muted-foreground" />
           <span className="flex-1 truncate text-sm">{url.split("/").pop()}</span>
-          <Button variant="ghost" size="icon" onClick={() => setUrl("")}>
+          <Button type="button" variant="ghost" size="icon" onClick={() => setUrl("")}>
             <X className="size-4" />
           </Button>
         </div>
       ) : (
-        <Button variant="outline" onClick={() => inputRef.current?.click()} disabled={uploading}>
+        <Button type="button" variant="outline" onClick={() => inputRef.current?.click()} disabled={uploading}>
           <Upload className="size-4" /> {label}
         </Button>
       )}
       {uploading && <Progress value={progress} className="h-1.5" />}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   )
 }

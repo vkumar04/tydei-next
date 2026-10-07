@@ -1,5 +1,6 @@
 "use server"
 
+import { roundToCents } from "@/lib/money/round"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
@@ -483,7 +484,9 @@ export async function importCaseSupplies(input: {
   )
 
   for (const supply of input.supplies) {
-    const extCost = supply.usedCost * (supply.quantity ?? 1)
+    const extCost = roundToCents(
+      supply.extendedCost ?? supply.usedCost * (supply.quantity ?? 1),
+    )
     if (existingKeys.has(`${supply.vendorItemNo ?? ""}|${extCost}`)) {
       continue
     }
@@ -492,7 +495,7 @@ export async function importCaseSupplies(input: {
         caseId: input.caseId,
         materialName: supply.materialName,
         vendorItemNo: supply.vendorItemNo,
-        usedCost: supply.usedCost,
+        usedCost: roundToCents(supply.usedCost),
         quantity: supply.quantity ?? 1,
         extendedCost: extCost,
         isOnContract: supply.isOnContract ?? false,

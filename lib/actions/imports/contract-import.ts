@@ -11,7 +11,7 @@ import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
-import type { RichContractExtractData } from "@/lib/ai/schemas"
+import type { ImportableContractExtract } from "@/lib/ai/contract-extract-mapper"
 import { normalizeAIRebateValue } from "@/lib/contracts/rebate-value-normalize"
 import {
   findOrCreateVendorByName,
@@ -23,7 +23,7 @@ import {
 } from "./shared"
 
 export type IngestContractInput = {
-  extracted: RichContractExtractData
+  extracted: ImportableContractExtract
   sourceFilename?: string
   s3Key?: string
 }
@@ -118,7 +118,8 @@ export async function ingestExtractedContracts(
           status: "active",
           effectiveDate,
           expirationDate,
-          totalValue: extracted.tieInDetails?.capitalEquipmentValue ?? 0,
+          totalValue:
+            extracted.totalValue ?? extracted.tieInDetails?.capitalEquipmentValue ?? 0,
           description:
             extracted.specialConditions && extracted.specialConditions.length > 0
               ? extracted.specialConditions.join(" · ")

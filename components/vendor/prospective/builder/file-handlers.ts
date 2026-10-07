@@ -449,8 +449,11 @@ export async function handlePricingRowsImport(
       }
 
       setNewProposal(prev => {
+        let mergedProducts = products
+        let mergedVolume = totalVolume
         if (prev.products.length > 0 && prev.products.some(p => !p.fromPricingFile)) {
           const existingUsage = prev.products.filter(p => !p.fromPricingFile)
+          const matchedUsage = new Set<(typeof existingUsage)[number]>()
 
           const normalizeRef = (ref: string): string => {
             return (ref || "").toString().trim().toLowerCase()
@@ -476,6 +479,7 @@ export async function handlePricingRowsImport(
               )
             })
             if (usageMatch) {
+              matchedUsage.add(usageMatch)
               product.projectedVolume = usageMatch.projectedVolume || product.projectedVolume
               product.historicalAvgPrice = usageMatch.historicalAvgPrice
               product.historicalAvgVolume = usageMatch.historicalAvgVolume
@@ -485,6 +489,8 @@ export async function handlePricingRowsImport(
             }
           }
 
+          mergedProducts = [...products, ...existingUsage.filter(u => !matchedUsage.has(u))]
+          mergedVolume = mergedProducts.reduce((sum, p) => sum + (p.projectedVolume || 0), 0)
           toast.success(`Merged pricing with usage: ${matched} matched of ${products.length} products`)
         }
 
@@ -495,12 +501,12 @@ export async function handlePricingRowsImport(
         )
         return {
           ...prev,
-          products: products,
+          products: mergedProducts,
           // projectedSpend is a USER-OWNED assumption (Vick: "list ≠
           // entered value") — files only SEED it when it's still 0,
           // never overwrite a typed value.
           projectedSpend: prev.projectedSpend > 0 ? prev.projectedSpend : toCents(totalSpend),
-          projectedVolume: totalVolume,
+          projectedVolume: mergedVolume,
           productCategory:
             prev.productCategory ||
             detectedCategory ||

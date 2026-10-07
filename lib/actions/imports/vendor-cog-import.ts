@@ -30,7 +30,6 @@ import { requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { prisma } from "@/lib/db"
 import { logAudit } from "@/lib/audit"
-import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { recomputeMatchStatusesForVendorCog } from "@/lib/cog/vendor-cog-recompute"
 import { parseMoney, parseDate } from "./shared"
 import {
@@ -226,10 +225,7 @@ export async function bulkImportVendorCogRecords(
       const extendedPrice =
         explicitExtended > 0 ? explicitExtended : unitCost * quantity
 
-      const rawCategory = cell(row, "category") || undefined
-      const category = rawCategory
-        ? canonicalizeCategoryName(rawCategory) || rawCategory
-        : null
+      const category = cell(row, "category").trim() || null
 
       return {
         vendorId,

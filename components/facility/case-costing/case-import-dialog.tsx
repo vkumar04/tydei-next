@@ -255,7 +255,7 @@ export function CaseImportDialog({
       >()
       const supplyRecords = new Map<
         string,
-        Array<{ itemNo: string; name: string; cost: number; qty: number }>
+        Array<{ itemNo: string; name: string; cost: number; qty: number; extended: number }>
       >()
 
       // Step 1: Validate
@@ -341,22 +341,21 @@ export function CaseImportDialog({
               ]) ||
               materialName.match(/ - ([A-Za-z0-9\-.]+)$/)?.[1] ||
               ""
-            const cost =
-              parseFloat(
-                findValue(r, [
-                  "used cost",
-                  "usedcost",
-                  "unit cost",
-                  "unitcost",
-                  "cost",
-                  "price",
-                  "amount",
-                  "extended cost",
-                  "extendedcost",
-                  "total cost",
-                  "totalcost",
-                ]) || "0"
-              ) || 0
+            const lineTotalRaw = findValue(r, [
+              "used cost",
+              "usedcost",
+              "extended cost",
+              "extendedcost",
+              "total cost",
+              "totalcost",
+            ])
+            const unitRaw = findValue(r, [
+              "unit cost",
+              "unitcost",
+              "cost",
+              "price",
+              "amount",
+            ])
             const qty =
               parseInt(
                 findValue(r, [
@@ -370,7 +369,11 @@ export function CaseImportDialog({
                   "units",
                 ]) || "1"
               ) || 1
-            supplyRecords.get(caseId)!.push({ itemNo, name: materialName, cost, qty })
+            const lineTotal = lineTotalRaw ? parseFloat(lineTotalRaw) || 0 : null
+            const unit = unitRaw ? parseFloat(unitRaw) || 0 : null
+            const extended = lineTotal ?? (unit ?? 0) * qty
+            const cost = unit ?? extended / qty
+            supplyRecords.get(caseId)!.push({ itemNo, name: materialName, cost, qty, extended })
           }
         })
 
@@ -494,7 +497,7 @@ export function CaseImportDialog({
         const supplies = supplyRecords.get(caseId) ?? []
 
         const totalSpend = supplies.reduce(
-          (sum, s) => sum + s.cost * s.qty,
+          (sum, s) => sum + s.extended,
           0
         )
 
@@ -557,6 +560,7 @@ export function CaseImportDialog({
               materialName: s.name || "Unknown material",
               vendorItemNo: s.itemNo || undefined,
               usedCost: s.cost,
+              extendedCost: s.extended,
               quantity: s.qty,
               isOnContract: false,
             })),

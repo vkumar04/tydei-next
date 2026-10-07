@@ -29,6 +29,7 @@ export const caseSupplyInputSchema = z.object({
   materialName: z.string().min(1, "Material name is required"),
   vendorItemNo: z.string().optional(),
   usedCost: z.number().min(0),
+  extendedCost: z.number().min(0).optional(),
   quantity: z.number().int().min(1).default(1),
   isOnContract: z.boolean().default(false),
   contractId: z.string().optional(),

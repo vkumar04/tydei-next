@@ -356,7 +356,7 @@ describe("ingestProformaMatrix", () => {
       ["Salary and benefits", "10"],
     ]
     await expect(ingestProformaMatrix(thin, { fileName: "pl.csv", adhocName: "N" })).rejects.toThrow(
-      "Only 2 P&L lines were recognized (missing medicalSupplies).",
+      "Only 2 P&L lines were recognized (missing medical supplies).",
     )
     expect(proformaUpsert).not.toHaveBeenCalled()
   })

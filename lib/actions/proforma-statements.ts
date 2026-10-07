@@ -122,11 +122,11 @@ export async function ingestProformaMatrix(
   // silently zero the rest and produce a confidently wrong NOI. Require the
   // lines the model actually depends on, not merely "something matched".
   const MIN_MATCHED = 5
-  const required: (keyof typeof parsed.lineItems)[] = [
-    "standardBillingRevenue",
-    "medicalSupplies",
-  ]
-  const missing = required.filter((f) => !parsed.matchedFields.includes(f))
+  const required = [
+    ["standardBillingRevenue", "standard billing revenue"],
+    ["medicalSupplies", "medical supplies"],
+  ] as const satisfies readonly (readonly [keyof typeof parsed.lineItems, string])[]
+  const missing = required.filter(([f]) => !parsed.matchedFields.includes(f)).map(([, label]) => label)
   if (parsed.matchedFields.length < MIN_MATCHED || missing.length > 0) {
     throw new ImportValidationError(
       `Only ${parsed.matchedFields.length} P&L line${parsed.matchedFields.length === 1 ? "" : "s"} were recognized${
