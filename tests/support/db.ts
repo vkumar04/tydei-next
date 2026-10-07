@@ -49,3 +49,37 @@ export async function vendorIdForUser(email = "demo-vendor@tydei.com"): Promise<
   if (!id) throw new Error(`no vendor linked to ${email}`)
   return id
 }
+
+export async function vendorIdByName(name: string): Promise<string> {
+  const id = await scalar<string | null>(`select id from vendor where name = $1 limit 1`, [name])
+  if (!id) throw new Error(`vendor "${name}" not found — is the database seeded?`)
+  return id
+}
+
+export async function createScratchContract(name: string, vendorName = "Stryker"): Promise<string> {
+  const facilityId = await facilityIdByName()
+  const vendorId = await vendorIdByName(vendorName)
+  const id = `e2e-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`
+  await withDb((c) =>
+    c.query(
+      `insert into contract (id, name, "vendorId", "facilityId", "contractType", status, "effectiveDate", "expirationDate", "updatedAt")
+       values ($1, $2, $3, $4, 'usage', 'active', '2026-01-01', '2028-12-31', now())`,
+      [id, name, vendorId, facilityId],
+    ),
+  )
+  return id
+}
+
+export async function deleteContract(id: string): Promise<void> {
+  await withDb(async (c) => {
+    for (const sql of [
+      `delete from contract_pricing where "contractId" = $1`,
+      `delete from contract_tier where "termId" in (select id from contract_term where "contractId" = $1)`,
+      `delete from contract_term where "contractId" = $1`,
+      `delete from contract_document where "contractId" = $1`,
+      `delete from contract where id = $1`,
+    ]) {
+      await c.query(sql, [id]).catch(() => undefined)
+    }
+  })
+}

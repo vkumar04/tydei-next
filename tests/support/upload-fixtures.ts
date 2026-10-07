@@ -220,3 +220,47 @@ export function cogMatrix(rows: CogFixtureRow[]): Cell[][] {
 export function cogTotal(rows: CogFixtureRow[]): number {
   return Math.round(rows.reduce((a, r) => a + Math.round(r.quantity * r.unitCost * 100) / 100, 0) * 100) / 100
 }
+
+export interface PricingFixtureRow {
+  vendorItemNo: string
+  manufacturerNo: string
+  description: string
+  listPrice: number
+  contractPrice: number
+  category: string
+  uom: string
+}
+
+export function pricingFixtureRows(count: number, seed = 1): PricingFixtureRow[] {
+  const categories = ["Joint Replacement", "Spine", "Sports Medicine", "Arthroscopy"]
+  return Array.from({ length: count }, (_, i) => {
+    const list = 100 + ((i * 37 + seed * 11) % 4900)
+    return {
+      vendorItemNo: `PX-${String(seed).padStart(2, "0")}-${String(i).padStart(5, "0")}`,
+      manufacturerNo: `MFG-${seed}-${i}`,
+      description: `Pricing Fixture Item ${i}`,
+      listPrice: list,
+      contractPrice: Math.round(list * 0.82 * 100) / 100,
+      category: categories[i % categories.length]!,
+      uom: i % 3 === 0 ? "BX" : "EA",
+    }
+  })
+}
+
+export const PRICING_HEADER_VENDOR_STYLE: Cell[] = [
+  "CATALOG NO",
+  "MFG PART #",
+  "ITEM DESCRIPTION",
+  "LIST PRICE",
+  "NET PRICE",
+  "PRODUCT LINE",
+  "UOM",
+  "EFFECTIVE DATE",
+]
+
+export function pricingMatrix(rows: PricingFixtureRow[], effective = new Date(Date.UTC(2026, 0, 1))): Cell[][] {
+  return [
+    PRICING_HEADER_VENDOR_STYLE,
+    ...rows.map((r) => [r.vendorItemNo, r.manufacturerNo, r.description, r.listPrice, r.contractPrice, r.category, r.uom, effective]),
+  ]
+}
