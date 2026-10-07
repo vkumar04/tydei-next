@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test"
+import { test, expect } from "../support/test"
 
 /**
  * E2E: regression guards for the eight issues Charles reported and we

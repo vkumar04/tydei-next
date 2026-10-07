@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test"
+import { test, expect } from "../support/test"
 import { browserSignIn } from "../support/sign-in"
 
 const POLLED_ROUTES = ["/api/alerts/unread-count", "/api/notifications"]
