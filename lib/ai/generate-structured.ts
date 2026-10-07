@@ -123,9 +123,12 @@ export function tryUnwrapEnvelope<T>(
   const entries = Object.entries(parsed as Record<string, unknown>)
   if (entries.length !== 1) return null
   const [key, value] = entries[0]
-  if (!/^(input|data|response|result|output|payload)$/i.test(key)) return null
+  if (!/^(input|data|response|result|output|payload|parameters|arguments|args)$/i.test(key)) {
+    return null
+  }
   const res = schema.safeParse(value)
-  return res.success ? res.data : null
+  if (res.success) return res.data
+  return decodeStringifiedFields(schema, value)
 }
 
 export function tryDecodeStringifiedFields<T>(
@@ -134,12 +137,14 @@ export function tryDecodeStringifiedFields<T>(
 ): T | null {
   const text = (err as { text?: unknown } | null)?.text
   if (typeof text !== "string" || !text) return null
-  let parsed: unknown
   try {
-    parsed = JSON.parse(text)
+    return decodeStringifiedFields(schema, JSON.parse(text))
   } catch {
     return null
   }
+}
+
+function decodeStringifiedFields<T>(schema: z.ZodSchema<T>, parsed: unknown): T | null {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     return null
   }

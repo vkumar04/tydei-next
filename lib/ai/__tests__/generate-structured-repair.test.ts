@@ -161,3 +161,17 @@ describe("tryDecodeStringifiedFields", () => {
     expect(generateTextMock).toHaveBeenCalledTimes(1)
   })
 })
+
+describe("tool-call envelopes", () => {
+  const listSchema = z.object({ clauses: z.array(z.object({ category: z.string() })) })
+  const clauses = [{ category: "REBATE" }]
+
+  it("unwraps a parameters envelope", () => {
+    expect(tryUnwrapEnvelope(listSchema, { text: JSON.stringify({ parameters: { clauses } }) })).toEqual({ clauses })
+  })
+
+  it("unwraps an envelope whose field is stringified", () => {
+    const text = JSON.stringify({ arguments: { clauses: JSON.stringify(clauses) } })
+    expect(tryUnwrapEnvelope(listSchema, { text })).toEqual({ clauses })
+  })
+})
