@@ -63,7 +63,7 @@ function bulkInput(): { facilityId: string; records: Record<string, unknown>[]; 
 }
 
 describe("ingestCOGRecordsRows", () => {
-  it("returns an all-zero result for no rows without mapping, auth, or writes", async () => {
+  it("authenticates and returns an all-zero result for no rows without mapping or writes", async () => {
     expect(await ingestCOGRecordsRows([], "empty.csv")).toEqual({
       imported: 0,
       overwritten: 0,
@@ -74,7 +74,7 @@ describe("ingestCOGRecordsRows", () => {
       onContractRate: 0,
     })
     expect(mapColumnsWithAI).not.toHaveBeenCalled()
-    expect(requireFacility).not.toHaveBeenCalled()
+    expect(requireFacility).toHaveBeenCalledTimes(1)
     expect(bulkImportCOGRecords).not.toHaveBeenCalled()
   })
 
@@ -174,10 +174,10 @@ describe("ingestCOGRecordsRows", () => {
     expect(bulkInput().records[0]).toMatchObject({ poNumber: "PO-KEEP" })
   })
 
-  it("reports every row skipped and never authenticates or writes when no row is importable", async () => {
+  it("authenticates, reports every row skipped, and never writes when no row is importable", async () => {
     const result = await ingestCOGRecordsRows([row({ Vendor: "" }), row({ "Transaction Date": "" })])
     expect(result).toEqual({ imported: 0, overwritten: 0, skipped: 2, errors: 0, matched: 0, unmatched: 0, onContractRate: 0 })
-    expect(requireFacility).not.toHaveBeenCalled()
+    expect(requireFacility).toHaveBeenCalledTimes(1)
     expect(bulkImportCOGRecords).not.toHaveBeenCalled()
     expect(auditLogCreate).not.toHaveBeenCalled()
   })
@@ -196,7 +196,7 @@ describe("ingestCOGRecordsRows", () => {
         action: "cog.imported_via_mass_upload",
         entityType: "cog_record",
         entityId: null,
-        metadata: { ...BULK_RESULT, fileName: "Primary COG.xlsx", rowCount: 3 },
+        metadata: { ...BULK_RESULT, skipped: BULK_RESULT.skipped + 1, fileName: "Primary COG.xlsx", rowCount: 3 },
         ipAddress: null,
       },
     })
@@ -225,13 +225,15 @@ describe("ingestCOGRecordsRows", () => {
     expect(bulkImportCOGRecords).not.toHaveBeenCalled()
   })
 
-  it.fails("authenticates before calling the AI column mapper (an unauthenticated direct action call spends an Anthropic request)", async () => {
+  it(
+    "authenticates before calling the AI column mapper", async () => {
     requireFacility.mockRejectedValue(new Error("Your session has expired."))
     await expect(ingestCOGRecordsRows([row()])).rejects.toThrow()
     expect(mapColumnsWithAI).not.toHaveBeenCalled()
   })
 
-  it.fails("counts rows dropped for a missing vendor or date in the skipped total when other rows import", async () => {
+  it(
+    "counts rows dropped for a missing vendor or date in the skipped total when other rows import", async () => {
     const result = await ingestCOGRecordsRows([row(), row({ Vendor: "" }), row({ "Transaction Date": "" })])
     expect(result.skipped).toBe(BULK_RESULT.skipped + 2)
   })
