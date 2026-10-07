@@ -5,8 +5,6 @@ import { CapabilitiesSection } from "@/components/marketing/capabilities-section
 import { CtaSection } from "@/components/marketing/cta-section"
 import { siteUrl } from "@/lib/site-url"
 
-export const instant = false
-
 // Rich-result structured data: Organization + the product as a
 // SoftwareApplication, so search engines understand what TYDEi is.
 const jsonLd = {

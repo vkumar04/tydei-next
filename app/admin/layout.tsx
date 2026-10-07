@@ -1,28 +1,25 @@
-import { requireRole } from "@/lib/actions/auth"
+import { Suspense } from "react"
 import { adminNav } from "@/lib/constants"
 import { PortalShell } from "@/components/shared/shells/portal-shell"
+import { PortalUserMenu, UserMenuSkeleton } from "@/components/shared/shells/portal-user-menu"
+import { AdminGate } from "@/components/shared/auth/access-gate"
+import Loading from "./loading"
 
-export const instant = false
-
-export default async function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const session = await requireRole("admin")
-
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <PortalShell
       // oxlint-disable-next-line jsx-a11y/aria-role -- `role` is a typed PortalShell prop (PortalRole), not an HTML ARIA attribute; it never reaches the DOM.
       role="admin"
       navItems={adminNav}
-      user={{
-        name: session.user.name,
-        email: session.user.email,
-        image: session.user.image,
-      }}
+      userMenu={
+        <Suspense fallback={<UserMenuSkeleton />}>
+          <PortalUserMenu role="admin" />
+        </Suspense>
+      }
     >
-      {children}
+      <Suspense fallback={<Loading />}>
+        <AdminGate>{children}</AdminGate>
+      </Suspense>
     </PortalShell>
   )
 }

@@ -51,6 +51,7 @@ const ALLOWLIST = new Set<string>([
   // trip with no security benefit since redirect() exits before
   // anything renders.
   "app/admin/page.tsx",
+  "app/vendor/page.tsx",
   "app/dashboard/purchase-orders/new/page.tsx",
   // Client-only ("use client") page — a server-side `await` guard
   // can't go here. The role gate must wrap this in a server layout

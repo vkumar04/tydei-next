@@ -3,8 +3,6 @@ import { MailCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { AuthCard } from "@/components/auth/auth-card"
 
-export const instant = false
-
 export default function SignUpSuccessPage() {
   return (
     <AuthCard title="Check Your Email">

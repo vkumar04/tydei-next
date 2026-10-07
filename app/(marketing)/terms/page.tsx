@@ -1,8 +1,6 @@
 import type { Metadata } from "next"
 import { LegalPage } from "@/components/marketing/legal-page"
 
-export const instant = false
-
 export const metadata: Metadata = {
   title: "Terms of Service",
   description:
