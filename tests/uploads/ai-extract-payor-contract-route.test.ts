@@ -10,6 +10,7 @@ const db = vi.hoisted(() => ({ member: { findFirst: vi.fn() } }))
 const uploadFile = vi.hoisted(() => vi.fn<(key: string, body: Uint8Array, type: string) => Promise<void>>())
 const recordClaudeUsage = vi.hoisted(() => vi.fn())
 const getSession = vi.hoisted(() => vi.fn())
+const denyUnlessPortalWriter = vi.hoisted(() => vi.fn<(userId: string, portal: "facility" | "vendor") => Promise<Response | null>>())
 
 vi.mock("ai", async (importActual) => ({
   ...(await importActual<typeof import("ai")>()),
@@ -19,6 +20,7 @@ vi.mock("ai", async (importActual) => ({
 }))
 vi.mock("@/lib/db", () => ({ prisma: db }))
 vi.mock("@/lib/storage", () => ({ uploadFile }))
+vi.mock("@/lib/api/import-route-auth", () => ({ denyUnlessPortalWriter }))
 vi.mock("@/lib/ai/record-usage", () => ({ recordClaudeUsage }))
 vi.mock("@/lib/auth-server", () => ({
   auth: { api: { getSession: (args: unknown) => getSession(args) } },
@@ -76,6 +78,7 @@ beforeEach(() => {
   seq += 1
   userId = `payor-user-${seq}`
   getSession.mockReset().mockResolvedValue({ user: { id: userId, name: "Rev Cycle", email: "rcm@lighthouse.test" } })
+  denyUnlessPortalWriter.mockReset().mockResolvedValue(null)
   ai.generateText.mockReset()
   ai.generateObject.mockReset()
   ai.streamObject.mockReset()
@@ -119,7 +122,8 @@ describe("POST /api/ai/extract-payor-contract — guards", () => {
     expect(ai.generateText).not.toHaveBeenCalled()
   })
 
-  it.fails("rejects an oversize declared content-length with 413 before buffering the body", async () => {
+  it(
+    "rejects an oversize declared content-length with 413 before buffering the body", async () => {
     expect((await POST(oversizeContentLengthRequest(URL))).status).toBe(413)
   })
 
@@ -127,13 +131,14 @@ describe("POST /api/ai/extract-payor-contract — guards", () => {
     expect((await POST(new Request(URL, { method: "POST", body: new FormData() }))).status).toBe(400)
   })
 
-  it.fails("rejects a vendor-portal caller", async () => {
-    db.member.findFirst.mockResolvedValue({ organization: { facility: null, vendor: { id: "ven-omx" } } })
+  it("rejects a caller who is not a facility writer", async () => {
+    denyUnlessPortalWriter.mockResolvedValue(Response.json({ error: "Not authorized" }, { status: 403 }))
     scriptModel()
     const { status } = await upload(fileOf(payorPdf, "bhhp.pdf", "application/pdf"))
     expect(status).toBe(403)
     expect(uploadFile).not.toHaveBeenCalled()
     expect(ai.generateText).not.toHaveBeenCalled()
+    expect(denyUnlessPortalWriter).toHaveBeenCalledWith(userId, "facility")
   })
 })
 

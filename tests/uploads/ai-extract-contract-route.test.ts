@@ -180,7 +180,7 @@ describe("POST /api/ai/extract-contract — guards", () => {
     expect(ai.generateObject).not.toHaveBeenCalled()
   })
 
-  it.fails("does not archive a rejected non-PDF upload to S3", async () => {
+  it("does not archive a rejected non-PDF upload to S3", async () => {
     await POST(multipartRequest(URL, { file: fileOf("plain text", "agreement.txt", "text/plain") }))
     expect(uploadFile).not.toHaveBeenCalled()
   })
@@ -375,7 +375,7 @@ describe("POST /api/ai/extract-contract — chunked path", () => {
     ai.generateObject.mockRejectedValue(noObjectError())
     const { status, body } = await uploadPdf(ninePagePdf, "nine.pdf")
     expect(status).toBe(502)
-    expect(body.error).toBe("AI extraction unavailable")
+    expect(body.error).toMatch(/^Contract extraction failed/)
     expect(body.details).toContain("tool input was empty")
     expect(ai.generateObject).toHaveBeenCalledTimes(6)
     expect(db.contractExtractionCache.upsert).not.toHaveBeenCalled()
@@ -397,7 +397,7 @@ describe("POST /api/ai/extract-contract — chunked path", () => {
     expect(recordClaudeUsage).not.toHaveBeenCalled()
   })
 
-  it.fails("names the contract-extraction action in the client error when every chunk fails", async () => {
+  it("names the contract-extraction action in the client error when every chunk fails", async () => {
     ai.generateObject.mockRejectedValue(new Error("prompt is too long"))
     const { body } = await uploadPdf(twelvePagePdf, "twelve.pdf")
     expect(body.error).toMatch(/contract extraction/i)

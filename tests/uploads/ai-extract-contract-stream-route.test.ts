@@ -204,6 +204,7 @@ describe("POST /api/ai/extract-contract/stream — cache", () => {
     expect(db.contractExtractionCache.findUnique).toHaveBeenCalledWith({
       where: { userId_fileHash: { userId, fileHash } },
     })
+    expect(recordClaudeUsage).not.toHaveBeenCalled()
     expect(ai.streamObject).not.toHaveBeenCalled()
     expect(uploadFile).not.toHaveBeenCalled()
   })
@@ -267,7 +268,7 @@ describe("POST /api/ai/extract-contract/stream — single streamed call", () => 
     expect(JSON.parse(text).vendorName).toBe(CONTRACT_FIXTURE.vendor)
   })
 
-  it.fails("records AI usage for a successful streamed extraction", async () => {
+  it("records AI usage for a successful streamed extraction", async () => {
     const extracted = fakeContract()
     scriptStream({ chunks: jsonPieces(extracted), object: extracted })
     await uploadPdf(textPdf)
@@ -292,6 +293,7 @@ describe("POST /api/ai/extract-contract/stream — chunked path", () => {
       chunked: { chunks: 1, pages: 2 },
       done: true,
     })
+    expect(recordClaudeUsage).toHaveBeenCalledTimes(1)
     expect(db.contractExtractionCache.upsert).toHaveBeenCalledTimes(1)
   })
 
