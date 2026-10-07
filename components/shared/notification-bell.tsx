@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { useSession } from "@/lib/auth"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,6 +34,8 @@ import { queryKeys } from "@/lib/query-keys"
 export function NotificationBell() {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { data: session, isPending: sessionPending } = useSession()
+  const signedIn = sessionPending || !!session
   type NotificationsData = Awaited<ReturnType<typeof getMyNotifications>>
   const NOTIF_KEY = queryKeys.notifications.all
   const { data } = useQuery({
@@ -48,6 +51,7 @@ export function NotificationBell() {
       return res.json()
     },
     refetchInterval: 30_000,
+    enabled: signedIn,
   })
 
   const nowIso = () => new Date().toISOString()
