@@ -54,7 +54,6 @@ const config: NextConfig = {
   experimental: {
     turbopackFileSystemCacheForBuild: false,
     turbopackGc: true,
-    turbopackLazyDynamicImports: true,
     // TypeScript 7 (Go-native) removed the JS compiler API Next's default
     // typecheck path requires; this flag shells out to the local `tsc` CLI
     // instead. REQUIRED while typescript >= 7 — without it `next build`
