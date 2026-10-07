@@ -252,7 +252,7 @@ describe("POST /api/ai/extract-amendment — extraction", () => {
     expect(uploadFile).toHaveBeenCalledWith(body.s3Key, expect.any(Uint8Array), "text/plain")
   })
 
-  it.fails("sends an uppercase .PDF upload with no MIME type to the model as a PDF", async () => {
+  it("sends an uppercase .PDF upload with no MIME type to the model as a PDF", async () => {
     scriptModel()
     await upload(fileOf(amendmentPdf, "AMENDMENT-1.PDF", ""))
     expect(fileParts(ai.generateText.mock.calls[0]![0])[0]!.mediaType).toBe("application/pdf")
@@ -277,7 +277,7 @@ describe("POST /api/ai/extract-amendment — extraction", () => {
     expect(recordClaudeUsage).not.toHaveBeenCalled()
   })
 
-  it.fails("names the amendment action in the client error and server log when the model fails", async () => {
+  it("names the amendment action in the client error and server log when the model fails", async () => {
     ai.generateText.mockRejectedValueOnce(new Error("Invalid request: context window exceeded"))
     const { body } = await upload(pdfFile())
     expect(body.error).toMatch(/amendment/i)

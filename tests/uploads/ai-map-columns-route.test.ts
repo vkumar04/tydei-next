@@ -133,7 +133,7 @@ describe("POST /api/ai/map-columns", () => {
     expect(await res.json()).toEqual({ error: "Mapping failed" })
   })
 
-  it.fails("rejects a malformed body with 400 instead of a 500", async () => {
+  it("rejects a malformed body with 400 instead of a 500", async () => {
     const res = await POST(mapRequest({ sourceHeaders: [], targetFields: COG_FIELDS }))
     expect(res.status).toBe(400)
   })

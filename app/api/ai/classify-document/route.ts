@@ -122,7 +122,8 @@ function extractDatePeriod(fileName: string): {
   ]
   const shortMonths = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
   for (let i = 0; i < monthNames.length; i++) {
-    if (fn.includes(monthNames[i]) || fn.includes(shortMonths[i])) {
+    const shortMonth = new RegExp(`(^|[^a-z])${shortMonths[i]}([^a-z]|$)`)
+    if (fn.includes(monthNames[i]) || shortMonth.test(fn)) {
       month = i + 1
       dataPeriod = `${monthNames[i][0].toUpperCase()}${monthNames[i].slice(1)}${year ? ` ${year}` : ""}`
       break

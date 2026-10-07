@@ -184,7 +184,7 @@ describe("POST /api/ai/classify-document — spreadsheet filename heuristics (no
     expectNoModelCall()
   })
 
-  it.fails("does not infer March from the word 'summary' in a filename", async () => {
+  it("does not infer March from the word 'summary' in a filename", async () => {
     const { body } = await classify(fileOf(cogXlsx, "Pricing Summary 2026.xlsx", XLSX_TYPE))
     expect(body.month).toBeNull()
     expect(body.dataPeriod).toBe("Year 2026")
