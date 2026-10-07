@@ -33,6 +33,7 @@
  * delete, and tier upsert — in `lib/actions/contract-terms.ts`.
  */
 import { prisma } from "@/lib/db"
+import { invalidateContractAnalytics, invalidateFacilityAnalytics } from "@/lib/actions/analytics/_cache"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
@@ -104,7 +105,10 @@ export async function recomputeAccrualForContract(
 ): Promise<RecomputeAccrualResult> {
   const { facility } = await requireFacility()
   await requireCanMutate()
-  return _recomputeAccrualForContractWithFacility(contractId, facility.id)
+  const result = await _recomputeAccrualForContractWithFacility(contractId, facility.id)
+  await invalidateContractAnalytics(contractId)
+  await invalidateFacilityAnalytics(facility.id)
+  return result
 }
 
 /**

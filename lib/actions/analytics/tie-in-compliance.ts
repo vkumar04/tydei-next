@@ -8,6 +8,12 @@
  */
 
 import { prisma } from "@/lib/db"
+import { cacheLife, cacheTag } from "next/cache"
+import {
+  contractAnalyticsTag,
+  facilityAnalyticsTag,
+} from "@/lib/actions/analytics/_cached"
+import { floorToHour } from "@/lib/dates/floor-to-hour"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import { serialize } from "@/lib/serialize"
 import {
@@ -55,6 +61,26 @@ async function _getTieInComplianceImpl(
   mode: "all_or_nothing" | "proportional",
 ): Promise<TieInComplianceResult> {
   const scope = await requireContractScope(contractId)
+  return computeTieInCompliance(
+    contractId,
+    scope.cogScopeFacilityIds,
+    mode,
+    floorToHour(new Date()),
+  )
+}
+
+async function computeTieInCompliance(
+  contractId: string,
+  cogScopeFacilityIds: string[],
+  mode: "all_or_nothing" | "proportional",
+  now: Date,
+): Promise<TieInComplianceResult> {
+  "use cache"
+  cacheTag(
+    contractAnalyticsTag(contractId),
+    ...cogScopeFacilityIds.map(facilityAnalyticsTag),
+  )
+  cacheLife("hours")
 
   const contract = await prisma.contract.findFirstOrThrow({
     where: { id: contractId },
@@ -87,7 +113,7 @@ async function _getTieInComplianceImpl(
   // read 0.00% / Not compliant despite real trailing-12mo spend. Align the
   // window with the header (trailing 12mo) and route the category scope through
   // the canonical union helper so unrelated vendor spend isn't over-counted.
-  const { start: twelveMonthsAgo, end: today } = getTrailing12MonthWindow()
+  const { start: twelveMonthsAgo, end: today } = getTrailing12MonthWindow(now)
   const cogCategoryUniverse = contract.facilityId
     ? await facilityCogCategoryUniverse(contract.facilityId)
     : []
@@ -100,7 +126,7 @@ async function _getTieInComplianceImpl(
   )
   const cog = await prisma.cOGRecord.aggregate({
     where: {
-      facilityId: { in: scope.cogScopeFacilityIds },
+      facilityId: { in: cogScopeFacilityIds },
       vendorId: contract.vendorId,
       transactionDate: { gte: twelveMonthsAgo, lte: today },
       ...unionCategoryWhere,
