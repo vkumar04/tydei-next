@@ -42,8 +42,13 @@ export function UserMenu({ user, role }: UserMenuProps) {
 
   async function handleSignOut() {
     await queryClient.cancelQueries()
-    await authClient.signOut()
-    router.push("/login")
+    await authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          router.push("/login")
+        },
+      },
+    })
   }
 
   return (
