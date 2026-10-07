@@ -42,7 +42,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox"
 import { createContractDocument } from "@/lib/actions/contracts/document-attach"
 
-type UploadStage = "idle" | "creating" | "indexing" | "done"
+type UploadStage = "idle" | "reading" | "creating" | "indexing" | "done"
 
 interface ContractOption {
   id: string
@@ -66,13 +66,14 @@ const DOCUMENT_TYPES: Array<{ value: string; label: string }> = [
 
 async function readFileAsText(file: File): Promise<string> {
   if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-    // Browsers can't reliably extract text from PDFs without a library.
-    // For the UI surface we stream the raw bytes as a UTF-8 string —
-    // the document-index action normalizes + splits whatever text it
-    // receives. A proper PDF-to-text pipeline is flagged in the spec as
-    // a follow-up (subsystem 2 depends on an OCR upstream).
-    const buf = await file.arrayBuffer()
-    return new TextDecoder("utf-8", { fatal: false }).decode(buf)
+    const form = new FormData()
+    form.append("file", file)
+    const res = await fetch("/api/ai/document-text", { method: "POST", body: form })
+    const body = (await res.json().catch(() => null)) as { text?: string; error?: string } | null
+    if (!res.ok || typeof body?.text !== "string") {
+      throw new Error(body?.error ?? `Could not read text from ${file.name}`)
+    }
+    return body.text
   }
   return await file.text()
 }
@@ -110,11 +111,17 @@ export function UploadDocumentDialog({
       setName(f.name.replace(/\.[^.]+$/, ""))
     }
     if (f) {
+      setError(null)
+      setStage("reading")
       try {
         const text = await readFileAsText(f)
         setRawText(text)
+        setStage("idle")
       } catch (err) {
+        setStage("idle")
         console.warn("[upload-dialog] readFileAsText failed:", err)
+        setRawText("")
+        setError(err instanceof Error ? err.message : "Could not read text from this file.")
       }
     }
   }
@@ -157,7 +164,7 @@ export function UploadDocumentDialog({
     }
   }
 
-  const busy = stage === "creating" || stage === "indexing"
+  const busy = stage === "reading" || stage === "creating" || stage === "indexing"
 
   return (
     <Dialog
@@ -167,7 +174,7 @@ export function UploadDocumentDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Upload Document</DialogTitle>
           <DialogDescription>
@@ -251,6 +258,7 @@ export function UploadDocumentDialog({
               onChange={(e) => setRawText(e.target.value)}
               placeholder="Paste contract text here. Use form-feed characters (U+000C) or <<<PAGE_BREAK>>> to mark page boundaries."
               rows={5}
+              className="max-h-48 overflow-y-auto"
             />
           </div>
 
@@ -274,7 +282,7 @@ export function UploadDocumentDialog({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={busy}
+              disabled={stage === "creating" || stage === "indexing"}
             >
               Cancel
             </Button>
@@ -282,7 +290,7 @@ export function UploadDocumentDialog({
               {busy ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {stage === "indexing" ? "Indexing…" : "Uploading…"}
+                  {stage === "reading" ? "Reading document…" : stage === "indexing" ? "Indexing…" : "Uploading…"}
                 </>
               ) : (
                 <>

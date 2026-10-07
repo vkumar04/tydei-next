@@ -753,3 +753,49 @@ describe("usage↔pricing merge matches SKUs EXACTLY (no substring cross-match)"
     expect(p?.projectedVolume).toBe(450)
   })
 })
+
+describe("usage then pricing merge keeps usage-only products and the usage volume", () => {
+  const usageHeaders = ["Description", "Item No", "Vendor", "Date", "Qty", "Unit Cost"]
+  const usageRows = [
+    { Description: "Knee Implant", "Item No": "K-1", Vendor: "Stryker", Date: "2026-01-15", Qty: "10", "Unit Cost": "100" },
+    { Description: "Hip Stem", "Item No": "H-1", Vendor: "Stryker", Date: "2026-01-15", Qty: "20", "Unit Cost": "200" },
+    { Description: "Bone Screw", "Item No": "S-1", Vendor: "Stryker", Date: "2026-01-15", Qty: "6", "Unit Cost": "10" },
+  ]
+  const pricingHeaders = ["Description", "Item No", "Price"]
+  const pricingRows = [
+    { Description: "Knee Implant", "Item No": "K-1", Price: "90" },
+    { Description: "Hip Stem", "Item No": "H-1", Price: "180" },
+  ]
+  const usageMapping = {
+    name: "Description", ref: "Item No", vendor: "Vendor", date: "Date",
+    qty: "Qty", unitCost: "Unit Cost", extendedCost: null, category: null,
+  }
+  const pricingMapping = {
+    name: "Description", ref: "Item No", currentPrice: null, price: "Price",
+    qty: null, costBasis: null, category: null,
+  }
+
+  async function run() {
+    let state = makeBuilderState()
+    const setState: React.Dispatch<React.SetStateAction<NewProposalState>> = (action) => {
+      state = typeof action === "function" ? (action as (p: NewProposalState) => NewProposalState)(state) : action
+    }
+    await handleUsageRowsImport(usageHeaders, usageRows, usageMapping, () => {}, setState)
+    await handlePricingRowsImport(pricingHeaders, pricingRows, pricingMapping, () => {}, setState)
+    return state
+  }
+
+  it("keeps a product that is in the usage file but not the pricing file", async () => {
+    const state = await run()
+    const names = state.products.map((p) => p.productName).sort()
+    expect(names).toEqual(["Bone Screw", "Hip Stem", "Knee Implant"])
+    const screw = state.products.find((p) => p.productName === "Bone Screw")!
+    expect(screw.fromPricingFile).toBeFalsy()
+    expect(screw.projectedVolume).toBe(6)
+  })
+
+  it("projects the merged usage volume when the pricing file has no quantity column", async () => {
+    const state = await run()
+    expect(state.projectedVolume).toBe(36)
+  })
+})

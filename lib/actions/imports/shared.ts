@@ -13,6 +13,7 @@
  *   - get (row-by-mapping field getter)
  *   - toContractType / toPerfPeriod / toTermType / toRebateType (AI→enum)
  */
+import { detectHeaderRowIndex } from "@/lib/utils/tabular/detect-headers"
 import { parseXlsxMatrixBounded } from "@/lib/xlsx/parse-xlsx-bounded"
 import { parseCsvTextBounded } from "@/lib/csv/parse-csv-bounded"
 import { generateText, Output } from "ai"
@@ -295,17 +296,18 @@ export async function parseXlsxBufferToRows(
   // whole sheet via `xlsx.load` — a decompression bomb would OOM the
   // container. `parseXlsxMatrixBounded` streams the first worksheet
   // row-by-row, coercing each cell with `excelCellToString`, and aborts
-  // past hard row/cell caps. Row 0 of the matrix is the header row
-  // (matches the prior `getRow(1)`); rows 1.. are data.
+  // past hard row/cell caps. The header row is detected below any
+  // report title rows; everything after it is data.
   const matrix = await parseXlsxMatrixBounded(buffer, excelCellToString)
   if (matrix.length === 0) return { headers: [], rows: [] }
 
-  const headers = (matrix[0] ?? []).map((h) => h.trim())
+  const headerRowIndex = detectHeaderRowIndex(matrix)
+  const headers = (matrix[headerRowIndex] ?? []).map((h) => h.trim())
 
   const STOP_AFTER_SPARSE_RUN = 200
   let sparseRun = 0
   const rows: Record<string, string>[] = []
-  for (let r = 1; r < matrix.length; r++) {
+  for (let r = headerRowIndex + 1; r < matrix.length; r++) {
     const cells = matrix[r] ?? []
     const record: Record<string, string> = {}
     let nonEmpty = 0

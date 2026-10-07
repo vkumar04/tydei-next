@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { ImportValidationError } from "@/lib/imports/import-validation-error"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
@@ -86,10 +87,10 @@ export async function ingestProformaMatrix(
   const parsedMeta = ingestProformaMetaSchema.parse(meta)
 
   if (!Array.isArray(matrix) || matrix.length === 0) {
-    throw new Error("The file contains no rows")
+    throw new ImportValidationError("The file contains no rows")
   }
   if (matrix.length > MAX_MATRIX_ROWS) {
-    throw new Error(
+    throw new ImportValidationError(
       `The file has ${matrix.length.toLocaleString()} rows; a P&L statement should be well under ${MAX_MATRIX_ROWS.toLocaleString()}`,
     )
   }
@@ -106,7 +107,7 @@ export async function ingestProformaMatrix(
       },
       select: { id: true, name: true },
     })
-    if (!facility) throw new Error("Facility not found")
+    if (!facility) throw new ImportValidationError("Facility not found")
     facilityId = facility.id
     facilityKey = `facility:${facility.id}`
     facilityLabel = facility.name
@@ -121,13 +122,13 @@ export async function ingestProformaMatrix(
   // silently zero the rest and produce a confidently wrong NOI. Require the
   // lines the model actually depends on, not merely "something matched".
   const MIN_MATCHED = 5
-  const required: (keyof typeof parsed.lineItems)[] = [
-    "standardBillingRevenue",
-    "medicalSupplies",
-  ]
-  const missing = required.filter((f) => !parsed.matchedFields.includes(f))
+  const required = [
+    ["standardBillingRevenue", "standard billing revenue"],
+    ["medicalSupplies", "medical supplies"],
+  ] as const satisfies readonly (readonly [keyof typeof parsed.lineItems, string])[]
+  const missing = required.filter(([f]) => !parsed.matchedFields.includes(f)).map(([, label]) => label)
   if (parsed.matchedFields.length < MIN_MATCHED || missing.length > 0) {
-    throw new Error(
+    throw new ImportValidationError(
       `Only ${parsed.matchedFields.length} P&L line${parsed.matchedFields.length === 1 ? "" : "s"} were recognized${
         missing.length > 0 ? ` (missing ${missing.join(", ")})` : ""
       }. The file should have one row per line item, with the label in one column and the amount in another — e.g. "Medical supplies and services | 12,316,248".`,
@@ -136,7 +137,7 @@ export async function ingestProformaMatrix(
 
   const validLineItems = proformaLineItemsSchema.safeParse(parsed.lineItems)
   if (!validLineItems.success) {
-    throw new Error(
+    throw new ImportValidationError(
       "The statement contains out-of-range amounts. Check for values that are not plain numbers.",
     )
   }

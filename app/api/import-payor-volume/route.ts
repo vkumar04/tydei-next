@@ -1,3 +1,4 @@
+import { importErrorMessage } from "@/lib/imports/import-validation-error"
 import { NextResponse } from "next/server"
 import { headers as getHeaders } from "next/headers"
 import { unstable_rethrow } from "next/navigation"
@@ -132,16 +133,9 @@ export async function POST(request: Request) {
     }
     // Action-level validation errors (facility, columns, caps) are safe to
     // surface verbatim; anything else stays generic.
-    const KNOWN = [
-      "Facility not found",
-      "No procedure groups found",
-      "rows; max is",
-      "procedure groups; max is",
-      "no data rows",
-      "Provide exactly one",
-    ]
-    if (KNOWN.some((k) => message.includes(k))) {
-      return NextResponse.json({ error: message }, { status: 400 })
+    const userMessage = importErrorMessage(error)
+    if (userMessage) {
+      return NextResponse.json({ error: userMessage }, { status: 400 })
     }
     return NextResponse.json({ error: "Import failed" }, { status: 500 })
   }

@@ -275,15 +275,17 @@ export async function importInvoice(input: ImportInvoiceInput) {
       where: { facilityId: facility.id, poNumber },
       select: { id: true, vendorId: true },
     })
-    if (!po) {
+    if (!po && !data.unlinkMissingPo) {
       throw new Error(
         `Purchase order "${poNumber}" was not found for this facility. Clear the PO Number field to import without a PO link.`
       )
     }
-    if (data.vendorId && po.vendorId !== data.vendorId) {
-      throw new Error(`PO "${poNumber}" belongs to a different vendor`)
+    if (po) {
+      if (data.vendorId && po.vendorId !== data.vendorId) {
+        throw new Error(`PO "${poNumber}" belongs to a different vendor`)
+      }
+      purchaseOrderId = po.id
     }
-    purchaseOrderId = po.id
   }
 
   const lineSum = data.lineItems.reduce(

@@ -94,6 +94,7 @@ const ALLOWED_CONTENT_TYPES = [
 
 export async function getUploadUrl(input: UploadRequest) {
   const session = await requireAuth()
+  await requireCanMutate()
   const data = uploadRequestSchema.parse(input)
 
   if (!ALLOWED_CONTENT_TYPES.includes(data.contentType)) {
@@ -112,7 +113,7 @@ export async function getUploadUrl(input: UploadRequest) {
   const key = `${data.folder}/${tenantSegment}/${Date.now()}-${crypto
     .randomUUID()
     .slice(0, 8)}-${safeName}`
-  const uploadUrl = await generatePresignedUploadUrl(key, data.contentType)
+  const uploadUrl = await generatePresignedUploadUrl(key, data.contentType, data.size)
   const publicUrl = key
 
   return { uploadUrl, key, publicUrl }

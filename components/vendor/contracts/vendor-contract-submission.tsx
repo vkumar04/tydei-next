@@ -111,7 +111,7 @@ export function VendorContractSubmission({
   const [droppedFile, setDroppedFile] = useState<File | null>(null)
   const [extractionComplete, setExtractionComplete] = useState(false)
 
-  const [additionalDocs, setAdditionalDocs] = useState<{ file: File; type: string; name: string }[]>([])
+  const [additionalDocs, setAdditionalDocs] = useState<{ file: File; type: string; name: string; key?: string }[]>([])
   const [pricingFile, setPricingFile] = useState<File | null>(null)
   const [pricingFileData, setPricingFileData] = useState<PricingFileData | null>(null)
   const [pricingItems, setPricingItems] = useState<ContractPricingItem[]>([])
@@ -134,12 +134,14 @@ export function VendorContractSubmission({
       fileName: file.name,
       contentType: file.type,
       folder: "contracts",
+      size: file.size,
     })
-    await fetch(uploadUrl, {
+    const put = await fetch(uploadUrl, {
       method: "PUT",
       body: file,
       headers: { "Content-Type": file.type },
     })
+    if (!put.ok) throw new Error(`Upload of ${file.name} failed (${put.status})`)
     setUploadedDocs((prev) => [...prev, { name: file.name, url: key }])
     return key
   }, [])
@@ -366,6 +368,7 @@ export function VendorContractSubmission({
     setExtractionComplete(true)
 
     setContractName(data.contractName)
+    if (data.contractNumber) setContractNumber(data.contractNumber)
     setContractType(data.contractType)
     // AI extractor returns null for undated / evergreen fields; skip when null.
     if (data.effectiveDate) {
@@ -628,6 +631,10 @@ export function VendorContractSubmission({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    if (additionalDocs.some((d) => !d.key)) {
+      toast.error("Wait for the additional documents to finish uploading, then submit again.")
+      return
+    }
 
     // Charles audit round-1 vendor C1: multi-facility submission used
     // to silently take only selectedFacilities[0]. The remaining
@@ -885,8 +892,22 @@ export function VendorContractSubmission({
         onClearPDF={handleClearPDF}
         onAIExtracted={handleAIExtract}
         additionalDocs={additionalDocs}
-        onAddDoc={(file, type) => setAdditionalDocs((prev) => [...prev, { file, type, name: file.name }])}
-        onRemoveDoc={(i) => setAdditionalDocs((prev) => prev.filter((_, idx) => idx !== i))}
+        onAddDoc={(file, type) => {
+          setAdditionalDocs((prev) => [...prev, { file, type, name: file.name }])
+          handleDocUpload(file)
+            .then((key) =>
+              setAdditionalDocs((prev) => prev.map((d) => (d.file === file ? { ...d, key } : d))),
+            )
+            .catch((err: unknown) => {
+              setAdditionalDocs((prev) => prev.filter((d) => d.file !== file))
+              toast.error(err instanceof Error ? err.message : `Upload of ${file.name} failed`)
+            })
+        }}
+        onRemoveDoc={(i) => {
+          const removed = additionalDocs[i]
+          setAdditionalDocs((prev) => prev.filter((_, idx) => idx !== i))
+          if (removed?.key) setUploadedDocs((prev) => prev.filter((d) => d.url !== removed.key))
+        }}
         onChangeDocType={(i, type) => setAdditionalDocs((prev) => prev.map((d, idx) => idx === i ? { ...d, type } : d))}
         pricingFileName={pricingFile?.name ?? null}
         pricingItemCount={pricingItems.length}
@@ -1007,6 +1028,7 @@ export function VendorContractSubmission({
             pricingFileData={pricingFileData}
             uploadedDocs={uploadedDocs}
             submitting={submitting}
+            uploadingDocs={additionalDocs.some((d) => !d.key)}
             onClearPricingFile={handleClearPricingFile}
             onPricingFileSelect={processPricingFile}
             onDocUpload={handleDocUpload}

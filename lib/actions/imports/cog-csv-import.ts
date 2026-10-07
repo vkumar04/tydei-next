@@ -43,6 +43,7 @@ export async function ingestCOGRecordsRows(
   rows: Record<string, string>[],
   fileName?: string,
 ): Promise<COGImportResult> {
+  const session = await requireFacility()
   if (rows.length === 0)
     return {
       imported: 0,
@@ -174,12 +175,13 @@ export async function ingestCOGRecordsRows(
     }
   }
 
-  const session = await requireFacility()
-  const result = await bulkImportCOGRecords({
+  const dropped = rows.length - records.length
+  const imported = await bulkImportCOGRecords({
     facilityId: session.facility.id,
     records,
     duplicateStrategy: "skip",
   })
+  const result = { ...imported, skipped: imported.skipped + dropped }
   await logAudit({
     userId: session.user.id,
     action: "cog.imported_via_mass_upload",

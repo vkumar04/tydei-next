@@ -170,12 +170,8 @@ describe("ingestCOGRecordsCSV — standard v0 header shape", () => {
       "Stryker,03/15/2026,5,100,500\n" // valid
 
     const result = await ingestCOGRecordsCSV(csv)
-    // Rows missing required fields are silently dropped during the
-    // row→record transformation; only the dedup-skip count surfaces
-    // in `skipped`. With all-new records and no dedup collisions,
-    // skipped stays 0 here.
     expect(result.imported).toBe(1)
-    expect(result.skipped).toBe(0)
+    expect(result.skipped).toBe(2)
   })
 })
 

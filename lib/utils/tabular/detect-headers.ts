@@ -66,13 +66,7 @@ export type HeaderDetectionResult = {
  * callers translate these into their own surface's error path (HTTP 400
  * in the route, a toast in the client reader).
  */
-export function matrixToHeadersAndRows(
-  matrix: string[][],
-): HeaderDetectionResult {
-  if (matrix.length === 0) {
-    throw new Error("No data found in first sheet")
-  }
-
+export function detectHeaderRowIndex(matrix: string[][]): number {
   const SCAN_LIMIT = Math.min(matrix.length, 15)
   let headerRowIdx = -1
   let bestScore = 0
@@ -95,6 +89,17 @@ export function matrixToHeadersAndRows(
     }
   }
   if (headerRowIdx === -1) headerRowIdx = 0
+  return headerRowIdx
+}
+
+export function matrixToHeadersAndRows(
+  matrix: string[][],
+): HeaderDetectionResult {
+  if (matrix.length === 0) {
+    throw new Error("No data found in first sheet")
+  }
+
+  const headerRowIdx = detectHeaderRowIndex(matrix)
 
   const rawHeaderRow = matrix[headerRowIdx] ?? []
   if (rawHeaderRow.every((h) => h === "")) {

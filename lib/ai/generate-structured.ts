@@ -43,6 +43,7 @@ import { claudeModel, claudeSonnet } from "@/lib/ai/config"
 
 export interface GenerateStructuredInput<T> {
   schema: z.ZodSchema<T>
+  instructions?: string
   messages: ModelMessage[]
   /** For log lines so we can tell which call site fell back. */
   actionName: string
@@ -122,9 +123,61 @@ export function tryUnwrapEnvelope<T>(
   const entries = Object.entries(parsed as Record<string, unknown>)
   if (entries.length !== 1) return null
   const [key, value] = entries[0]
-  if (!/^(input|data|response|result|output|payload)$/i.test(key)) return null
+  if (!/^(input|data|response|result|output|payload|parameters|arguments|args)$/i.test(key)) {
+    return null
+  }
   const res = schema.safeParse(value)
+  if (res.success) return res.data
+  return decodeStringifiedFields(schema, value)
+}
+
+export function tryDecodeStringifiedFields<T>(
+  schema: z.ZodSchema<T>,
+  err: unknown,
+): T | null {
+  const text = (err as { text?: unknown } | null)?.text
+  if (typeof text !== "string" || !text) return null
+  try {
+    return decodeStringifiedFields(schema, JSON.parse(text))
+  } catch {
+    return null
+  }
+}
+
+function decodeStringifiedFields<T>(schema: z.ZodSchema<T>, parsed: unknown): T | null {
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return null
+  }
+  let changed = false
+  const decoded: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    decoded[key] = value
+    if (typeof value !== "string" || !/^\s*[[{]/.test(value)) continue
+    let inner: unknown
+    try {
+      inner = JSON.parse(value)
+    } catch {
+      continue
+    }
+    if (
+      inner !== null &&
+      typeof inner === "object" &&
+      !Array.isArray(inner) &&
+      Object.keys(inner).length === 1 &&
+      key in inner
+    ) {
+      inner = (inner as Record<string, unknown>)[key]
+    }
+    decoded[key] = inner
+    changed = true
+  }
+  if (!changed) return null
+  const res = schema.safeParse(decoded)
   return res.success ? res.data : null
+}
+
+function tryRepair<T>(schema: z.ZodSchema<T>, err: unknown): T | null {
+  return tryUnwrapEnvelope(schema, err) ?? tryDecodeStringifiedFields(schema, err)
 }
 
 function isSchemaMismatch(err: unknown): boolean {
@@ -143,6 +196,7 @@ export async function generateStructured<T>(
 
   const callOpts = {
     output: Output.object({ schema: input.schema }),
+    instructions: input.instructions,
     messages: input.messages,
     providerOptions: ANTHROPIC_TOOL_MODE_OPTIONS,
     abortSignal: input.abortSignal,
@@ -158,10 +212,10 @@ export async function generateStructured<T>(
   } catch (primaryErr: unknown) {
     // Envelope repair first — cheaper than any retry, and the content is
     // often perfect underneath.
-    const repaired = tryUnwrapEnvelope(input.schema, primaryErr)
+    const repaired = tryRepair(input.schema, primaryErr)
     if (repaired !== null) {
       console.warn(
-        `[${input.actionName}] repaired single-key envelope from primary output`,
+        `[${input.actionName}] repaired malformed structured output from primary`,
       )
       return {
         output: repaired,
@@ -190,10 +244,10 @@ export async function generateStructured<T>(
         modelUsed: "fallback",
       }
     } catch (fallbackErr: unknown) {
-      const repairedFallback = tryUnwrapEnvelope(input.schema, fallbackErr)
+      const repairedFallback = tryRepair(input.schema, fallbackErr)
       if (repairedFallback !== null) {
         console.warn(
-          `[${input.actionName}] repaired single-key envelope from fallback output`,
+          `[${input.actionName}] repaired malformed structured output from fallback`,
         )
         return {
           output: repairedFallback,

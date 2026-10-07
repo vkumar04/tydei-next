@@ -49,6 +49,7 @@ describe("getUploadUrl key provenance", () => {
       fileName: "Q1 Report (final).pdf",
       contentType: "application/pdf",
       folder: "contracts",
+      size: 2048,
     })
     const match = KEY_SHAPE.exec(key)
     expect(match, key).not.toBeNull()
@@ -66,6 +67,7 @@ describe("getUploadUrl key provenance", () => {
         fileName: "a.pdf",
         contentType: "application/pdf",
         folder: "contracts",
+        size: 2048,
       })
     ).key
     expect(vendorKey.startsWith("contracts/ven-2/")).toBe(true)
@@ -76,6 +78,7 @@ describe("getUploadUrl key provenance", () => {
         fileName: "a.pdf",
         contentType: "application/pdf",
         folder: "contracts",
+        size: 2048,
       })
     ).key
     expect(userKey.startsWith("contracts/user-7/")).toBe(true)
@@ -89,6 +92,7 @@ describe("getUploadUrl key provenance", () => {
       fileName: "same.pdf",
       contentType: "application/pdf",
       folder: "contracts",
+      size: 2048,
     } as const
     const a = (await getUploadUrl(input)).key
     const b = (await getUploadUrl(input)).key

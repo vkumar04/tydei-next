@@ -16,11 +16,18 @@ import type { RichContractExtractData } from "@/lib/ai/schemas"
  * Idempotent: a payload that already carries a non-null `tieInDetails`
  * (the rich path) is passed through untouched.
  */
+export type ImportableContractExtract = RichContractExtractData & {
+  totalValue?: number | null
+}
+
 export function toRichExtractedContract(
   flat: Record<string, unknown>,
-): RichContractExtractData {
+): ImportableContractExtract {
   type Cadence = "monthly" | "quarterly" | "semi_annual" | "annual"
   const f = flat as {
+    contractId?: string | null
+    contractNumber?: string | null
+    totalValue?: number | null
     tieInDetails?: RichContractExtractData["tieInDetails"]
     capitalCost?: number | null
     termMonths?: number | null
@@ -51,6 +58,8 @@ export function toRichExtractedContract(
 
   return {
     ...(flat as unknown as RichContractExtractData),
+    contractId: f.contractId ?? f.contractNumber ?? null,
+    totalValue: f.totalValue ?? null,
     tieInDetails,
   }
 }
