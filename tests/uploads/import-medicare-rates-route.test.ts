@@ -1,3 +1,4 @@
+import { ImportValidationError } from "@/lib/imports/import-validation-error"
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { buildCsv, buildLegacyXls, buildXlsx, type Cell } from "../support/upload-fixtures"
 import { MB, XLSX_TYPE, fileFor, forbidden, postForm, postOversized } from "../support/import-route-harness"
@@ -177,27 +178,28 @@ describe("POST /api/import-medicare-rates", () => {
 
   it("surfaces 'No rates were recognized' from the action as a 400", async () => {
     const message = "No rates were recognized. Expected columns: Procedure Group, CPT/HCPCS code, Rate."
-    ingestMedicareRateRows.mockRejectedValue(new Error(message))
+    ingestMedicareRateRows.mockRejectedValue(new ImportValidationError(message))
     const { status, body } = await upload(fileFor("r.csv", buildCsv(rateMatrix())))
     expect(status).toBe(400)
     expect(body).toEqual({ error: message })
   })
 
   it("surfaces out-of-range rate values as a 400", async () => {
-    ingestMedicareRateRows.mockRejectedValue(new Error("The file contains out-of-range rate values."))
+    ingestMedicareRateRows.mockRejectedValue(new ImportValidationError("The file contains out-of-range rate values."))
     const { status, body } = await upload(fileFor("r.csv", buildCsv(rateMatrix())))
     expect(status).toBe(400)
     expect(body).toEqual({ error: "The file contains out-of-range rate values." })
   })
 
   it("surfaces the action's row cap as a 400", async () => {
-    ingestMedicareRateRows.mockRejectedValue(new Error("The file has 2,001 rows; max is 2,000"))
+    ingestMedicareRateRows.mockRejectedValue(new ImportValidationError("The file has 2,001 rows; max is 2,000"))
     const { status, body } = await upload(fileFor("r.csv", buildCsv(rateMatrix())))
     expect(status).toBe(400)
     expect(body).toEqual({ error: "The file has 2,001 rows; max is 2,000" })
   })
 
-  it.fails("rejects a rate-set name over 120 characters with a 400 (route forwards it and the action's ZodError falls through to a generic 500)", async () => {
+  it(
+    "rejects a rate-set name over 120 characters with a 400", async () => {
     const parsed = ingestMedicareRatesMetaSchema.safeParse({ fileName: "r.csv", name: "N".repeat(121) })
     if (parsed.success) throw new Error("expected the meta schema to reject")
     ingestMedicareRateRows.mockRejectedValue(parsed.error)

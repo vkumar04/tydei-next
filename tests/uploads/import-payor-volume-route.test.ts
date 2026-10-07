@@ -1,3 +1,4 @@
+import { ImportValidationError } from "@/lib/imports/import-validation-error"
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { buildCsv, buildLegacyXls, buildXlsx, type Cell } from "../support/upload-fixtures"
 import { MB, XLSX_TYPE, fileFor, forbidden, postForm, postOversized } from "../support/import-route-harness"
@@ -198,14 +199,14 @@ describe("POST /api/import-payor-volume", () => {
   })
 
   it("surfaces 'Facility not found' from the action as a 400", async () => {
-    ingestPayorVolumeRows.mockRejectedValue(new Error("Facility not found"))
+    ingestPayorVolumeRows.mockRejectedValue(new ImportValidationError("Facility not found"))
     const { status, body } = await upload(fileFor("v.csv", buildCsv(volumeMatrix())), { facilityId: "fac-other-vendor" })
     expect(status).toBe(400)
     expect(body).toEqual({ error: "Facility not found" })
   })
 
   it("surfaces the action's xlsx row cap as a 400", async () => {
-    ingestPayorVolumeRows.mockRejectedValue(new Error("The file has 50,001 rows; max is 50,000"))
+    ingestPayorVolumeRows.mockRejectedValue(new ImportValidationError("The file has 50,001 rows; max is 50,000"))
     const { status, body } = await upload(fileFor("v.csv", buildCsv(volumeMatrix())))
     expect(status).toBe(400)
     expect(body).toEqual({ error: "The file has 50,001 rows; max is 50,000" })
@@ -222,15 +223,15 @@ describe("POST /api/import-payor-volume", () => {
 
   it("surfaces 'No procedure groups found' as a 400", async () => {
     const message = "No procedure groups found. Expected columns: Procedure Group, Year, Quarter, Volume."
-    ingestPayorVolumeRows.mockRejectedValue(new Error(message))
+    ingestPayorVolumeRows.mockRejectedValue(new ImportValidationError(message))
     const { status, body } = await upload(fileFor("v.csv", buildCsv(volumeMatrix())))
     expect(status).toBe(400)
     expect(body).toEqual({ error: message })
   })
 
-  it.fails("surfaces the action's out-of-range volume error as a 400 (message missing from the route's KNOWN list, so a negative volume returns a generic 500)", async () => {
+  it("surfaces the action's out-of-range volume error as a 400", async () => {
     const message = "The file contains out-of-range values (volumes must be non-negative numbers)."
-    ingestPayorVolumeRows.mockRejectedValue(new Error(message))
+    ingestPayorVolumeRows.mockRejectedValue(new ImportValidationError(message))
     const { status, body } = await upload(fileFor("v.csv", buildCsv(volumeMatrix())))
     expect(status).toBe(400)
     expect(body).toEqual({ error: message })

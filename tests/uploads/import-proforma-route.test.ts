@@ -1,3 +1,4 @@
+import { ImportValidationError } from "@/lib/imports/import-validation-error"
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { buildCsv, buildLegacyXls, buildXlsx, type Cell } from "../support/upload-fixtures"
 import { MB, XLSX_TYPE, fileFor, forbidden, postForm, postOversized } from "../support/import-route-harness"
@@ -237,7 +238,7 @@ describe("POST /api/import-proforma", () => {
   })
 
   it("surfaces 'Facility not found' from the action as a 400", async () => {
-    ingestProformaMatrix.mockRejectedValue(new Error("Facility not found"))
+    ingestProformaMatrix.mockRejectedValue(new ImportValidationError("Facility not found"))
     const { status, body } = await upload(fileFor("p.csv", buildCsv(statementRows())), { facilityId: "fac-x" })
     expect(status).toBe(400)
     expect(body).toEqual({ error: "Facility not found" })
@@ -254,16 +255,16 @@ describe("POST /api/import-proforma", () => {
 
   it("surfaces out-of-range amounts as a 400", async () => {
     const message = "The statement contains out-of-range amounts. Check for values that are not plain numbers."
-    ingestProformaMatrix.mockRejectedValue(new Error(message))
+    ingestProformaMatrix.mockRejectedValue(new ImportValidationError(message))
     const { status, body } = await upload(fileFor("p.csv", buildCsv(statementRows())))
     expect(status).toBe(400)
     expect(body).toEqual({ error: message })
   })
 
-  it.fails("surfaces the action's 'Only N P&L lines were recognized' error as a 400 (route KNOWN list matches 'No P&L lines', which the action never emits)", async () => {
+  it("surfaces the action's 'Only N P&L lines were recognized' error as a 400", async () => {
     const message =
       'Only 2 P&L lines were recognized (missing medicalSupplies). The file should have one row per line item, with the label in one column and the amount in another — e.g. "Medical supplies and services | 12,316,248".'
-    ingestProformaMatrix.mockRejectedValue(new Error(message))
+    ingestProformaMatrix.mockRejectedValue(new ImportValidationError(message))
     const { status, body } = await upload(fileFor("p.csv", buildCsv(statementRows())))
     expect(status).toBe(400)
     expect(body).toEqual({ error: message })
