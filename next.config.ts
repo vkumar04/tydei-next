@@ -51,7 +51,9 @@ const config: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   deploymentId: process.env.RAILWAY_DEPLOYMENT_ID,
+  reactCompiler: true,
   experimental: {
+    turbopackRustReactCompiler: true,
     turbopackFileSystemCacheForBuild: false,
     turbopackGc: true,
     // TypeScript 7 (Go-native) removed the JS compiler API Next's default
