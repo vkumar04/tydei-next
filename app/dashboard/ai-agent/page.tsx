@@ -4,6 +4,8 @@ import { getFeatureFlags } from "@/lib/actions/settings"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { AIAgentClient } from "@/components/facility/ai-agent/ai-agent-client"
 
+export const prefetch = "force-disabled"
+
 export default async function FacilityAIAgentPage() {
   const { facility } = await requireFacility()
   const flags = await getFeatureFlags(facility.id)

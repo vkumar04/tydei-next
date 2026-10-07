@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button"
 
 export default function MarketingError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string }
-  reset: () => void
+  retry: () => void
 }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -15,7 +15,7 @@ export default function MarketingError({
       <p className="text-sm text-muted-foreground max-w-md text-center">
         {error.message || "An unexpected error occurred. Please try again."}
       </p>
-      <Button onClick={reset}>Try Again</Button>
+      <Button onClick={retry}>Try Again</Button>
     </div>
   )
 }
