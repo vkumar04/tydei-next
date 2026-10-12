@@ -85,11 +85,12 @@ These caused real production incidents. Each is enforced by a scanner test in
   Dev works; prod doesn't. The from-form (`export type { X } from "…"`) is
   fine. Guarded by `use-server-async-export-scanner.test.ts`.
 - **No `any`.** Strict mode is on.
-- **Do not bump `typescript` past 6.x** until Next 16.3 is stable. TS 7
-  removed the JS compiler API Next needs; on next@16.2.x it makes `next build`
-  die with a silent SIGSEGV and zero diagnostics. TS 7 requires next ≥16.3 AND
-  `experimental.useTypeScriptCli` — bump both together. Guarded by
-  `typescript-version-pairing.test.ts`, which carries the full upgrade steps.
+- **TypeScript 7 only works paired with `experimental.useTypeScriptCli`.**
+  TS 7 removed the JS compiler API; Next falls back to shelling out to `tsc`
+  only with that flag (next ≥16.2.12). Dropping the flag or downgrading next
+  makes `next build` die with a silent SIGSEGV and zero diagnostics. Scripts
+  that need the compiler API import `@typescript/typescript6`, never
+  `typescript`. Guarded by `typescript-version-pairing.test.ts`.
 
 ## Conventions
 
