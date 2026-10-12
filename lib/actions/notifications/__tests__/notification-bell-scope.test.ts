@@ -41,7 +41,7 @@ describe("getMyNotifications", () => {
   })
 
   it("keeps the limit module-local — a 'use server' file may only export async functions", () => {
-    // CLAUDE.md hard rule: `export const` in a "use server" module emits
+    // AGENTS.md hard rule: `export const` in a "use server" module emits
     // registerServerReference(X, …), throws at module load, and kills every
     // action in the file. Dev works; prod does not.
     const src = actionSrc()

@@ -137,7 +137,7 @@ export async function getTrueMarginReport(
   // payor contracts so we can backfill reimbursement (Revenue) from the
   // canonical CPT-rate map when `Case.totalReimbursement` is 0 (the prod
   // demo state). Same helper as the cases list / hero card / report —
-  // see CLAUDE.md "Case reimbursement backfill" invariant. Without this,
+  // see AGENTS.md "Case reimbursement backfill" invariant. Without this,
   // the Revenue column reads raw stored reimbursement and shows $0.
   const [cases, payorContracts] = await Promise.all([
     prisma.case.findMany({
@@ -218,7 +218,7 @@ export async function getTrueMarginReport(
   }
 
   // 3a. Per-supply rebate rule per contract — the SAME derivation the
-  // surgeon Rebate-Contribution report uses (CLAUDE.md "Per-supply rebate
+  // surgeon Rebate-Contribution report uses (AGENTS.md "Per-supply rebate
   // rule"). This is what makes the Rebate Allocation column reflect the
   // actual products used on each case, matched to their contract's rebate
   // terms — rather than spreading each vendor's earned rebate by spend

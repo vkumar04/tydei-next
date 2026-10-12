@@ -388,7 +388,7 @@ ${text.trim()}`,
       }
       const errorMessage =
         aiError instanceof Error ? aiError.message : "Unknown error"
-      // CLAUDE.md AI-action error path: log full context server-side
+      // AGENTS.md AI-action error path: log full context server-side
       // before returning a sanitized envelope to the client. console.error
       // (not warn) so prod log search picks it up.
       console.error("[extract-contract] AI extraction failed:", aiError, {

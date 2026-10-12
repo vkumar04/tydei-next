@@ -8,7 +8,7 @@
  *
  * Everything here is a PROJECTION surface — the predicted rebate is the
  * proposal's extracted tier ladder run against real trailing-12-month COG
- * spend, never an earned figure (CLAUDE.md rebates rule).
+ * spend, never an earned figure (AGENTS.md rebates rule).
  */
 
 import {

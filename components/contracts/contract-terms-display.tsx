@@ -82,7 +82,7 @@ function TierProgressCard({
   // whose fixtures use 2 / 3 / 4 — integer percent.
   //
   // `scaleRebateValueForEngine` is the one helper that owns this conversion
-  // (CLAUDE.md "Rebate units are per-rebateType"): it multiplies by 100 ONLY
+  // (AGENTS.md "Rebate units are per-rebateType"): it multiplies by 100 ONLY
   // for percent_of_spend and leaves fixed-dollar types alone, so a
   // $30,000 fixed_rebate tier does not become $3,000,000.
   const tiersForEngine: TierLike[] = term.tiers.map((t) => ({

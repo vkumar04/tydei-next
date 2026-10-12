@@ -12,7 +12,7 @@
  * Callers subtract the YTD-already-earned number to show how much
  * more is coming at the current trajectory.
  *
- * Reserves CLAUDE.md's "rebates NEVER auto-computed for display"
+ * Reserves AGENTS.md's "rebates NEVER auto-computed for display"
  * rule — this helper is ONLY called where the UI labels the value as
  * a PROJECTION. Never route an earned/collected tile through it.
  *

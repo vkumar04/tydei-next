@@ -81,7 +81,7 @@ interface ContractTransactionsProps {
 type TransactionType = "rebate" | "credit" | "payment"
 
 function getCollectionStatus(row: PeriodRow): "collected" | "pending" | "overdue" {
-  // 2026-04-26 (F2-M1): the canonical "Rebates Collected" rule (CLAUDE.md
+  // 2026-04-26 (F2-M1): the canonical "Rebates Collected" rule (AGENTS.md
   // invariants: sumCollectedRebates) gates ONLY on collectionDate. The
   // previous fallback "rebateCollected >= rebateEarned" returned "collected"
   // even on rows with collectionDate=null, contradicting the header card

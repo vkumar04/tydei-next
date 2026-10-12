@@ -17,7 +17,7 @@ import { normalizeSku } from "@/lib/contracts/normalize-sku"
  *
  * Result: a fresh demo DB shows "Avg On-Contract 0.0%" because the
  * import never sets the flag, and adding a new contract afterward
- * doesn't update existing supplies. Per CLAUDE.md, every parallel
+ * doesn't update existing supplies. Per AGENTS.md, every parallel
  * data source needs a canonical writer; this is that writer.
  *
  * Algorithm (mirrors `recomputeMatchStatusesForVendor`):

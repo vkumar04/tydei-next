@@ -665,7 +665,7 @@ export async function getContractRebates(contractId: string) {
 
   // Charles W1.Q — ledger shows only closed periods; future-dated
   // accruals (e.g. from seed data or speculative recompute) are hidden.
-  // Matches CLAUDE.md doctrine: earned = payPeriodEnd <= today. If this
+  // Matches AGENTS.md doctrine: earned = payPeriodEnd <= today. If this
   // filter reduces visible rows to 0 when the contract HAS future-dated
   // rows, the empty state (W1.P) explains: "no earned rebates yet —
   // click Recompute."
@@ -702,7 +702,7 @@ export async function getContractRebates(contractId: string) {
 // Charles 2026-04-24 (Bug 13): `rebateEarned` is editable on MANUALLY
 // entered rows (notes does NOT contain `[auto-accrual]`), so a typo in
 // a hand-logged earned amount can be corrected without a DB edit.
-// Engine-generated rows remain locked — the CLAUDE.md "rebates are
+// Engine-generated rows remain locked — the AGENTS.md "rebates are
 // never auto-computed for display" rule applies only to the engine's
 // output; rows the user typed themselves are theirs to fix. Passing
 // `collectionDate: null` is the explicit "uncollect" path.

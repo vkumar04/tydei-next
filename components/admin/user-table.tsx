@@ -137,7 +137,7 @@ export function UserTable() {
   const facilityOptions = facilityOptionsData ?? []
   const vendorOptions = vendorOptionsData ?? []
   const accessOptions = isVendorRole ? vendorOptions : facilityOptions
-  // Derived during render, not mirrored into state (CLAUDE.md).
+  // Derived during render, not mirrored into state (AGENTS.md).
   const visibleAccessOptions = accessOptions.filter((o) => {
     if (assignableOnly && !o.canHaveUsers) return false
     const q = accessSearch.trim().toLowerCase()

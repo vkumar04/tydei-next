@@ -7,7 +7,7 @@
  *
  * ONE schema, two consumers (never fork it — drift hazard):
  *   - write side: `runAnalysis` in lib/actions/vendor-prospective.ts
- *     (zod-validated JSON-column write, per CLAUDE.md)
+ *     (zod-validated JSON-column write, per AGENTS.md)
  *   - read side: `getVendorProposalDetail` in lib/actions/prospective.ts
  *     (tolerant `safeParse` — proposals saved before this feature simply
  *     have no `dealAssumptions` key and read back as `undefined`)

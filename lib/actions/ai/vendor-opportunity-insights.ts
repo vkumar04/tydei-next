@@ -8,7 +8,7 @@
  * read on demand: an AI win-probability estimate with risk level / competitive
  * threat / recommended action, and a recommended offer structure.
  *
- * Follows the CLAUDE.md "AI-action error path" convention exactly.
+ * Follows the AGENTS.md "AI-action error path" convention exactly.
  */
 
 import { generateText, Output } from "ai"

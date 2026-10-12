@@ -8,7 +8,7 @@
  *   - market_share_rebate and price_reduction terms paid $0;
  *   - tier ladders were typed but never consulted.
  *
- * Unit semantics (the repo's recurring type-confusion class — see CLAUDE.md
+ * Unit semantics (the repo's recurring type-confusion class — see AGENTS.md
  * invariants + the market-share memory): thresholds are DOLLARS for spend
  * targets, UNITS for volume targets, and PERCENTS (0–100) for market-share
  * targets. Never mix them. The rebate value's denomination is routed by

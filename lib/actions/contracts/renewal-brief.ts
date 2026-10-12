@@ -242,7 +242,7 @@ Produce the JSON response exactly matching the schema. Use the rebateHistory + p
     // Anthropic API call itself failed (schema rejected, rate-limit, auth,
     // context exceeded, etc.). Surface the message — not the stack — so the
     // toast is readable.
-    // Per CLAUDE.md "AI-action error path": log the raw exception server-side
+    // Per AGENTS.md "AI-action error path": log the raw exception server-side
     // before re-throwing, so prod digests still have a debug trail.
     console.error("[generateRenewalBrief]", err, {
       facilityId: session.facility.id,

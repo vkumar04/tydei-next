@@ -59,7 +59,7 @@ describe("buildNarrative (Analysis export story)", () => {
   })
 })
 
-// Every figure on the dashboard must appear in BOTH exports (CLAUDE.md "Both
+// Every figure on the dashboard must appear in BOTH exports (AGENTS.md "Both
 // exports carry the full picture"). The CSV must enumerate every dashboard
 // section — including the AI Prospective Impact Engine layer and the
 // Conversion Targets card, which were audited as missing (2026-07-02).

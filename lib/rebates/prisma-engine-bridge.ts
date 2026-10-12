@@ -13,7 +13,7 @@
  * callers should fall back to their existing hand-rolled path and
  * surface a warning.
  *
- * ─── UNIT-CONVERSION RULES (CLAUDE.md "Rebate engine units") ──────
+ * ─── UNIT-CONVERSION RULES (AGENTS.md "Rebate engine units") ──────
  *
  * The engine's shared cumulative + marginal helpers ALWAYS interpret
  * `tier.rebateValue` as integer percent (e.g. `2` = 2%) and divide by

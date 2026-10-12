@@ -300,7 +300,7 @@ export const OpportunityEngineSection = forwardRef<
 
   // The real proposal THIS run belongs to — it enables "Save opportunity to
   // proposal" and keys the re-entry restore below. Derived, never mirrored into
-  // state (CLAUDE.md). A live deal handoff names it first: a card's
+  // state (AGENTS.md). A live deal handoff names it first: a card's
   // "Opportunity Engine" button must save onto ITS proposal, not whatever the
   // Deal Scorer's picker happens to be holding. Otherwise it's the proposal the
   // scorer is attached to — the RE-ENTRY path, where no Analyze ever runs

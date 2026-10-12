@@ -10,7 +10,7 @@
  * explain the opportunity, recommend conversion targets, predict managed-care
  * reimbursement, and read the enterprise-value impact.
  *
- * Follows the CLAUDE.md "AI-action error path" convention exactly.
+ * Follows the AGENTS.md "AI-action error path" convention exactly.
  */
 
 import { generateText, Output } from "ai"

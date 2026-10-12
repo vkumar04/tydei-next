@@ -44,7 +44,7 @@ const labelForType = (value: ProspectiveTerm["termType"]): string =>
   TERM_TYPES.find((t) => t.value === value)?.label ?? value
 
 // Target metric options — spend thresholds are DOLLARS, volume thresholds are
-// UNITS, market-share thresholds are PERCENTS (CLAUDE.md type-confusion rule).
+// UNITS, market-share thresholds are PERCENTS (AGENTS.md type-confusion rule).
 const TARGET_TYPES: { value: ProspectiveTerm["targetType"]; label: string }[] = [
   { value: "spend", label: "Spend ($)" },
   { value: "volume", label: "Volume (units)" },
@@ -111,7 +111,7 @@ export function ContractTerms({
   estimate,
 }: ContractTermsProps) {
   // Tier-row mutations route through updateTerm; rows keyed + deleted by the
-  // stable UI-only _uid (CLAUDE.md list-key rule — never the array index).
+  // stable UI-only _uid (AGENTS.md list-key rule — never the array index).
   const addTier = (term: ProspectiveTerm) =>
     updateTerm(term.id, {
       tiers: [...term.tiers, { _uid: crypto.randomUUID(), min: 0, value: 0 }],

@@ -115,7 +115,7 @@ export async function getSurgeonRebateContribution(
   // ─── 1. Owned contracts → per-supply rule map ──────────────────
   // The contractId → SupplyRebateRule derivation lives in the shared
   // `buildSupplyRebateRuleMap` so this report and the per-procedure
-  // True-Margin table attribute the SAME per-supply rebate (CLAUDE.md
+  // True-Margin table attribute the SAME per-supply rebate (AGENTS.md
   // "Per-supply rebate rule" invariant).
   const ownedContracts = await prisma.contract.findMany({
     where: contractsOwnedByFacility(facility.id),

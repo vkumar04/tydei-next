@@ -1,6 +1,6 @@
 /**
  * Tests for the rebate aggregation rules on `getContracts` — the same
- * filters the detail page (`getContract`) applies per CLAUDE.md:
+ * filters the detail page (`getContract`) applies per AGENTS.md:
  *
  *   rebateEarned    — sum of Rebate rows where
  *                     startOfYear <= payPeriodEnd <= today (YTD, R5.31)

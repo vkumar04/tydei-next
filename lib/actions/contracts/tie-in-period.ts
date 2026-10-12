@@ -13,7 +13,7 @@
  *
  * Why a wrapper, not a recompute writer: the lifetime "rebate applied
  * to capital" aggregate already routes through the canonical
- * `sumRebateAppliedToCapital` helper (CLAUDE.md invariants table).
+ * `sumRebateAppliedToCapital` helper (AGENTS.md invariants table).
  * Every customer-visible aggregate uses that helper — header card,
  * Capital Amortization card, reports — and switching to the engine's
  * per-period output would change those aggregates from collected-rebate

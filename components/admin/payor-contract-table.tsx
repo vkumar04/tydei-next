@@ -280,7 +280,7 @@ export function payorNameFreeTextOption(
 /**
  * Clamped page slice. `page` is clamped rather than mirrored into state so a
  * search that shrinks the result set can't strand the user on an empty page
- * (CLAUDE.md: derive, don't mirror).
+ * (AGENTS.md: derive, don't mirror).
  */
 export function payorContractPage<T>(
   rows: T[],

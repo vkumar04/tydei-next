@@ -135,7 +135,7 @@ export async function getContracts(input: ContractFilters) {
 
   // Derive aggregated rebateEarned / rebateCollected per contract so UI can
   // render the "Rebate Earned" column without an extra round-trip. Same
-  // temporal filters as getContract (see CLAUDE.md "Rebates are NEVER
+  // temporal filters as getContract (see AGENTS.md "Rebates are NEVER
   // auto-computed for display"): earned counts only closed periods,
   // collected counts only rows with a collectionDate set.
   //
@@ -143,7 +143,7 @@ export async function getContracts(input: ContractFilters) {
   // is now LIFETIME (was YTD). Routed through canonical
   // sumEarnedRebatesLifetime so list column + detail Transactions tab
   // "Total Rebates (Lifetime)" + reports overview cannot drift apart.
-  // Per CLAUDE.md invariants table: list = lifetime, detail header
+  // Per AGENTS.md invariants table: list = lifetime, detail header
   // "Earned (YTD)" card = YTD via sumEarnedRebatesYTD.
   const today = new Date()
 

@@ -41,7 +41,7 @@ export interface BundleComputeResult {
  * compute the compliance result via the v0-aligned pure helpers.
  *
  * `facilityId` scopes COG aggregation — same semantics as every other
- * canonical reducer in the codebase (see CLAUDE.md invariants table).
+ * canonical reducer in the codebase (see AGENTS.md invariants table).
  */
 export async function computeBundleStatus(
   db: PrismaLike,

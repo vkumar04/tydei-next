@@ -6,11 +6,11 @@
  * Rules — must match the "Rebates Earned (YTD)" card on the same page:
  *   - Earned is summed from `rebateEarned`, bucketed by `payPeriodEnd`
  *     quarter, and ONLY counts rows whose `payPeriodEnd` has already
- *     passed (closed periods). Per CLAUDE.md: "Earned counts only
+ *     passed (closed periods). Per AGENTS.md: "Earned counts only
  *     periods where payPeriodEnd <= today".
  *   - Collected is summed from `rebateCollected`, bucketed by
  *     `collectionDate` quarter, and ONLY counts rows with a real
- *     `collectionDate` set. Per CLAUDE.md: "collected counts only rows
+ *     `collectionDate` set. Per AGENTS.md: "collected counts only rows
  *     with a collectionDate set".
  *
  * The output is sorted chronologically by quarter and every quarter that

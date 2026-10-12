@@ -7,7 +7,7 @@
  * dialog prefills the manual-entry form for user review before import.
  *
  * Conventions mirror `app/api/ai/extract-contract/route.ts`:
- * auth → rate limit → 25MB cap → PDF-only → CLAUDE.md AI-action error
+ * auth → rate limit → 25MB cap → PDF-only → AGENTS.md AI-action error
  * path (console.error with context server-side; named, sanitized error
  * client-side). Multi-page PDFs over MAX_PAGES_PER_CHUNK are split via
  * the same pdf-chunker and merged (header from first chunk that has it,
@@ -198,7 +198,7 @@ export async function POST(request: Request) {
       if (aiError instanceof Error && aiError.name === "AbortError") {
         return new Response(null, { status: 499 })
       }
-      // CLAUDE.md AI-action error path: full context server-side,
+      // AGENTS.md AI-action error path: full context server-side,
       // named + sanitized message client-side.
       console.error("[extract-invoice] AI extraction failed:", aiError, {
         userId: session.user.id,

@@ -13,7 +13,7 @@ import type { RebateOpportunity } from "@/lib/actions/rebate-optimizer"
  * doesn't belong in a list titled "ranked opportunities."
  *
  * Lives in lib/rebate-optimizer/ alongside the engine so callers from
- * any surface use the same ranking semantics (per CLAUDE.md's canonical-
+ * any surface use the same ranking semantics (per AGENTS.md's canonical-
  * reducer rule — one helper owns the filter).
  */
 export function rankOpportunities(

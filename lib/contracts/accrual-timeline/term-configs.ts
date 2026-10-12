@@ -20,7 +20,7 @@ import type { AccrualContract } from "./types"
 // 100× too small. Mirrors the convention in
 // `lib/rebates/calculate.ts#computeRebateFromPrismaTiers` and
 // `lib/contracts/tier-rebate-label.ts` — scale at the boundary, not in
-// the engine. See CLAUDE.md "Rebate engine units" rule.
+// the engine. See AGENTS.md "Rebate engine units" rule.
 // Bug #16 (2026-05-08, Vick screenshots): the accrual-timeline rate
 // column was rendering raw `tier.rebateValue` for `fixed_rebate`
 // tiers, so a $50,000 / $500,000 flat rebate showed up as "50000%" /

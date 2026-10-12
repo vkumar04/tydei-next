@@ -11,7 +11,7 @@
  *      string (or template string) whose leading literal names the action
  *      (e.g., `AI Smart Recommendations generation failed: ...`).
  *
- * Backlog B5. See CLAUDE.md § "AI-action error path".
+ * Backlog B5. See AGENTS.md § "AI-action error path".
  *
  * Runs via: `bun run lint:ai`.
  * Exits non-zero with a `file:line:col` list when any violation is found.
@@ -293,7 +293,7 @@ function main() {
   console.error(
     `\nFix: wrap every Claude call in try/catch and ensure the catch block calls\n` +
       `     console.error('[<actionName>]', err, { ...context }) before any re-throw.\n` +
-      `     See CLAUDE.md § "AI-action error path".`,
+      `     See AGENTS.md § "AI-action error path".`,
   )
   process.exit(1)
 }

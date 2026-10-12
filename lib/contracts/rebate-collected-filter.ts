@@ -1,7 +1,7 @@
 /**
  * Canonical "Rebates Collected" aggregate.
  *
- * CLAUDE.md invariant: a rebate is **collected** ONLY when a `Rebate` row
+ * AGENTS.md invariant: a rebate is **collected** ONLY when a `Rebate` row
  * has a non-null `collectionDate`. Every surface that renders a "Collected"
  * number (contract list row, contract detail header card, contract
  * Transactions tab summary card, dashboard totals, reports, etc.) MUST sum

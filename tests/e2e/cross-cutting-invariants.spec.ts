@@ -6,7 +6,7 @@ import { type Page } from "@playwright/test"
  *
  * These are the app-wide properties that no single feature owns, so no
  * single feature spec catches them when they break. Each one maps to a
- * class of incident CLAUDE.md calls out:
+ * class of incident AGENTS.md calls out:
  *
  *  1. No authenticated page scrolls horizontally (commit 789302e3 — a
  *     SHELL bug that broke 26 of 27 routes at once).

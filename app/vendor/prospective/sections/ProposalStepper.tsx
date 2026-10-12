@@ -96,7 +96,7 @@ export function ProposalStepper({
   // ONE identity for the whole workspace session: which saved proposal is open
   // plus the "New proposal" nonce. Handed to the builder + the two sections as
   // `key`, so starting a new proposal REMOUNTS them instead of leaving the
-  // previous proposal's bindings behind — CLAUDE.md "reset state with a key
+  // previous proposal's bindings behind — AGENTS.md "reset state with a key
   // prop, not an effect" (Charles 2026-07-27; the stale binding meant the next
   // save overwrote the proposal just created).
   const builderKey = builderSessionKey(editingProposalId, builderSessionId)

@@ -142,7 +142,7 @@ export function ContractDetailClient({
 
   // The Export button shipped with NO handler at all — a dead affordance
   // (found in the 2026-08-06 live smoke). It now renders the server-side
-  // contract report through /api/reports/pdf (CLAUDE.md: all PDFs render
+  // contract report through /api/reports/pdf (AGENTS.md: all PDFs render
   // server-side via lib/pdf).
   async function handleExportPdf() {
     setExportingPdf(true)
@@ -297,7 +297,7 @@ export function ContractDetailClient({
       // day of the year — it should be the projected rebate there.
       // Should be the rebate they are trending toward based on historic
       // spend." Uses trailing-12-month spend × current tier rate as the
-      // year-end projection. CLAUDE.md projection-vs-ledger rule: this
+      // year-end projection. AGENTS.md projection-vs-ledger rule: this
       // number is labeled "Projected" so it can't be mistaken for the
       // actual ledger YTD value shown above it.
       projectedYearEnd:

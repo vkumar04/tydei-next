@@ -25,7 +25,7 @@
  *
  * When you add a new surface that must respect in-term category scope,
  * add a line here that exercises the new surface against FIXTURE and
- * asserts its output matches the helper. Also add a line to CLAUDE.md's
+ * asserts its output matches the helper. Also add a line to AGENTS.md's
  * "Canonical reducers — invariants table" under the
  * "COG in-term-scope" row.
  */
@@ -123,7 +123,7 @@ describe("parity: cross-surface category-filter wiring catalog", () => {
       const hasUnion = src.includes("buildUnionCategoryWhereClause")
       expect(
         hasBuild || hasUnion,
-        `${relative} should import the cog-category-filter helper — see CLAUDE.md "COG in-term-scope" row`,
+        `${relative} should import the cog-category-filter helper — see AGENTS.md "COG in-term-scope" row`,
       ).toBe(true)
     }
   })

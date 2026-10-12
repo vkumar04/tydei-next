@@ -287,7 +287,7 @@ describe("getTrueMarginReport — per-supply rebate allocation", () => {
 // the prod demo cases carry `totalReimbursement = 0`, so the action used
 // to render Revenue = $0 for every row. Revenue must backfill from the
 // canonical CPT-rate map (`resolveCaseReimbursement`) like the cases
-// list / hero card / report do — CLAUDE.md "Case reimbursement backfill".
+// list / hero card / report do — AGENTS.md "Case reimbursement backfill".
 
 describe("getTrueMarginReport — Revenue backfill", () => {
   it("fills Revenue from the payor CPT-rate map when totalReimbursement is 0", async () => {

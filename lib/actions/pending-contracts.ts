@@ -50,7 +50,7 @@ import { revalidatePath } from "next/cache"
  * SAME materialization — "if it is set up for 1 way on a facility it does not
  * need to submit a contract it just becomes active after creating it". Two
  * parallel hand-rolled materializers would drift exactly like the parallel
- * reducers CLAUDE.md warns about; there is one.
+ * reducers AGENTS.md warns about; there is one.
  *
  * LOCAL AND NON-EXPORTED ON PURPOSE. This file is `"use server"`, so any
  * export here becomes a client-callable Server Action — a directly-invocable
@@ -384,7 +384,7 @@ async function materializePending(
       //     createPendingContract: a row it just created under requireVendor),
       //     but this helper must not depend on that to be safe — a bare
       //     `where: {id}` here would be the exact shape the auth-scope scanner
-      //     exists to catch, and CLAUDE.md forbids exempting it by comment.
+      //     exists to catch, and AGENTS.md forbids exempting it by comment.
       //   - `status: "submitted"` re-checks, INSIDE the transaction, the guard
       //     at the top of this function — which read a snapshot taken outside
       //     it. Without the re-check two concurrent approvals of the same row

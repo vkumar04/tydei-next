@@ -97,7 +97,7 @@ export interface VendorProspectiveAnalysisInput {
   /**
    * When set, the facility-spend backfill (the vendor-COG-at-facility
    * aggregate) is scoped to this category — matched canonically via
-   * `expandCategoriesToCogVariants`, never a raw `in` (CLAUDE.md invariant).
+   * `expandCategoriesToCogVariants`, never a raw `in` (AGENTS.md invariant).
    */
   estimatedSpendCategory?: string
   /**
@@ -525,7 +525,7 @@ export async function getVendorProspectiveAnalysis(
   try {
     return await runAnalysis(vendor, input, divisionScope, divisionCategoryKeys)
   } catch (err) {
-    // AI-action error-path convention (CLAUDE.md): log the underlying
+    // AI-action error-path convention (AGENTS.md): log the underlying
     // exception server-side, surface a named user-facing message.
     console.error("[getVendorProspectiveAnalysis]", err, {
       vendorId: vendor.id,
@@ -757,7 +757,7 @@ async function runAnalysis(
       // re-entry. UNITS: `*Pct` fields are WHOLE percents (40 = 40%) — the
       // UI string-state units — converted here, once, from the analyzer
       // input's fractions (see lib/prospective/deal-assumptions.ts). Zod-
-      // validated JSON-column write (CLAUDE.md); a bad shape drops the
+      // validated JSON-column write (AGENTS.md); a bad shape drops the
       // assumptions (keeping any previously saved ones via the meta spread)
       // rather than blocking the score write.
       const safeAssumptions = dealAssumptionsSchema.safeParse({
@@ -801,7 +801,7 @@ async function runAnalysis(
               dealScore: { score, scoredAt: new Date().toISOString() },
               // Wave-3 F: the per-component legend, so My-Proposals / the
               // detail dialog can explain the score later. Zod-validated
-              // like dealAssumptions (CLAUDE.md: validate JSON-column
+              // like dealAssumptions (AGENTS.md: validate JSON-column
               // writes); additive/optional on read.
               ...(safeScoreComponents.success
                 ? { scoreComponents: safeScoreComponents.data }

@@ -54,7 +54,7 @@ describe("linked-contract picker — the list is server-searched", () => {
 
   it("keeps the search term under the factory's key prefix", () => {
     // Prefix from lib/query-keys.ts so invalidating `contracts.linkOptions()`
-    // still clears every cached search (CLAUDE.md: keys come from the factory).
+    // still clears every cached search (AGENTS.md: keys come from the factory).
     expect(code).toMatch(
       /queryKey: \[\.\.\.queryKeys\.contracts\.linkOptions\(\), linkSearchTerm\]/,
     )

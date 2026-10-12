@@ -214,7 +214,7 @@ export function FacilityCurrentStatePanel({
 /**
  * Inner model: holds the assumption + Net Revenue control state, seeded from
  * `data`. Remounted via `key={facilityId}` on facility change so state resets
- * cleanly without a reset effect (CLAUDE.md "derive, don't mirror").
+ * cleanly without a reset effect (AGENTS.md "derive, don't mirror").
  *
  * Seed logic mirrors `analysis-dashboard-client.tsx` (seedAssumptions /
  * seedRevenue) — kept local because the vendor data shape omits the facility

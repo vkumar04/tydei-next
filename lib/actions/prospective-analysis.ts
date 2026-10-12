@@ -394,7 +394,7 @@ export interface ExtractAndAnalyzeCanonicalResult {
  * run the canonical analyzer. The Upload Proposal tab calls this so
  * the user only sees a single round-trip.
  *
- * Per CLAUDE.md AI-action error-path rule: failures log
+ * Per AGENTS.md AI-action error-path rule: failures log
  * `[extractAndAnalyzeUploadedPDFCanonical]` with context and re-throw
  * a user-facing message naming the action + failure kind.
  */
@@ -502,7 +502,7 @@ export interface VendorLookbackComparison {
   /**
    * PROJECTION — what the proposal's extracted tier ladder would have paid
    * on the trailing-12-month spend. Never an earned figure; surfaces must
-   * label it as a projection (CLAUDE.md rebates rule).
+   * label it as a projection (AGENTS.md rebates rule).
    */
   predicted: {
     tierAchieved: number
@@ -597,7 +597,7 @@ export async function getVendorLookbackComparison(input: {
 
     // ── Projection: extracted ladder × lookback spend ─────────────────
     // normalizeAIRebateValue folds "3" → 0.03; the projection engine scales
-    // fractions ×100 at the Prisma boundary (CLAUDE.md rebate-units rule).
+    // fractions ×100 at the Prisma boundary (AGENTS.md rebate-units rule).
     const tiers = input.extractedTiers
       .filter((t) => Number.isFinite(t.spendMin) && Number.isFinite(t.rebateValue))
       .map((t) => ({

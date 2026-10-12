@@ -11,7 +11,7 @@
  * its stale bound id, so the next save called updateProposal on the proposal
  * the vendor had just finished, overwriting it instead of creating a second.
  *
- * The fix is the CLAUDE.md "reset state with a key prop, not an effect" rule:
+ * The fix is the AGENTS.md "reset state with a key prop, not an effect" rule:
  * the workspace derives a session key from (proposal being edited, new-proposal
  * nonce) and hands it to the builder as `key`. A new session = a new key = a
  * remount = a fresh bound id, with no reset effect anyone can forget to fire.

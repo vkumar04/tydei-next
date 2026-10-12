@@ -14,7 +14,7 @@
  *     tab "Total Rebates (Lifetime)" showed thousands more — two separate
  *     reducers with subtly different temporal filters.
  *
- * Fix: one helper owns each invariant (see CLAUDE.md "Canonical reducers"
+ * Fix: one helper owns each invariant (see AGENTS.md "Canonical reducers"
  * table). This file is the TRIPWIRE — it exercises each invariant's helper
  * against a single deterministic fixture and asserts numeric agreement
  * across every surface that renders the number.
@@ -32,7 +32,7 @@
  *   - When you add a NEW invariant (e.g. "Rebates Accrued (quarter-to-date)")
  *     that has more than one surface, add a new `describe` block here with
  *     its own FIXTURE section + cross-surface assertions. Register the
- *     invariant in CLAUDE.md's "Canonical reducers" table.
+ *     invariant in AGENTS.md's "Canonical reducers" table.
  *
  *   - When you change a canonical helper's semantics (e.g. switch `earned`
  *     from `payPeriodEnd <= today` to an `earnedDate` column), update the
@@ -245,7 +245,7 @@ describe("parity: invariants between reducers", () => {
 
 describe("parity: Earned YTD across surfaces", () => {
   // Every surface that renders "Rebates Earned (YTD)" MUST go through
-  // `sumEarnedRebatesYTD` (see CLAUDE.md canonical reducers). This block
+  // `sumEarnedRebatesYTD` (see AGENTS.md canonical reducers). This block
   // enumerates each such surface and asserts it returns the canonical
   // value for FIXTURE.
   //
@@ -293,7 +293,7 @@ describe("parity: Earned YTD across surfaces", () => {
 
 describe("parity: Collected across surfaces", () => {
   // Every surface that renders "Rebates Collected" MUST go through
-  // `sumCollectedRebates` (see CLAUDE.md canonical reducers). Enumerate
+  // `sumCollectedRebates` (see AGENTS.md canonical reducers). Enumerate
   // each surface and assert it matches the canonical helper against FIXTURE.
 
   it("canonical helper: sumCollectedRebates(FIXTURE)", () => {

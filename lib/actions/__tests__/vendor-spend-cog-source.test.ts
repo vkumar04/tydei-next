@@ -3,7 +3,7 @@
  * Bug 2 + Bug 3 + Bug 5). On prod, Stryker @ Lighthouse Surgical Center
  * has $1.7M+ of categorized COG but ZERO ContractPeriod rows — so
  * every surface that read spend from ContractPeriod silently rendered
- * $0. Per CLAUDE.md, ContractPeriod must NEVER be the sole spend
+ * $0. Per AGENTS.md, ContractPeriod must NEVER be the sole spend
  * source for vendor surfaces. These tests pin the cOGRecord-based
  * cascade for:
  *   - getVendorSpendTrend (sources spend from cOGRecord rows)

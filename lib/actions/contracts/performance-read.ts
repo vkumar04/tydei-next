@@ -133,7 +133,7 @@ export async function getContractPerformance(contractId: string): Promise<{
         spendMax: t.spendMax != null ? Number(t.spendMax) : null,
         // Boundary-scale: ContractTier.rebateValue is a fraction (0.03 =
         // 3%) for percent tiers. Engine expects integer percent per
-        // CLAUDE.md. Force 0 for every non-percent rebate type so the
+        // AGENTS.md. Force 0 for every non-percent rebate type so the
         // spend × rate utilization math never multiplies a dollar amount
         // (or a per-unit count) by spend — this is a spend-based surface;
         // unit-driven types (fixed_rebate_per_unit / per_procedure_rebate)

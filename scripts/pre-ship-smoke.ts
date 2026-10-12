@@ -521,7 +521,7 @@ async function stepTouchedActionSmoke(args: Args): Promise<CheckOutcome> {
 // ─── Step 4: numeric parity ─────────────────────────────────────
 
 async function getDemoFacilityId(): Promise<string | null> {
-  // CLAUDE.md calls out Lighthouse Community Hospital as the demo facility
+  // AGENTS.md calls out Lighthouse Community Hospital as the demo facility
   // but the primary seeded org is Lighthouse Surgical Center (see
   // prisma/seeds/users.ts). We accept either — whichever exists.
   const f =

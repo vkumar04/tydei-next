@@ -199,7 +199,7 @@ async function _buildCarveOutRebate(
     const topTier = carveOutTerm?.tiers?.[0]
     if (carveOutTerm && topTier && topTier.rebateType === "percent_of_spend") {
       // percent_of_spend stores a FRACTION (0.02 = 2%); applied directly to
-      // dollar spend it is NOT scaled ×100 (CLAUDE.md rebate-units caveat).
+      // dollar spend it is NOT scaled ×100 (AGENTS.md rebate-units caveat).
       const fraction = Number(topTier.rebateValue)
       const scopedCategories =
         carveOutTerm.appliesTo === "specific_category"
