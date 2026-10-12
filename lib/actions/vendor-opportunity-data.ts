@@ -11,7 +11,7 @@
  *     data, so only facilities with an accepted `two_way` Connection count
  *   - currentShare                 → currentRevenue ÷ addressableSpend
  *
- * Categories are matched canonically (CLAUDE.md invariant). When the vendor
+ * Categories are matched canonically (AGENTS.md invariant). When the vendor
  * has no sales yet, the caller falls back to the engine defaults.
  */
 

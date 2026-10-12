@@ -119,7 +119,7 @@ export async function getVendorMarketShare(input: {
   // dashboard widget ("Ortho-Joints") for the same dollars, and a new
   // raw-variant import would have split buckets. Route through the
   // canonical computeCategoryMarketShare like every other share surface
-  // (CLAUDE.md invariants table). Scope: vendor's facilities (or the
+  // (AGENTS.md invariants table). Scope: vendor's facilities (or the
   // requested one), window bounded at NOW so future-dated COG rows don't
   // inflate the totals.
   // 2026-06-09 audit: the requested facilityId must be one the vendor
@@ -264,7 +264,7 @@ export async function getVendorPerformance(_vendorId?: string): Promise<VendorPe
   // placeholder. Spend Compliance is the one axis with a real signal:
   // trailing 12-month vendor COG vs the sum of active-contract
   // annualValue / totalValue targets. That mirrors the canonical spend
-  // source per CLAUDE.md (cOGRecord, not the sparse ContractPeriod
+  // source per AGENTS.md (cOGRecord, not the sparse ContractPeriod
   // rollup — see `getVendorSpendTrend` rationale).
   const now = new Date()
   const { start: trailing12MoStart } = getTrailing12MonthWindow(now)
@@ -313,7 +313,7 @@ export async function getVendorPerformance(_vendorId?: string): Promise<VendorPe
   // computed three different compliance values. This is now the ONE
   // canonical definition — trailing-12mo vendor COG spend ÷ Σ
   // active-contract annual targets, capped at VENDOR_COMPLIANCE_CAP_PCT
-  // — owned by lib/contracts/vendor-compliance.ts (CLAUDE.md
+  // — owned by lib/contracts/vendor-compliance.ts (AGENTS.md
   // invariants table). Note: previously capped at 100 here; the
   // canonical cap is 120, so over-target vendors now read >100%.
   const compliance = computeVendorCompliance({
@@ -342,7 +342,7 @@ export async function getVendorPerformance(_vendorId?: string): Promise<VendorPe
  * Trailing 12-month vendor-scoped spend by category, with the prior
  * 12-month window as the comparison "target". Replaces the old
  * `MOCK_CATEGORY_BREAKDOWN` constants on the vendor /performance page
- * (Charles V2 audit). Sourced from cOGRecord per CLAUDE.md — same data
+ * (Charles V2 audit). Sourced from cOGRecord per AGENTS.md — same data
  * source as `getVendorSpendTrend` and the vendor dashboard market-share
  * card.
  */
@@ -471,7 +471,7 @@ export async function getVendorPerformanceMonthlyTrend(
  * Real `ContractTier` rows for the vendor's active contracts, joined
  * with trailing-12mo vendor-scoped COG so each tier carries a `current`
  * progress value. Replaces `MOCK_DEFAULT_REBATE_TIERS` (Charles V2
- * audit). Per CLAUDE.md, `ContractTier.rebateValue` is stored as a
+ * audit). Per AGENTS.md, `ContractTier.rebateValue` is stored as a
  * fraction (0.05 = 5%), so we scale by 100 at the Prisma boundary.
  */
 export async function getVendorPerformanceTiers(
@@ -537,7 +537,7 @@ export async function getVendorPerformanceTiers(
       // spendMin, so comparing dollar spend against them marked every
       // percent tier trivially "achieved"; carve_out/tie_in placeholder
       // tiers (rebateValue 0) are display noise. Same gate as the
-      // contract-detail Tier Achievement panel (CLAUDE.md invariants).
+      // contract-detail Tier Achievement panel (AGENTS.md invariants).
       if (!hasSpendDollarTierLadder(term)) continue
       for (const t of term.tiers) {
         const threshold = Number(t.spendMin ?? 0)
@@ -549,7 +549,7 @@ export async function getVendorPerformanceTiers(
           threshold,
           current,
           // Stored as fraction (0.05 = 5%) — route through the canonical
-          // boundary helper per CLAUDE.md "Rebate engine units" rule
+          // boundary helper per AGENTS.md "Rebate engine units" rule
           // (Charles 2026-05-04 DRIFT-3).
           rebateRate: scaleRebateValueForEngine(t.rebateValue ?? 0, t.rebateType),
           achieved: threshold > 0 && current >= threshold,
@@ -566,7 +566,7 @@ export async function getVendorPerformanceTiers(
 /**
  * Per-contract performance rows used by the Contracts and Rebate
  * Progress tabs. Spend is trailing-12mo vendor-scoped COG (per
- * CLAUDE.md). Rebate paid is the canonical lifetime earned figure
+ * AGENTS.md). Rebate paid is the canonical lifetime earned figure
  * (`sumEarnedRebatesLifetime`). Replaces the in-component mock
  * fallback that mixed in `MOCK_CONTRACT_PERFORMANCE` whenever the
  * server returned an empty list.

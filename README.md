@@ -304,7 +304,7 @@ graphify update .                # refresh after code changes (no API cost)
 ```
 
 A human-readable summary sits at `graphify-out/GRAPH_REPORT.md`, which records
-the commit it was built from so you can tell when it's stale. `CLAUDE.md`
+the commit it was built from so you can tell when it's stale. `AGENTS.md`
 carries the operational rules — the hard invariants, the verify checklist, and
 the conventions that are enforced by scanner tests.
 

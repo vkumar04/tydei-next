@@ -9,7 +9,7 @@
  * the contract detail page (Charles W1.R). This script won't catch
  * every case — only the patterns we've already seen drift on — but it
  * closes the "two places quietly disagree" hazard for the invariants
- * already in CLAUDE.md's table.
+ * already in AGENTS.md's table.
  *
  * Usage: bun scripts/check-invariants.ts
  */
@@ -40,7 +40,7 @@ const RULES: Rule[] = [
     allowed: ["lib/contracts/rebate-collected-filter.ts"],
     hint:
       "Use sumCollectedRebates from lib/contracts/rebate-collected-filter.ts.\n" +
-      "  See CLAUDE.md invariants table → Rebates Collected.",
+      "  See AGENTS.md invariants table → Rebates Collected.",
   },
   {
     name: "rebates-earned-ytd",
@@ -52,7 +52,7 @@ const RULES: Rule[] = [
     allowed: ["lib/contracts/rebate-earned-filter.ts"],
     hint:
       "Use sumEarnedRebatesYTD from lib/contracts/rebate-earned-filter.ts.\n" +
-      "  See CLAUDE.md invariants table → Rebates Earned (YTD).",
+      "  See AGENTS.md invariants table → Rebates Earned (YTD).",
   },
   {
     name: "bundle-shortfalls",
@@ -71,7 +71,7 @@ const RULES: Rule[] = [
     patterns: [
       // Don't hand-roll rebateValue * 100 scaling outside the boundary
       // helpers. The scaling lives in computeRebateFromPrismaTiers +
-      // tier-rebate-label.ts per CLAUDE.md.
+      // tier-rebate-label.ts per AGENTS.md.
       /rebateValue\s*\*\s*100\b/g,
       /Number\(\s*[a-zA-Z_]+\.rebateValue\s*\)\s*\*\s*100\b/g,
     ],

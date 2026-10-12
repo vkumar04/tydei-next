@@ -7,7 +7,7 @@
  * Background: `getAccrualTimeline` computes accruals on-the-fly for
  * display and NEVER writes to the database, while the contract detail
  * "Rebates Earned" card reads from `prisma.rebate` rows (per the
- * CLAUDE.md "never auto-compute rebates for display" rule).
+ * AGENTS.md "never auto-compute rebates for display" rule).
  *
  * That split means when a user edits `ContractTerm.evaluationPeriod`
  * (or any other field that changes the accrual shape), the detail card
@@ -67,7 +67,7 @@ import { ENGINE_VERSION } from "@/lib/rebates/engine-version"
 // below must cover EVERY writer's prefix, not just the spend writer's
 // (bugs.rtfd 2026-06-12 R1). Imported (never re-exported) because
 // `"use server"` files can only export async functions per the
-// CLAUDE.md convention; the constants live in a plain module.
+// AGENTS.md convention; the constants live in a plain module.
 import {
   AUTO_ACCRUAL_PREFIX,
   AUTO_ACCRUAL_PREFIXES,
@@ -367,7 +367,7 @@ export async function _recomputeAccrualForContractWithFacility(
   // fed raw fractions (0.03) into the engine, which expects integer
   // percent (3), so every persisted Rebate row's `rebateEarned` landed
   // 100× too small. Routes through `scaleRebateValueForEngine` so the
-  // unit convention is owned by a single helper. See CLAUDE.md "Rebate
+  // unit convention is owned by a single helper. See AGENTS.md "Rebate
   // engine units" rule.
   const termConfigs: TermAccrualConfig[] = termsWithTiers.map((term) => {
     // Charles iMessage 2026-04-21: "Fixed Rebate" tiers (rebateType =

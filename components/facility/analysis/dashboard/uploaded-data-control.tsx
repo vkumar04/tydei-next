@@ -52,7 +52,7 @@ const SPEND_ALIASES = [
   "total_cost",
 ]
 
-// Reuses the canonical header aliases (CLAUDE.md: never inline a header-alias
+// Reuses the canonical header aliases (AGENTS.md: never inline a header-alias
 // list). category OR vendor + price OR spend are needed to model.
 const SPEND_FILE_SPECS: UploadFieldSpec[] = [
   { key: "category", label: "Category", aliases: CATEGORY_ALIASES, kind: "text" },

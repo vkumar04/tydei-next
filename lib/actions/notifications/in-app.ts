@@ -50,7 +50,7 @@ export interface NotificationRow {
  * notification ("Account locked — click to verify" → http://evil.com)
  * into a foreign facility user's inbox.
  *
- * Per CLAUDE.md "use server hygiene": internal helpers MUST live in
+ * Per AGENTS.md "use server hygiene": internal helpers MUST live in
  * non-"use server" modules so they cannot be RPC-invoked. The helper
  * has been moved to `lib/notifications/in-app-helper.ts` as
  * `createInAppNotificationsInternal`. Internal server-action callers

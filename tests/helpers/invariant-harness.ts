@@ -5,7 +5,7 @@
  * number must be the same wherever it's shown" invariant can be
  * locked down with a single assertion.
  *
- * The CLAUDE.md invariants table names one canonical helper per
+ * The AGENTS.md invariants table names one canonical helper per
  * business number (sumCollectedRebates, sumEarnedRebatesYTD, etc.).
  * Every display surface rendering that number MUST call the helper.
  * In practice drift has dominated Charles's feedback (W1.R, W1.U-B,

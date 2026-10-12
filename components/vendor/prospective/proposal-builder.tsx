@@ -455,7 +455,7 @@ export const ProposalBuilder = forwardRef<
                 rebatePercent: t.rebatePercent,
                 // Wave 1.C: rebateType + tiers used to be STRIPPED here, so a
                 // built ladder never persisted. The UI-only _uid stays out of
-                // the payload (persist boundary — CLAUDE.md list-key rule).
+                // the payload (persist boundary — AGENTS.md list-key rule).
                 rebateType: t.rebateType,
                 tiers:
                   t.tiers.length > 0

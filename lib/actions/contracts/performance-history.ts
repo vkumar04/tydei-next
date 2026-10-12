@@ -80,7 +80,7 @@ async function _buildPerformanceHistory(
   // the chart from Rebate rows instead so it matches the card. Earned is
   // bucketed by `payPeriodEnd` quarter (only closed periods count); collected
   // is bucketed by `collectionDate` quarter (only rows with a real
-  // collection date count). See CLAUDE.md "Rebates are NEVER auto-computed
+  // collection date count). See AGENTS.md "Rebates are NEVER auto-computed
   // for display" rule — both Rebate rows and ContractPeriod rollups are
   // valid sources; we pick Rebate rows to stay in sync with the card.
   const rebates = await prisma.rebate.findMany({

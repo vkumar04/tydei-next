@@ -2,7 +2,7 @@
  * Tests for the Charles W1.Q ledger filter.
  *
  * `getContractRebates` backs the contract detail Transactions tab. Per
- * CLAUDE.md doctrine, earned rebates are only counted when
+ * AGENTS.md doctrine, earned rebates are only counted when
  * `payPeriodEnd <= today` — but the ledger query historically returned
  * *all* Rebate rows for a contract, so future-dated auto-accrual rows
  * (seeded or written by a pre-R5.26 script) leaked into the visible

@@ -196,7 +196,7 @@ export function AIExtractReview({
   // `data` can be a PARTIAL streamObject payload — ai-extract-dialog calls
   // setExtracted() on every parsed chunk — so arrays the model hasn't emitted
   // yet are undefined at render time regardless of what the Zod schema says.
-  // Derived, not mirrored (CLAUDE.md).
+  // Derived, not mirrored (AGENTS.md).
   const terms = data.terms ?? []
 
   return (

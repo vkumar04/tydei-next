@@ -632,7 +632,7 @@ export async function updateProposal(input: {
  * can clean up their historic proposals. Both lookups are
  * tenant-scoped to the calling vendor.
  *
- * The constraints in CLAUDE.md / V1 audit reserved `withdrawPendingContract`
+ * The constraints in AGENTS.md / V1 audit reserved `withdrawPendingContract`
  * for `PendingContract` rows submitted via the contract-submission flow;
  * prospective drafts never enter that flow (status "draft",
  * facilityId null).
@@ -809,7 +809,7 @@ function payloadToProposal(
   let dealHandoff: ProposalDealHandoff | null = null
   if (rawConstructs.length > 0) {
     const num = (v: unknown) => (typeof v === "number" ? v : Number(v) || 0)
-    // Route through the canonical blend (CLAUDE.md: never re-derive inline).
+    // Route through the canonical blend (AGENTS.md: never re-derive inline).
     // Its Target tier is dropped when no target prices were entered — in that
     // case the price change is 0, not −100% (bug-bash V-C6).
     const blended = blendConstructsToScenarios(

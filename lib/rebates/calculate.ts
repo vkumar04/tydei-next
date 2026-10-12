@@ -216,7 +216,7 @@ export const DEFAULT_COLLECTION_RATE = 0.8
  * the engine never applies percentage math to them.
  *
  * Why this helper exists: every caller that feeds raw Prisma tier rows
- * into the engine MUST scale at this boundary (CLAUDE.md "Rebate engine
+ * into the engine MUST scale at this boundary (AGENTS.md "Rebate engine
  * units" rule). Historical bugs (Charles W1.S, W1.V) were caused by
  * callers forgetting this and writing 100×-too-small rebates. Route all
  * scaling through this function so a single place owns the convention.
@@ -385,7 +385,7 @@ export function computeRebateFromPrismaTiers(
       // Existing percent-of-spend path — scale fractional .02 to 2% for
       // the math engine (mirrors lib/contracts/tier-rebate-label.ts).
       // Routes through `scaleRebateValueForEngine` to keep the unit
-      // convention owned by one helper (CLAUDE.md "Rebate engine units").
+      // convention owned by one helper (AGENTS.md "Rebate engine units").
       const scaled: TierInput[] = sortedTiers.map((t) => ({
         tierNumber: t.tierNumber,
         spendMin: t.spendMin,

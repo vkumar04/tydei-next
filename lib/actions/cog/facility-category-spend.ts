@@ -13,7 +13,7 @@
  *    spend here."
  *
  * Same canonical source as the standalone CategoryMarketShareCard:
- * cOGRecord rows in the trailing window. Per CLAUDE.md, every spend-
+ * cOGRecord rows in the trailing window. Per AGENTS.md, every spend-
  * by-vendor / share number traces back to cOGRecord, never to the
  * sparse ContractPeriod rollups.
  */

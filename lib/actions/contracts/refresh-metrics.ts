@@ -18,7 +18,7 @@
  * Failure modes are loud — the action returns a structured result and
  * the caller decides whether to surface the failure (toast for the
  * button click) or swallow it (best-effort during import). No
- * `console.warn` swallowing here; per CLAUDE.md AI-action error path
+ * `console.warn` swallowing here; per AGENTS.md AI-action error path
  * rule, errors are logged with context before re-throwing.
  */
 import { prisma } from "@/lib/db"

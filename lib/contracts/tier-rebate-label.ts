@@ -63,7 +63,7 @@ export function formatTierRebateUnitSuffix(rebateType: RebateType): string {
  * "Tier 2 · 9.0%" rendered its $84,557 contribution with NO rate while the
  * spend term beside it showed "2.00%".
  *
- * Unit convention (CLAUDE.md "Rebate engine units"): `percent_of_spend`
+ * Unit convention (AGENTS.md "Rebate engine units"): `percent_of_spend`
  * tiers store a FRACTION (0.09 = 9%); the timeline displays scaled percent,
  * so scale ×100 here — same boundary convention as
  * `scaleRebateValueForEngine` / `formatTierRebateLabel` above. Non-percent
@@ -137,7 +137,7 @@ export function formatTierDollarAnnotation(
   // amount. Charles iMessage 2026-04-20 N10: label used to read
   // "currently earning $X" which users read as an actual earned value
   // while the canonical "Rebates Earned (YTD)" card showed $0 (no
-  // Rebate rows yet). Per CLAUDE.md "Rebates are NEVER auto-computed
+  // Rebate rows yet). Per AGENTS.md "Rebates are NEVER auto-computed
   // for display" — projections are fine when CLEARLY labeled as such.
   // Rewording to `projects $X at this rate` makes the projection
   // explicit so it cannot be mistaken for the ledger total.

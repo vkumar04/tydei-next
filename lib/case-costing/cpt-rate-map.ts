@@ -9,7 +9,7 @@
  * stored `Case.totalReimbursement` (0 in most prod states) — so the
  * report header's "Avg Margin" contradicted the per-case tables beside
  * it. This module is the ONE place the rate-map filter lives, mirroring
- * the canonical-reducer policy in CLAUDE.md.
+ * the canonical-reducer policy in AGENTS.md.
  *
  * Pure functions — no Prisma imports. Callers pass the `cptRates` JSON
  * straight off the PayorContract rows.

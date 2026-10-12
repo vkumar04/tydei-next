@@ -7,7 +7,7 @@
  * Stryker user wrote a phishing notification into a foreign user's
  * inbox via the action endpoint).
  *
- * Per CLAUDE.md "use server hygiene": internal helpers MUST live in
+ * Per AGENTS.md "use server hygiene": internal helpers MUST live in
  * non-"use server" modules so they cannot be invoked as a Next.js
  * Server Action. Callers that need to fan out notifications import
  * this helper from inside their already-authenticated server action.

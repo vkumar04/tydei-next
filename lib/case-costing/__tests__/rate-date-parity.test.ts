@@ -31,7 +31,7 @@ import { normalizePayorCptRates } from "../payor-rate-normalize"
  * (`inEffectiveWindow`, `pickMostRecent`) was fed nothing but nulls and
  * silently degraded to "first row in the JSON wins".
  *
- * That is precisely the failure mode CLAUDE.md's canonical-reducer rule
+ * That is precisely the failure mode AGENTS.md's canonical-reducer rule
  * exists to prevent: one copy gets fixed, the other quietly keeps the old
  * behaviour, and the two disagree in production. Production carries 252 of
  * 336 rate rows with a date, so this was live.

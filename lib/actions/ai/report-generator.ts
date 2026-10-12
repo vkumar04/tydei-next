@@ -130,7 +130,7 @@ export async function generateReportFromPrompt(input: {
       notes: output.notes ?? null,
     })
   } catch (err) {
-    // Per CLAUDE.md "AI-action error path": log the raw exception server-side
+    // Per AGENTS.md "AI-action error path": log the raw exception server-side
     // before we degrade to a placeholder report, so prod still has a debug
     // trail (the user-facing path hides this failure in the "notes" field).
     console.error("[generateReportFromPrompt]", err, {

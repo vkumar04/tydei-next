@@ -461,7 +461,7 @@ If a finding is intentionally a post-fetch equality check (the
 pattern in lib/actions/contracts/proposals.ts), add the file:line
 to BASELINE_HITS in this test file with a one-line reason.
 
-If you're rolling new server actions, see CLAUDE.md "Canonical
+If you're rolling new server actions, see AGENTS.md "Canonical
 reducers" section + lib/actions/contracts-auth.ts helpers.
 
 New findings:

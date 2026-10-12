@@ -213,7 +213,7 @@ Produce the JSON response exactly matching the schema. Include observations only
     })
     rawOutput = result.output
   } catch (err) {
-    // Per CLAUDE.md "AI-action error path": log the raw exception server-side
+    // Per AGENTS.md "AI-action error path": log the raw exception server-side
     // before re-throwing so prod digests still have a debug trail. The Anthropic
     // call itself failed (rate-limit, auth, schema-rejected, context exceeded).
     console.error("[getRebateOptimizerInsights]", err, {

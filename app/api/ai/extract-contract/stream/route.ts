@@ -267,7 +267,7 @@ export async function POST(req: Request) {
           meaningfulChars: pdfText.meaningfulChars,
         },
       )
-      // Name the action AND the failure kind (CLAUDE.md "AI actions"). A
+      // Name the action AND the failure kind (AGENTS.md "AI actions"). A
       // scanned PDF is by far the most common cause here and the user can act
       // on it, so say so rather than emitting a bare "extraction failed".
       return Response.json(
@@ -314,7 +314,7 @@ export async function POST(req: Request) {
         },
       ],
       onError: ({ error }) => {
-        // CLAUDE.md AI-action error path: log full context server-side
+        // AGENTS.md AI-action error path: log full context server-side
         // before the SDK surfaces the failure to the client.
         console.error("[extract-contract/stream]", error, {
           userId,

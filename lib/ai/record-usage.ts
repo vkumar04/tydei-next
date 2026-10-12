@@ -13,12 +13,12 @@
  *    response on this helper (wrap in try/catch, or use streaming onFinish).
  *  - This helper never throws. Usage-logging failures must not regress the
  *    feature; the caller still succeeds. On any error we log via the
- *    CLAUDE.md "AI-action error path" convention and return
+ *    AGENTS.md "AI-action error path" convention and return
  *    `{ recorded: false }`.
  *  - If no `AICredit` row exists for the target entity we lazily create one
  *    with a large default allocation (1,000,000 credits) so the tab always
  *    renders real data. This is a visibility system, not an enforcement
- *    gate — see CLAUDE.md "AI Credits" / Step 1 design.
+ *    gate — see AGENTS.md "AI Credits" / Step 1 design.
  */
 
 import { prisma } from "@/lib/db"
@@ -120,7 +120,7 @@ export async function recordClaudeUsage(
 
     return { recorded: true, creditsUsed, remaining }
   } catch (err) {
-    // Per CLAUDE.md "AI-action error path": log the raw exception with the
+    // Per AGENTS.md "AI-action error path": log the raw exception with the
     // action name + context so prod digests still have a debug trail.
     console.error("[recordClaudeUsage]", err, {
       facilityId: input.facilityId,

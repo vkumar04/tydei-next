@@ -1,5 +1,5 @@
 /**
- * Regression tests for the CLAUDE.md "AI-action error path" contract on
+ * Regression tests for the AGENTS.md "AI-action error path" contract on
  * `getRebateOptimizerInsights`.
  *
  * Three invariants:

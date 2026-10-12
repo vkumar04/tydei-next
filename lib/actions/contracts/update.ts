@@ -30,7 +30,7 @@ export async function updateContract(id: string, input: UpdateContractInput) {
   try {
     return await _updateContractImpl(id, input)
   } catch (err) {
-    // Per CLAUDE.md "AI-action error path" — every server action that can
+    // Per AGENTS.md "AI-action error path" — every server action that can
     // throw should `console.error` with enough breadcrumbs to debug in
     // production logs, because the client only sees a redacted digest
     // ("An error occurred in the Server Components render"). Without

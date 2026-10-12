@@ -13,7 +13,7 @@
  *      currentTierPercent, capitalCost, rebateAppliedToCapital) so the
  *      card can run the math without any ad-hoc reducer.
  *
- * Pattern: `vi.mock("@/lib/db")` per CLAUDE.md — no DB hit.
+ * Pattern: `vi.mock("@/lib/db")` per AGENTS.md — no DB hit.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest"

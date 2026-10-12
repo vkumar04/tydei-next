@@ -217,7 +217,7 @@ describe("recomputeAccrualForContract — bucket by transactionDate (R5.10)", ()
     expect(months).toContain("2025-07")
     // Crucially, NO row should land in the seed month (2026-04) just
     // because createdAt=2026-04-18. That was the R5.10 bug: the one
-    // row had payPeriodEnd=2026-04-30 > today, so the CLAUDE.md filter
+    // row had payPeriodEnd=2026-04-30 > today, so the AGENTS.md filter
     // `payPeriodEnd <= today` excluded it → "no rebate earned".
     expect(months).not.toContain("2026-04")
   })

@@ -20,7 +20,7 @@ import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 // `getVendorPerformance` in vendor-analytics.ts. Never hand-roll the
 // earned ("payPeriodEnd <= today") or collected ("collectionDate is
 // set") filters in this file; those rules live in the helpers
-// (CLAUDE.md invariants table).
+// (AGENTS.md invariants table).
 
 function coerceDate(value: Date | string | null | undefined): Date | null {
   if (value == null) return null
@@ -96,7 +96,7 @@ export interface VendorContractReport {
  * contract with multiple rebate rows or with a populated Rebate ledger
  * but sparse periods (Charles W1.U-B / 2026-04-26 Bug 3 cases).
  *
- * Now routed through canonical helpers per the CLAUDE.md invariants
+ * Now routed through canonical helpers per the AGENTS.md invariants
  * table:
  *   - Spend: ContractPeriod._sum(totalSpend) preferred when populated;
  *     fall back to cOGRecord.extendedPrice (mirrors
@@ -263,7 +263,7 @@ export interface VendorPerformanceSummaryRow {
  * Compliance (2026-06-09 unification) is the canonical vendor spend
  * compliance — trailing-12mo vendor COG spend at the facility ÷ Σ
  * active-contract annual targets — via `computeVendorCompliance`
- * (lib/contracts/vendor-compliance.ts, CLAUDE.md invariants table).
+ * (lib/contracts/vendor-compliance.ts, AGENTS.md invariants table).
  * It is ALWAYS trailing-12mo, independent of the report window, so it
  * matches the vendor /performance page for the same vendor+facility.
  * (Previously this averaged the persisted `Contract.complianceRate`,
@@ -369,7 +369,7 @@ export async function getVendorPerformanceSummary(
     const spendForContract = periodSpend > 0 ? periodSpend : cogSpend
 
     // Window the rows, then the canonical helpers apply the earned /
-    // collected rules (never hand-rolled here — CLAUDE.md invariants).
+    // collected rules (never hand-rolled here — AGENTS.md invariants).
     const earnedForContract = sumEarnedRebatesLifetime(
       windowByPayPeriodEnd(c.rebates, start, end),
       today,

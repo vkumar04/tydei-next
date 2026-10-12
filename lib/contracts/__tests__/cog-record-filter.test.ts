@@ -47,7 +47,7 @@ describe("cogRecordWhere", () => {
       "vendorItemNo",
     ])
     // Case-insensitive: SKUs and descriptions are operator-typed free text,
-    // and a case-sensitive `contains` under-counts (CLAUDE.md hard rule).
+    // and a case-sensitive `contains` under-counts (AGENTS.md hard rule).
     for (const c of or) {
       expect(Object.values(c)[0]).toMatchObject({
         contains: "Stryker",

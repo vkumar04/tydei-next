@@ -11,7 +11,7 @@
  *   3. `getVendorPerformanceMonthlyTrend` matches the canonical
  *      cOGRecord pattern from getVendorSpendTrend.
  *   4. `getVendorPerformanceTiers` scales `ContractTier.rebateValue`
- *      (stored as fraction) by 100 per CLAUDE.md "Rebate engine units"
+ *      (stored as fraction) by 100 per AGENTS.md "Rebate engine units"
  *      rule.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
@@ -180,7 +180,7 @@ describe("getVendorPerformanceCategoryBreakdown — sourced from cOGRecord", () 
     })
     expect(rows[1].pctOfPrior).toBeNull()
     expect(rows[2]).toMatchObject({ category: "Equipment", spend: 0 })
-    // Filter is vendorId-scoped (canonical per CLAUDE.md).
+    // Filter is vendorId-scoped (canonical per AGENTS.md).
     const { prisma } = (await import("@/lib/db")) as unknown as {
       prisma: { cOGRecord: { findMany: ReturnType<typeof vi.fn> } }
     }
@@ -193,7 +193,7 @@ describe("getVendorPerformanceCategoryBreakdown — sourced from cOGRecord", () 
 
 describe("getVendorPerformanceTiers — rebateValue scaled by 100 at the boundary", () => {
   it("converts ContractTier.rebateValue (fraction) to a percentage rate", async () => {
-    // Stored as fraction per CLAUDE.md "Rebate engine units" — 0.05
+    // Stored as fraction per AGENTS.md "Rebate engine units" — 0.05
     // means 5%, NOT 5%.
     contractFindMany = [
       {

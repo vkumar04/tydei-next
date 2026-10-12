@@ -30,7 +30,7 @@
  * Each per-supply rebate is clamped to ≤ the supply's extendedCost
  * (defensive — a rebate never exceeds the line spend). Supplies on no
  * contract (or that the rule scores 0) contribute nothing; we never fall
- * back to a fabricated flat percent (CLAUDE.md "rebates are NEVER
+ * back to a fabricated flat percent (AGENTS.md "rebates are NEVER
  * auto-computed for display"). The flat 0.03 this replaces was pure
  * invention.
  *

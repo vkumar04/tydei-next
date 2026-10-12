@@ -61,7 +61,7 @@ export function ReportPeriodTable({
   // ContractPeriod rollup when it is absent OR zero — otherwise a contract
   // whose earned/collected lives only in ContractPeriod rollups (no Rebate
   // rows yet) showed a $0 footer total under non-zero period rows (Vick
-  // 2026-06-22). CLAUDE.md: earned/collected come from Rebate rows OR
+  // 2026-06-22). AGENTS.md: earned/collected come from Rebate rows OR
   // ContractPeriod rollups — `||` honors both; `??` wrongly trusted a 0.
   const totalRebateEarned = canonicalTotals?.rebateEarned || periodRebateEarned
   const totalRebateCollected =

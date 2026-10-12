@@ -201,7 +201,7 @@ export async function updateContractTerm(id: string, input: UpdateTermInput) {
   try {
     return await _updateContractTermImpl(id, input)
   } catch (err) {
-    // CLAUDE.md "AI-action error path" — surface real reason to server
+    // AGENTS.md "AI-action error path" — surface real reason to server
     // logs. Prod clients only see a redacted digest.
     console.error("[updateContractTerm]", err, { termId: id })
     throw err

@@ -231,7 +231,7 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
   })
 
   // Charles audit round-1 vendor C4 + round-2 + round-3: lifetime
-  // totals come from canonical helpers per the CLAUDE.md invariants
+  // totals come from canonical helpers per the AGENTS.md invariants
   // table. Rebate metrics come from sumEarnedRebatesLifetime +
   // sumCollectedRebates over the Rebate rows — same source the
   // facility surfaces use, no drift.
@@ -244,7 +244,7 @@ export async function getVendorContractDetail(id: string, _vendorId?: string) {
   //   1. Prefer ContractPeriod._sum(totalSpend) when populated
   //      (persisted rollup is the canonical spend source when present).
   //   2. Fall back to cOGRecord.extendedPrice scoped to {contractId}.
-  // CLAUDE.md hard rule: never use ContractPeriod as the SOLE source
+  // AGENTS.md hard rule: never use ContractPeriod as the SOLE source
   // of vendor spend.
   const [spendAgg, cogAgg, rebateRows] = await Promise.all([
     prisma.contractPeriod.aggregate({

@@ -96,7 +96,7 @@ export async function buildAccrualTimelineForContract(
   // (spendMin 0, rebateValue 0) entered the walk and made the timeline's
   // Tier column escalate 1→2→3 with cumulative spend on contracts that
   // have no real ladder. Use the canonical guard
-  // `hasSpendDollarTierLadder` (CLAUDE.md invariants table, "Spend-tier
+  // `hasSpendDollarTierLadder` (AGENTS.md invariants table, "Spend-tier
   // display eligibility") — it encodes the full rule: spend-dollar
   // thresholds only, no carve_out / tie_in, tiers present, and at least
   // one non-zero rebateValue (excludes all-zero placeholder ladders).

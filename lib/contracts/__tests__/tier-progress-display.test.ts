@@ -80,7 +80,7 @@ describe("tier dollar annotation (Charles W1.I / N10 re-label)", () => {
     )
     expect(annotation).not.toBeNull()
     // Must be a clearly-labeled PROJECTION — never read as actual earned.
-    // See CLAUDE.md "Rebates are NEVER auto-computed for display".
+    // See AGENTS.md "Rebates are NEVER auto-computed for display".
     expect(annotation).toContain("projects")
     expect(annotation).not.toContain("earning ")
     // 412,000 * 0.04 = 16,480

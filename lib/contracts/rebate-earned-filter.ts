@@ -1,7 +1,7 @@
 /**
  * Canonical "Rebates Earned" aggregate.
  *
- * CLAUDE.md invariant: a rebate is **earned** ONLY when the underlying
+ * AGENTS.md invariant: a rebate is **earned** ONLY when the underlying
  * `Rebate` row's pay period has closed — i.e. `payPeriodEnd <= today`.
  * Pre-recorded rows for future periods are projections, not earned. A
  * contract's "earned" figure renders on at least four surfaces: the

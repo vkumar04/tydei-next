@@ -68,7 +68,7 @@ export async function getRebateBreakdownByType() {
     // Charles audit round-1 facility CONCERN-A: route the collected
     // aggregate through the canonical sumCollectedRebates helper so the
     // "Collected" filter (collectionDate != null) is owned by exactly
-    // one place. See CLAUDE.md canonical-reducers invariants table.
+    // one place. See AGENTS.md canonical-reducers invariants table.
     const result = bucketRebatesByType(
       rebates,
       termTypeById,

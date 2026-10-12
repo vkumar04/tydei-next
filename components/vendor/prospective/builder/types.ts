@@ -5,10 +5,10 @@ export interface ProspectiveFacility {
 
 /** Tier-ladder row in the builder. `min`/`max` are in the term's targetType
  *  units — DOLLARS for spend, UNITS for volume, PERCENT (0–100) for market
- *  share (never mix; see the CLAUDE.md market-share type-confusion memory).
+ *  share (never mix; see the AGENTS.md market-share type-confusion memory).
  *  `value` is denominated per the term's rebateType. */
 export interface ProspectiveTermTier {
-  /** UI-only stable row id (CLAUDE.md list-key rule) — minted via
+  /** UI-only stable row id (AGENTS.md list-key rule) — minted via
    *  crypto.randomUUID(), STRIPPED at the persist boundary. */
   _uid: string
   min: number

@@ -14,7 +14,7 @@
  *   2. Whitespace-collapse case-insensitive match (so `"Ortho  Extremity"`
  *      collides with `"Ortho Extremity"`).
  *   3. Optional create — only when `createMissing: true` is passed.
- *      Categories are tenant-shared taxonomy; per CLAUDE.md role-model,
+ *      Categories are tenant-shared taxonomy; per AGENTS.md role-model,
  *      writes to ProductCategory should normally be admin-only — but
  *      import paths legitimately need to coin new ones. We tag the
  *      `source` column so admins can audit/dedupe later.
@@ -94,7 +94,7 @@ export function applyConfirmedCategoryMapToNames(
 ): string[] {
   // Review F10 (2026-06-10): the map is keyed by normalizeCategoryKey
   // (case/whitespace), but stored names drift by word-order/punctuation too
-  // ("Joints-Ortho" vs "Joints Ortho"). Per the CLAUDE.md category-name
+  // ("Joints-Ortho" vs "Joints Ortho"). Per the AGENTS.md category-name
   // invariant, fall back to a canonical-key lookup so a variant of a
   // mapped-away name can't slip through the read-time guard.
   const canonicalIndex = new Map<string, string>()

@@ -207,7 +207,7 @@ export async function runAlertSynthesisForFacility(
     // CURRENT SPEND (dollars). Flat-mapping every term's tiers mixed
     // term types (market_share % thresholds, volume counts, carve-out
     // placeholder tiers) into one bogus dollar ladder. Gate with the
-    // canonical `hasSpendDollarTierLadder` (CLAUDE.md invariants table)
+    // canonical `hasSpendDollarTierLadder` (AGENTS.md invariants table)
     // and pick the FIRST qualifying term — contracts with multiple
     // spend-dollar ladders are rare, and a single coherent ladder beats
     // a merged incoherent one.

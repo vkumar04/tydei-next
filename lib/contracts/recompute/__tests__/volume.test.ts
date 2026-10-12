@@ -84,7 +84,7 @@ import { recomputeVolumeAccrualForTerm } from "@/lib/contracts/recompute/volume"
 const FACILITY = "fac_test"
 const CONTRACT = "ct_test"
 const VENDOR = "vd_test"
-// Use a window comfortably in the past so today (2026-05-17 per CLAUDE.md)
+// Use a window comfortably in the past so today (2026-05-17 per AGENTS.md)
 // is past the term end. Otherwise the writer clamps `end` to today and
 // annual buckets fail to close.
 const START = new Date(Date.UTC(2024, 0, 1)) // 2024-01-01

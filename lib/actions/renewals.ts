@@ -151,7 +151,7 @@ export async function getExpiringContracts(input: {
   const windowEnd = addDays(now, windowDays)
 
   // Facility scope includes ContractFacility join-shared contracts
-  // (CLAUDE.md hard rule); vendor scope includes grouped contracts where
+  // (AGENTS.md hard rule); vendor scope includes grouped contracts where
   // this vendor sits in additionalVendorIds (group-vendor drift class).
   const tenantWhere: Prisma.ContractWhereInput = facilityId
     ? contractsOwnedByFacility(facilityId)
@@ -189,7 +189,7 @@ export async function getExpiringContracts(input: {
         take: 1,
       },
       // Charles 2026-05-04 DRIFT-4: route totalRebate through canonical
-      // helper (CLAUDE.md "Rebates Earned (lifetime)" invariant) instead
+      // helper (AGENTS.md "Rebates Earned (lifetime)" invariant) instead
       // of the sparse `ContractPeriod.rebateEarned` reducer.
       rebates: { select: { rebateEarned: true, payPeriodEnd: true } },
     },
@@ -266,7 +266,7 @@ export async function getRenewalSummary(contractId: string): Promise<RenewalSumm
         take: 1,
       },
       // Charles 2026-05-04 DRIFT-4: route totalRebate through canonical
-      // helper (CLAUDE.md "Rebates Earned (lifetime)" invariant) instead
+      // helper (AGENTS.md "Rebates Earned (lifetime)" invariant) instead
       // of the sparse `ContractPeriod.rebateEarned` reducer.
       rebates: { select: { rebateEarned: true, payPeriodEnd: true } },
     },
@@ -320,7 +320,7 @@ export async function getRenewalSummary(contractId: string): Promise<RenewalSumm
  * today (spec §13 leaves the door open), so we pass `compliance: null`
  * for every period. The aggregator preserves null through to the UI.
  * Rebate values come from `ContractPeriod.rebateEarned` — the same
- * rollup that drives the contracts list / dashboard surfaces (CLAUDE.md
+ * rollup that drives the contracts list / dashboard surfaces (AGENTS.md
  * rule: rebates are never auto-synthesized for display).
  */
 export async function getContractPerformanceHistory(

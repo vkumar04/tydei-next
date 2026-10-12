@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  * 1. Group-vendor drift: a vendor-scoped contract search must include
  *    grouped contracts where the vendor only appears in
  *    `additionalVendorIds` — i.e. it must route through
- *    `contractsOwnedByVendor`, never a bare `{ vendorId }`. (CLAUDE.md
+ *    `contractsOwnedByVendor`, never a bare `{ vendorId }`. (AGENTS.md
  *    invariant: "Contract ownership (vendor) … NEVER bare vendorId".)
  * 2. Invoice deep-link: facility hits link to the invoice detail route
  *    `/dashboard/invoice-validation/{id}` (not the bare list), and vendor

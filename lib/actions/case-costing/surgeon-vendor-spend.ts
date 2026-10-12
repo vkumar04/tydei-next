@@ -36,7 +36,7 @@ import {
 
 // from-form re-export ONLY — a LOCAL `export type { SurgeonVendorSpendRow }`
 // (no `from`) is NOT erased by Turbopack's prod server-action transform and
-// crashes every action in the file (CLAUDE.md use-server rule).
+// crashes every action in the file (AGENTS.md use-server rule).
 export type { SurgeonVendorSpendRow } from "@/lib/case-costing/surgeon-vendor-spend"
 
 export interface GetSurgeonVendorSpendInput {

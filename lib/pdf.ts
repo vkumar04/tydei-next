@@ -3,7 +3,7 @@
 // implementations live in lib/pdf/*.
 //
 // All PDFs render server-side via these generators → /api/reports/pdf
-// (CLAUDE.md hard rule): jspdf must never be imported from app/ or
+// (AGENTS.md hard rule): jspdf must never be imported from app/ or
 // components/ — `grep -rl jspdf app components` must stay empty.
 
 export { generateContractReport } from "./pdf/contract-report"

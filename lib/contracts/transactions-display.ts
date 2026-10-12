@@ -4,7 +4,7 @@
  * Charles W1.N / W1.R: the ledger merges two sources — `ContractPeriod`
  * rows (seed-synthesized projections) and `Rebate` rows (real facts the
  * user or the accrual engine write). Only `Rebate` rows have a
- * `collectionDate`. Per CLAUDE.md, a rebate is "collected" ONLY when a
+ * `collectionDate`. Per AGENTS.md, a rebate is "collected" ONLY when a
  * `Rebate` row has a non-null `collectionDate`. The per-row display and
  * the summary-card total both delegate to the canonical
  * `sumCollectedRebates` helper so the Transactions tab, the contract

@@ -5,7 +5,7 @@ export const ALL_CATEGORIES = "__all__"
 
 // One "construct" per product line: pick a benchmark (or free-text), then enter
 // the Current / Floor / Target / Ask unit prices, annual volume and rebate %.
-// Keyed by a stable UI-only _uid (CLAUDE.md: editable lists key by id, not idx).
+// Keyed by a stable UI-only _uid (AGENTS.md: editable lists key by id, not idx).
 export interface ConstructForm {
   _uid: string
   benchmarkId: string | null

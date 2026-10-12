@@ -88,7 +88,7 @@ export interface RebateRowForBucket {
  * `sumCollected` is injected so the caller routes the collected aggregate
  * through the canonical `sumCollectedRebates` helper (the "Collected"
  * filter, `collectionDate != null`, is owned by exactly one place — see
- * CLAUDE.md canonical-reducers invariants table). Keeping it as a
+ * AGENTS.md canonical-reducers invariants table). Keeping it as a
  * parameter avoids importing the action-layer reducer into a pure module
  * while preserving byte-identical output.
  */

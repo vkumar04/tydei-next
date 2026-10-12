@@ -50,7 +50,7 @@ async function computeVendorDashboardStats(vendorId: string, now: Date) {
     // Charles 2026-05-04 DRIFT-1: route through canonical helper instead of
     // ContractPeriod._sum(rebateEarned) — sparse on prod, drifts from the
     // explicit `Rebate` rows that drive every other "Earned" surface
-    // (CLAUDE.md "Rebates Earned (lifetime)" invariant).
+    // (AGENTS.md "Rebates Earned (lifetime)" invariant).
     prisma.rebate.findMany({
       where: { contract: { vendorId } },
       select: { rebateEarned: true, payPeriodEnd: true },
@@ -273,7 +273,7 @@ export async function getVendorRecentContracts(_vendorId?: string) {
  * data available" for Stryker at Lighthouse despite $1.7M+ of
  * categorized COG, because the trend was sourced from `ContractPeriod`
  * rollups — and Stryker has zero rows there. ContractPeriod is sparse
- * on prod; the canonical source for vendor spend (per CLAUDE.md and
+ * on prod; the canonical source for vendor spend (per AGENTS.md and
  * `getVendorDashboardStats` above) is `cOGRecord.extendedPrice`
  * filtered by `vendorId`. Switched the trend to bucket COG rows by
  * `transactionDate` year-month and pull rebate from `Rebate` rows on

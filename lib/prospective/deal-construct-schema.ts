@@ -3,7 +3,7 @@ import { z } from "zod"
 /**
  * Validation for a persisted Deal-Scorer construct — one row of the
  * "Proposed Deal — by product" table, written into a proposal's
- * `pricingData.dealConstructs` JSON column (CLAUDE.md: validate JSON-column
+ * `pricingData.dealConstructs` JSON column (AGENTS.md: validate JSON-column
  * writes).
  *
  * Lives in its OWN module (not the `"use server"` action file) so it can be

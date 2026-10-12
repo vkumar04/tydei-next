@@ -1,7 +1,7 @@
 /**
  * Canonical vendor "Spend Compliance" aggregate.
  *
- * CLAUDE.md invariant: vendor-side compliance is **trailing-12-month
+ * AGENTS.md invariant: vendor-side compliance is **trailing-12-month
  * vendor COG spend ÷ Σ active-contract annual targets** where each
  * contract's annual target is `annualValue || totalValue`. The result
  * is a percentage capped at `VENDOR_COMPLIANCE_CAP_PCT` and rounded to
