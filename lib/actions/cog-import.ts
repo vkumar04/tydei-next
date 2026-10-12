@@ -8,6 +8,7 @@
  * (lib/vendors/resolve) so we never add a parallel vendor-match path.
  */
 import { prisma } from "@/lib/db"
+import { invalidateFacilityAnalytics } from "@/lib/actions/analytics/_cache"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import {
@@ -43,6 +44,7 @@ export async function bulkImportCOGRecords(input: BulkImportInput) {
 
   try {
     const result = await runBulkImport(session, data)
+    await invalidateFacilityAnalytics(session.facility.id)
     console.log(
       `[bulkImportCOGRecords] done in ${Date.now() - t0}ms — imported=${"imported" in result ? result.imported : "?"}`,
     )

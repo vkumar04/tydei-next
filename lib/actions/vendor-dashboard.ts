@@ -1,6 +1,9 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { cacheLife, cacheTag } from "next/cache"
+import { vendorAnalyticsTag } from "@/lib/actions/analytics/_cached"
+import { floorToHour } from "@/lib/dates/floor-to-hour"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
 import { computeCategoryMarketShare } from "@/lib/contracts/market-share-filter"
@@ -12,7 +15,13 @@ import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 
 export async function getVendorDashboardStats(_vendorId?: string) {
   const { vendor: sessionVendor } = await requireVendor()
-  const vendorId = sessionVendor.id
+  return computeVendorDashboardStats(sessionVendor.id, floorToHour(new Date()))
+}
+
+async function computeVendorDashboardStats(vendorId: string, now: Date) {
+  "use cache"
+  cacheTag(vendorAnalyticsTag(vendorId))
+  cacheLife("minutes")
 
   // 2026-06-09 audit: the dashboard's primary sales figure was LIFETIME
   // COG while the facility side's "Current Spend" is trailing-12mo — the
@@ -20,7 +29,6 @@ export async function getVendorDashboardStats(_vendorId?: string) {
   // history. Primary is now trailing-12mo (same window/pattern as
   // getVendorPerformance in vendor-analytics.ts); lifetime is kept as a
   // sublabel so no information is lost.
-  const now = new Date()
   const { start: trailing12MoStart } = getTrailing12MonthWindow(now)
 
   const [

@@ -9,8 +9,8 @@ import {
 } from "@/lib/storage"
 
 /** Returns just the URL string (legacy interface). */
-export async function generatePresignedUploadUrl(key: string, contentType: string) {
-  const { uploadUrl } = await getUploadPresignedUrl(key, contentType)
+export async function generatePresignedUploadUrl(key: string, contentType: string, contentLength: number) {
+  const { uploadUrl } = await getUploadPresignedUrl(key, contentType, undefined, contentLength)
   return uploadUrl
 }
 

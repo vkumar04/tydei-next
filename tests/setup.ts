@@ -27,3 +27,20 @@ vi.mock("@/lib/actions/auth-permissions", async (importActual) => {
     requireCanMutate: vi.fn().mockResolvedValue(SUPER_CTX),
   }
 })
+
+vi.mock("next/server", async (importActual) => {
+  const actual = await importActual<typeof import("next/server")>()
+  return { ...actual, connection: vi.fn().mockResolvedValue(undefined) }
+})
+
+vi.mock("next/cache", async (importActual) => {
+  const actual = await importActual<typeof import("next/cache")>()
+  return {
+    ...actual,
+    cacheLife: vi.fn(),
+    cacheTag: vi.fn(),
+    updateTag: vi.fn(),
+    revalidateTag: vi.fn(),
+    revalidatePath: vi.fn(),
+  }
+})

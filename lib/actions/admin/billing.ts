@@ -6,28 +6,14 @@ import { prisma } from "@/lib/db"
 import type { CreditTierId } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 import { appUrl } from "@/lib/site-url"
+import {
+  toStripeInvoiceRow,
+  toSubscriptionRow,
+  type StripeInvoiceRow,
+  type SubscriptionRow,
+} from "@/lib/billing/stripe-rows"
 
-// ─── Types ───────────────────────────────────────────────────────
-
-export interface SubscriptionRow {
-  id: string
-  customerEmail: string | null
-  status: string
-  planName: string
-  amount: number
-  currentPeriodEnd: string
-}
-
-export interface StripeInvoiceRow {
-  id: string
-  customerEmail: string | null
-  customerName: string | null
-  amount: number
-  status: string
-  date: string
-  period: string | null
-  pdfUrl: string | null
-}
+export type { SubscriptionRow, StripeInvoiceRow } from "@/lib/billing/stripe-rows"
 
 // ─── Get Subscriptions ──────────────────────────────────────────
 
@@ -46,14 +32,7 @@ export async function getSubscriptions(input: {
   const subs = await stripe.subscriptions.list(params as Parameters<typeof stripe.subscriptions.list>[0])
 
   return serialize({
-    subscriptions: subs.data.map((s) => ({
-      id: s.id,
-      customerEmail: null,
-      status: s.status,
-      planName: s.items.data[0]?.price?.nickname ?? "Standard",
-      amount: s.items.data[0]?.price?.unit_amount ? s.items.data[0].price.unit_amount / 100 : 0,
-      currentPeriodEnd: new Date(((s as unknown as Record<string, unknown>).current_period_end as number ?? 0) * 1000).toISOString(),
-    })),
+    subscriptions: subs.data.map(toSubscriptionRow),
     total: subs.data.length,
   })
 }
@@ -76,27 +55,7 @@ export async function getStripeInvoices(input: {
   const invoices = await stripe.invoices.list(params as Parameters<typeof stripe.invoices.list>[0])
 
   return serialize({
-    invoices: invoices.data.map((inv) => {
-      const periodStart = (inv as unknown as Record<string, unknown>).period_start as number | undefined
-      const periodEnd = (inv as unknown as Record<string, unknown>).period_end as number | undefined
-      let period: string | null = null
-      if (periodStart && periodEnd) {
-        const fmt = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" })
-        const start = fmt.format(new Date(periodStart * 1000))
-        const end = fmt.format(new Date(periodEnd * 1000))
-        period = start === end ? start : `${start} - ${end}`
-      }
-      return {
-        id: inv.id,
-        customerEmail: inv.customer_email,
-        customerName: inv.customer_name ?? null,
-        amount: (inv.amount_due ?? 0) / 100,
-        status: inv.status ?? "unknown",
-        date: new Date((inv.created ?? 0) * 1000).toISOString(),
-        period,
-        pdfUrl: inv.invoice_pdf ?? null,
-      }
-    }),
+    invoices: invoices.data.map(toStripeInvoiceRow),
     total: invoices.data.length,
   })
 }

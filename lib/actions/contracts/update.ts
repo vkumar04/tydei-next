@@ -18,6 +18,7 @@ import { revalidatePath } from "next/cache"
 import {
   invalidateContractAnalytics,
   invalidateFacilityAnalytics,
+  invalidateVendorAnalytics,
 } from "@/lib/actions/analytics/_cache"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeCaseSupplyContractStatus } from "@/lib/case-costing/recompute-supply"
@@ -242,11 +243,12 @@ async function _updateContractImpl(
   }
 
   // Contract health-score feature removed 2026-04-23 (Bug 15).
-  revalidatePath("/dashboard/cog")
+  revalidatePath("/dashboard/cog-data")
   revalidatePath("/dashboard/contracts")
   revalidatePath(`/dashboard/contracts/${id}`)
   revalidatePath("/dashboard")
   await invalidateContractAnalytics(id)
+  await invalidateVendorAnalytics(contract.vendorId)
   if (contract.facilityId) {
     await invalidateFacilityAnalytics(contract.facilityId)
   }

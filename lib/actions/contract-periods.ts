@@ -3,6 +3,10 @@
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { revalidatePath } from "next/cache"
 import { prisma } from "@/lib/db"
+import {
+  invalidateContractAnalytics,
+  invalidateFacilityAnalytics,
+} from "@/lib/actions/analytics/_cache"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
@@ -24,14 +28,17 @@ async function revalidateCapitalRoutes(contractId: string): Promise<void> {
   try {
     const c = await prisma.contract.findUnique({
       where: { id: contractId },
-      select: { tieInCapitalContractId: true },
+      select: { tieInCapitalContractId: true, facilityId: true },
     })
     revalidatePath(`/dashboard/contracts/${contractId}`)
+    await invalidateContractAnalytics(contractId)
+    if (c?.facilityId) await invalidateFacilityAnalytics(c.facilityId)
     // usage→capital direction: this contract points at a capital
     // sibling whose Capital Amortization card aggregates this row's
     // collected rebates.
     if (c?.tieInCapitalContractId) {
       revalidatePath(`/dashboard/contracts/${c.tieInCapitalContractId}`)
+      await invalidateContractAnalytics(c.tieInCapitalContractId)
     }
     // capital→usage direction (Charles audit round-2 facility CONCERN-1):
     // when the mutated row IS the capital contract, sibling usage
@@ -43,6 +50,7 @@ async function revalidateCapitalRoutes(contractId: string): Promise<void> {
     })
     for (const s of siblings) {
       revalidatePath(`/dashboard/contracts/${s.id}`)
+      await invalidateContractAnalytics(s.id)
     }
   } catch {
     // best-effort cache hint; never block the mutation on revalidate failure

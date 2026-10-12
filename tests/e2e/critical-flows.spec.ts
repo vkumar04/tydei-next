@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test"
+import { test, expect } from "../support/test"
 
 /**
  * E2E: critical-flow coverage for the fixes shipped on 2026-04-26.

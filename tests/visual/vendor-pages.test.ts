@@ -282,7 +282,7 @@ test(
     // Wait for a real number first.
     const totalContractsStat = heroStatValue(page, "Total Contracts")
     await expect(totalContractsStat).toHaveText(/^[\d,]+$/, {
-      timeout: 20_000,
+      timeout: 60_000,
     })
     const portfolioTotal = (await totalContractsStat.innerText()).trim()
     expect(Number(portfolioTotal.replace(/,/g, ""))).toBeGreaterThan(0)

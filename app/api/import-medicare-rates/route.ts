@@ -1,3 +1,4 @@
+import { importErrorMessage } from "@/lib/imports/import-validation-error"
 import { NextResponse } from "next/server"
 import { headers as getHeaders } from "next/headers"
 import { unstable_rethrow } from "next/navigation"
@@ -50,6 +51,12 @@ export async function POST(request: Request) {
     if (typeof name !== "string" || !name.trim()) {
       return NextResponse.json(
         { error: "Give the rate set a name, e.g. \"CY2026 National\"" },
+        { status: 400 },
+      )
+    }
+    if (name.trim().length > 120) {
+      return NextResponse.json(
+        { error: "Rate set names are limited to 120 characters." },
         { status: 400 },
       )
     }
@@ -123,14 +130,9 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
-    const KNOWN = [
-      "No rates were recognized",
-      "out-of-range rate values",
-      "no data rows",
-      "rows; max is",
-    ]
-    if (KNOWN.some((k) => message.includes(k))) {
-      return NextResponse.json({ error: message }, { status: 400 })
+    const userMessage = importErrorMessage(error)
+    if (userMessage) {
+      return NextResponse.json({ error: userMessage }, { status: 400 })
     }
     return NextResponse.json({ error: "Import failed" }, { status: 500 })
   }

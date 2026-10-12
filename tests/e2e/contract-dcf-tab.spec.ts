@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test"
+import { test, expect } from "../support/test"
+import { type Page } from "@playwright/test"
 
 /**
  * E2E: the DCF Analysis tab on a vendor contract (Charles 2026-08-13) — link a

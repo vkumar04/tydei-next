@@ -1,5 +1,7 @@
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { AuthCard } from "@/components/auth/auth-card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { ResetPasswordForm } from "@/components/auth/reset-password-form"
 
 interface ResetPasswordPageProps {
@@ -18,7 +20,7 @@ interface ResetPasswordPageProps {
  * they have never had is the sort of small wrongness that makes people think
  * they have landed on the wrong page.
  */
-export default async function ResetPasswordPage({ searchParams }: ResetPasswordPageProps) {
+async function ResetPasswordContent({ searchParams }: ResetPasswordPageProps) {
   const { token, invite } = await searchParams
 
   if (!token) {
@@ -38,5 +40,22 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
     >
       <ResetPasswordForm token={token} />
     </AuthCard>
+  )
+}
+
+export default function ResetPasswordPage({ searchParams }: ResetPasswordPageProps) {
+  return (
+    <Suspense
+      fallback={
+        <AuthCard title="Reset Password" description="Checking your link">
+          <div className="space-y-3">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        </AuthCard>
+      }
+    >
+      <ResetPasswordContent searchParams={searchParams} />
+    </Suspense>
   )
 }

@@ -17,6 +17,7 @@ import {
   mapColumnsWithAI,
   get,
   findOrCreateVendorByName,
+  parseDate,
 } from "./shared"
 
 export async function ingestPricingFile(input: {
@@ -48,10 +49,13 @@ export async function ingestPricingFile(input: {
 
   // Vendor resolution: filename hint first (match vendor.code + full name),
   // then Manufacturer column, then Unknown fallback.
-  const hint = input.vendorHint ?? input.fileName ?? ""
-  let vendorId: string | null = null
+  const explicitVendor = input.vendorHint?.trim()
+  const hint = input.fileName ?? ""
+  let vendorId: string | null = explicitVendor
+    ? await findOrCreateVendorByName(explicitVendor, undefined, { facilityId })
+    : null
 
-  if (hint) {
+  if (!vendorId && hint) {
     const vendors = await prisma.vendor.findMany({
       select: { id: true, name: true, displayName: true, code: true },
     })
@@ -143,6 +147,16 @@ export async function ingestPricingFile(input: {
       { key: "uom", label: "Unit of Measure / UOM", required: false },
       { key: "category", label: "Category / Product Category", required: false },
       {
+        key: "effectiveDate",
+        label: "Effective Date / Start Date / Price Effective",
+        required: false,
+      },
+      {
+        key: "expirationDate",
+        label: "Expiration Date / End Date / Price Expires",
+        required: false,
+      },
+      {
         key: "carveOutPercent",
         label: "Carve-Out % / Carveout Percent / Carve Out Rate",
         required: false,
@@ -168,6 +182,10 @@ export async function ingestPricingFile(input: {
       const manufacturerNo = get(row, mapping, "manufacturerNo") || undefined
       const uom = get(row, mapping, "uom") || undefined
       const category = get(row, mapping, "category") || undefined
+      const effectiveDate =
+        parseDate(get(row, mapping, "effectiveDate")) ?? today
+      const expirationDate =
+        parseDate(get(row, mapping, "expirationDate")) ?? undefined
 
       // Normalize carve-out percent: user-supplied values may arrive as
       // "30", "30%", or "0.30". We store as a fraction (0.30 = 30%) per
@@ -195,7 +213,8 @@ export async function ingestPricingFile(input: {
           productDescription,
           listPrice: listPrice || 0,
           contractPrice: contractPrice || 0,
-          effectiveDate: today,
+          effectiveDate,
+          expirationDate,
           category,
           uom,
           carveOutPercent: carveOutPercent ?? undefined,

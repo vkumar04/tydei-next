@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test"
+import { test, expect } from "../support/test"
 
 /**
  * Real-browser cover for two reported login bugs (2026-07-26).

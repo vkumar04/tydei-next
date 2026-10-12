@@ -321,8 +321,8 @@ const BASELINE_HITS = new Set<string>([
   // ledger fix), shifting the guarded rebate.delete from 715 → 790. The delete
   // still verifies ownership via the contractOwnershipWhere find + the scoped
   // findFirstOrThrow on {id, contractId} immediately above it.
-  "lib/actions/contract-periods.ts:484",
-  "lib/actions/contract-periods.ts:790",
+  "lib/actions/contract-periods.ts:492",
+  "lib/actions/contract-periods.ts:798",
   // contracts/proposals.ts: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
   "lib/actions/contracts/proposals.ts:96",

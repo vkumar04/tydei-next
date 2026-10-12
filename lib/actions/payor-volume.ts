@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { ImportValidationError } from "@/lib/imports/import-validation-error"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
@@ -79,10 +80,10 @@ export async function ingestPayorVolumeRows(
   const parsedMeta = ingestPayorVolumeMetaSchema.parse(meta)
 
   if (!Array.isArray(rows) || rows.length === 0) {
-    throw new Error("The file contains no data rows")
+    throw new ImportValidationError("The file contains no data rows")
   }
   if (rows.length > MAX_ROWS) {
-    throw new Error(
+    throw new ImportValidationError(
       `The file has ${rows.length.toLocaleString()} rows; max is ${MAX_ROWS.toLocaleString()}`,
     )
   }
@@ -101,7 +102,7 @@ export async function ingestPayorVolumeRows(
       },
       select: { id: true, name: true },
     })
-    if (!facility) throw new Error("Facility not found")
+    if (!facility) throw new ImportValidationError("Facility not found")
     facilityId = facility.id
     facilityKey = `facility:${facility.id}`
     facilityLabel = facility.name
@@ -113,12 +114,12 @@ export async function ingestPayorVolumeRows(
 
   const parsed = parsePayorVolumeRows(rows)
   if (parsed.groups.length === 0) {
-    throw new Error(
+    throw new ImportValidationError(
       "No procedure groups found. Expected columns: Procedure Group, Year, Quarter, Volume.",
     )
   }
   if (parsed.groups.length > MAX_GROUPS) {
-    throw new Error(
+    throw new ImportValidationError(
       `The file has ${parsed.groups.length} procedure groups; max is ${MAX_GROUPS}`,
     )
   }
@@ -127,7 +128,7 @@ export async function ingestPayorVolumeRows(
   // (finite bounded volumes, sane years/quarters), so reads can cast.
   const validGroups = payorProcedureGroupsSchema.safeParse(parsed.groups)
   if (!validGroups.success) {
-    throw new Error(
+    throw new ImportValidationError(
       "The file contains out-of-range values (volumes must be non-negative numbers).",
     )
   }

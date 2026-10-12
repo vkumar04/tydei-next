@@ -36,6 +36,7 @@ export type ExtractedAmendment = z.infer<typeof extractedAmendmentSchema>
 // ─── Handler ────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  const logContext: { userId: string | null; contractId: string | null } = { userId: null, contractId: null }
   try {
     const session = await auth.api.getSession({ headers: await headers() })
     if (!session) {
@@ -68,6 +69,8 @@ export async function POST(request: Request) {
     const formData = await request.formData()
     const file = formData.get("file") as File | null
     const contractId = formData.get("contractId") as string | null
+    logContext.userId = session.user.id
+    logContext.contractId = contractId
 
     if (!file) {
       return Response.json({ error: "No file provided" }, { status: 400 })
@@ -125,7 +128,7 @@ export async function POST(request: Request) {
     const s3Key = `amendments/${userId}/${timestamp}-${crypto.randomUUID().slice(0, 8)}-${safeName}`
     await uploadFile(s3Key, fileData, file.type || "application/octet-stream")
 
-    const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")
+    const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
     const mediaType = isPDF ? "application/pdf" : "text/plain"
 
     // ── Build a summary of the current contract for diffing ────
@@ -262,8 +265,11 @@ Return valid JSON only — no markdown fences.`,
     if (error instanceof Error && error.name === "AbortError") {
       return new Response(null, { status: 499 })
     }
-    console.error("Amendment extraction error:", error)
-    return Response.json({ error: "Extraction failed" }, { status: 500 })
+    console.error("[extract-amendment]", error, logContext)
+    return Response.json(
+      { error: "Amendment extraction failed. Try again, or enter the changes manually." },
+      { status: 500 },
+    )
   }
 }
 

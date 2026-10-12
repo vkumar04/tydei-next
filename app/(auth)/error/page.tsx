@@ -3,6 +3,8 @@ import { AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { AuthCard } from "@/components/auth/auth-card"
 
+export const ensureStatic = "navigation"
+
 export default function AuthErrorPage() {
   return (
     <AuthCard title="Authentication Error">

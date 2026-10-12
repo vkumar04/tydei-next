@@ -1,3 +1,5 @@
+import { detectHeaderRowIndex } from "@/lib/utils/tabular/detect-headers"
+
 /**
  * Memory-bounded CSV → row-record parser for upload route handlers.
  *
@@ -106,6 +108,7 @@ function scanLines(
   text: string,
   maxRows: number,
   maxColumns: number,
+  headerLines: 0 | 1,
 ): LineSpan[] {
   const spans: LineSpan[] = []
   let pos = 0
@@ -118,8 +121,7 @@ function scanLines(
     if (end > pos && text.charCodeAt(end - 1) === 13) end-- // trailing CR
 
     if (!isBlankSlice(text, pos, end)) {
-      // spans[0] is the header; every later span is a data row.
-      if (spans.length > maxRows) {
+      if (spans.length - headerLines >= maxRows) {
         throw new CsvLimitError(
           `CSV has more than ${maxRows.toLocaleString()} rows; max is ${maxRows.toLocaleString()}. Split it into smaller files.`,
         )
@@ -162,7 +164,7 @@ export function parseCsvTextToMatrixBounded(
   const offset = text.charCodeAt(0) === 0xfeff ? 1 : 0
   const body = offset === 0 ? text : text.slice(offset)
 
-  const spans = scanLines(body, maxRows, maxColumns)
+  const spans = scanLines(body, maxRows, maxColumns, 0)
   return spans.map((s) => splitRow(body.slice(s.start, s.end)))
 }
 
@@ -183,12 +185,14 @@ export function parseCsvTextBounded(
   const offset = text.charCodeAt(0) === 0xfeff ? 1 : 0
   const body = offset === 0 ? text : text.slice(offset)
 
-  const spans = scanLines(body, maxRows, maxColumns)
+  const spans = scanLines(body, maxRows, maxColumns, 1)
   if (spans.length === 0) return { headers: [], rows: [] }
 
-  const headers = splitRow(body.slice(spans[0].start, spans[0].end))
+  const head = spans.slice(0, 15).map((s) => splitRow(body.slice(s.start, s.end)))
+  const headerIndex = detectHeaderRowIndex(head)
+  const headers = head[headerIndex] ?? []
   const rows: Record<string, string>[] = []
-  for (let i = 1; i < spans.length; i++) {
+  for (let i = headerIndex + 1; i < spans.length; i++) {
     const cells = splitRow(body.slice(spans[i].start, spans[i].end))
     // Null prototype: a header literally named "__proto__" must become an own
     // key, never a prototype mutation, and must not inherit Object members

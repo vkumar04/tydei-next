@@ -125,3 +125,30 @@ describe("parseCsvTextBounded — memory caps", () => {
     expect(err.name).toBe("CsvLimitError")
   })
 })
+
+describe("parseCsvTextBounded — report title rows above the header", () => {
+  it("finds the header row below title lines and keys rows by it", () => {
+    const csv = [
+      "Lighthouse Surgical Center",
+      "COG Export Q3 2026",
+      "PO Number,Vendor Item No,Description,Extended Price",
+      "PO-1,SKU-1,Knee Implant,4500",
+      "PO-2,SKU-2,Hip Stem,3200",
+    ].join("\n")
+    const { headers, rows } = parseCsvTextBounded(csv)
+    expect(headers).toEqual(["PO Number", "Vendor Item No", "Description", "Extended Price"])
+    expect(rows).toHaveLength(2)
+    expect(rows[1]!["Description"]).toBe("Hip Stem")
+  })
+
+  it("still treats the first line as the header when there are no title lines", () => {
+    const { headers, rows } = parseCsvTextBounded("SKU,Price\nA,1\nB,2\n")
+    expect(headers).toEqual(["SKU", "Price"])
+    expect(rows).toHaveLength(2)
+  })
+
+  it("still enforces the row cap when the file has a title line", () => {
+    const csv = ["Title line", "SKU,Price", "A,1", "B,2", "C,3", "D,4"].join("\n")
+    expect(() => parseCsvTextBounded(csv, { maxRows: 3 })).toThrow(CsvLimitError)
+  })
+})

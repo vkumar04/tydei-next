@@ -1,6 +1,7 @@
 "use server"
 
 import { prisma } from "@/lib/db"
+import { invalidateFacilityAnalytics } from "@/lib/actions/analytics/_cache"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { alertFiltersSchema, type AlertFilters } from "@/lib/validators/alerts"
@@ -169,6 +170,7 @@ export async function resolveAlert(id: string) {
     entityType: "alert",
     entityId: id,
   })
+  await invalidateFacilityAnalytics(session.facility.id)
 }
 
 // ─── Dismiss ─────────────────────────────────────────────────────
@@ -186,6 +188,7 @@ export async function dismissAlert(id: string) {
     entityType: "alert",
     entityId: id,
   })
+  await invalidateFacilityAnalytics(session.facility.id)
 }
 
 // ─── Bulk Resolve ────────────────────────────────────────────────
@@ -197,6 +200,7 @@ export async function bulkResolveAlerts(ids: string[]) {
     where: { id: { in: ids }, facilityId: facility.id },
     data: { status: "resolved", resolvedAt: new Date() },
   })
+  await invalidateFacilityAnalytics(facility.id)
   return { resolved: result.count }
 }
 
@@ -209,6 +213,7 @@ export async function bulkDismissAlerts(ids: string[]) {
     where: { id: { in: ids }, facilityId: facility.id },
     data: { status: "dismissed", dismissedAt: new Date() },
   })
+  await invalidateFacilityAnalytics(facility.id)
   return { dismissed: result.count }
 }
 
@@ -231,9 +236,11 @@ export async function synthesizeAndPersistAlerts(): Promise<{
   // Creates/resolves Alert rows — block read-only `user` tier, consistent with
   // every other alert mutation in this file (audit 2026-06-21).
   await requireCanMutate()
-  return runAlertSynthesisForFacility(session.facility.id, {
+  const synthesized = await runAlertSynthesisForFacility(session.facility.id, {
     auditUserId: session.user.id,
   })
+  await invalidateFacilityAnalytics(session.facility.id)
+  return synthesized
 }
 
 // ─── Bulk Update Alerts (plan + apply) ───────────────────────────
@@ -306,6 +313,7 @@ export async function bulkUpdateAlerts(input: {
     },
   })
 
+  await invalidateFacilityAnalytics(facilityId)
   return {
     updated: plan.toUpdate.length,
     // Rows that didn't belong to the facility count as skipped too.

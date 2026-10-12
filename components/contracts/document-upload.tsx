@@ -30,8 +30,10 @@ export function DocumentUpload({ onUploaded, open, onOpenChange }: DocumentUploa
       fileName: file.name,
       contentType: file.type,
       folder: "contracts",
+      size: file.size,
     })
-    await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } })
+    const put = await fetch(uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": file.type } })
+    if (!put.ok) throw new Error(`Upload of ${file.name} failed (${put.status})`)
     onUploaded({ name: file.name, type: docType, url: key })
     onOpenChange(false)
     return key

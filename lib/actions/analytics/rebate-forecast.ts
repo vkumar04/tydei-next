@@ -8,6 +8,12 @@
  */
 
 import { prisma } from "@/lib/db"
+import { cacheLife, cacheTag } from "next/cache"
+import {
+  contractAnalyticsTag,
+  facilityAnalyticsTag,
+} from "@/lib/actions/analytics/_cached"
+import { floorToHour } from "@/lib/dates/floor-to-hour"
 import { serialize } from "@/lib/serialize"
 import { requireContractScope } from "@/lib/actions/analytics/_scope"
 import { withTelemetry } from "@/lib/actions/analytics/_telemetry"
@@ -47,6 +53,26 @@ async function _getRebateForecastImpl(
   forecastMonths: number,
 ): Promise<RebateForecast> {
   const scope = await requireContractScope(contractId)
+  return computeRebateForecastForScope(
+    contractId,
+    scope.cogScopeFacilityIds,
+    forecastMonths,
+    floorToHour(new Date()),
+  )
+}
+
+async function computeRebateForecastForScope(
+  contractId: string,
+  cogScopeFacilityIds: string[],
+  forecastMonths: number,
+  now: Date,
+): Promise<RebateForecast> {
+  "use cache"
+  cacheTag(
+    contractAnalyticsTag(contractId),
+    ...cogScopeFacilityIds.map(facilityAnalyticsTag),
+  )
+  cacheLife("hours")
 
   const contract = await prisma.contract.findFirstOrThrow({
     where: { id: contractId },
@@ -82,7 +108,7 @@ async function _getRebateForecastImpl(
   })
 
   // Pull last 24 months of vendor spend.
-  const today = new Date()
+  const today = now
   const since = new Date(today)
   since.setMonth(since.getMonth() - 24)
   // Group-drift guard: a grouped/tie-in contract spans several vendors.
@@ -90,7 +116,7 @@ async function _getRebateForecastImpl(
   const vendorIds = contractVendorIds(contract)
   const cog = await prisma.cOGRecord.findMany({
     where: {
-      facilityId: { in: scope.cogScopeFacilityIds },
+      facilityId: { in: cogScopeFacilityIds },
       vendorId: { in: vendorIds },
       transactionDate: { gte: since, lte: today },
     },

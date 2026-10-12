@@ -86,7 +86,11 @@ vi.mock("@/lib/actions/notifications", () => ({
 vi.mock("@/lib/cog/recompute", () => ({
   recomputeMatchStatusesForVendor: recomputeMock,
 }))
-vi.mock("next/cache", () => ({ revalidatePath: revalidatePathMock }))
+vi.mock("next/cache", () => ({
+  revalidatePath: revalidatePathMock,
+  updateTag: vi.fn(),
+  revalidateTag: vi.fn(),
+}))
 vi.mock("@/lib/audit", () => ({ logAudit: vi.fn() }))
 
 import * as pendingContractActions from "@/lib/actions/pending-contracts"

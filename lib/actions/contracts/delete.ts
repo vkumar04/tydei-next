@@ -12,6 +12,7 @@ import { revalidatePath } from "next/cache"
 import {
   invalidateContractAnalytics,
   invalidateFacilityAnalytics,
+  invalidateVendorAnalytics,
 } from "@/lib/actions/analytics/_cache"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
@@ -61,10 +62,11 @@ export async function deleteContract(id: string) {
       facilityId,
     })
   }
-  revalidatePath("/dashboard/cog")
+  revalidatePath("/dashboard/cog-data")
   revalidatePath("/dashboard/contracts")
   revalidatePath("/dashboard")
   await invalidateContractAnalytics(id)
+  await invalidateVendorAnalytics(existing.vendorId)
   if (existing.facilityId) {
     await invalidateFacilityAnalytics(existing.facilityId)
   }

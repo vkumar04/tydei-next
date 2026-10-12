@@ -5,6 +5,7 @@ import Link from "next/link"
 import { TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useQuery } from "@tanstack/react-query"
+import { useSession } from "@/lib/auth"
 import { queryKeys } from "@/lib/query-keys"
 import { toast } from "sonner"
 import type { PortalRole } from "@/lib/types"
@@ -32,6 +33,8 @@ export function AlertBell({
   const portalType = role === "vendor" ? "vendor" : "facility"
   const entityId = (role === "vendor" ? vendorId : facilityId) ?? ""
   const scopedToAnEntity = role !== "admin" && !!entityId
+  const { data: session, isPending: sessionPending } = useSession()
+  const signedIn = sessionPending || !!session
 
   const { data: count } = useQuery({
     queryKey: queryKeys.alerts.unreadCount(portalType, entityId),
@@ -49,7 +52,7 @@ export function AlertBell({
     },
     refetchInterval: 30_000,
     initialData: initialCount,
-    enabled: scopedToAnEntity,
+    enabled: scopedToAnEntity && signedIn,
   })
 
   const prevCountRef = useRef(initialCount)
@@ -88,6 +91,17 @@ export function AlertBell({
             {displayCount}
           </span>
         )}
+      </Button>
+    </Link>
+  )
+}
+
+export function AlertBellPlaceholder({ role }: { role: PortalRole }) {
+  const alertsHref = role === "vendor" ? "/vendor/alerts" : "/dashboard/alerts"
+  return (
+    <Link href={alertsHref} aria-label="Alerts">
+      <Button variant="ghost" size="icon" className="relative h-9 w-9">
+        <TriangleAlert className="h-4 w-4" />
       </Button>
     </Link>
   )

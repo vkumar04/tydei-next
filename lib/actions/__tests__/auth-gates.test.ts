@@ -152,14 +152,17 @@ describe("requireFacility", () => {
     expect(redirectMock).toHaveBeenCalledWith("/login")
   })
 
-  it("redirects (role mismatch) before reaching the facility lookup", async () => {
+  it("redirects on role mismatch even when a facility membership exists", async () => {
     authGetSessionMock.mockResolvedValue({ user: { id: "u-1" } })
     userFindUniqueMock.mockResolvedValue({ role: "vendor" })
+    memberFindFirstMock.mockResolvedValue({
+      organization: { facility: { id: "f-1" } },
+    })
 
     await expect(requireFacility()).rejects.toThrow(
       "REDIRECT:/vendor/dashboard",
     )
-    expect(memberFindFirstMock).not.toHaveBeenCalled()
+    expect(redirectMock).toHaveBeenCalledWith("/vendor/dashboard")
   })
 })
 
@@ -198,12 +201,15 @@ describe("requireVendor", () => {
     expect(redirectMock).toHaveBeenCalledWith("/login")
   })
 
-  it("redirects (role mismatch) before reaching the vendor lookup", async () => {
+  it("redirects on role mismatch even when a vendor membership exists", async () => {
     authGetSessionMock.mockResolvedValue({ user: { id: "u-2" } })
     userFindUniqueMock.mockResolvedValue({ role: "facility" })
+    memberFindFirstMock.mockResolvedValue({
+      organization: { vendor: { id: "v-1" } },
+    })
 
     await expect(requireVendor()).rejects.toThrow("REDIRECT:/dashboard")
-    expect(memberFindFirstMock).not.toHaveBeenCalled()
+    expect(redirectMock).toHaveBeenCalledWith("/dashboard")
   })
 })
 

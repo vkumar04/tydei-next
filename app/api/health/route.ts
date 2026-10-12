@@ -3,8 +3,7 @@
 // traffic to a new deploy as soon as it can boot instead of waiting for a
 // real page (`/`) to render. 2026-06-09: cuts the "Deploying…" cutover wait.
 import { headers } from "next/headers"
-
-export const dynamic = "force-dynamic"
+import { connection } from "next/server"
 
 // TEMPORARY (remove after reading the logs): better-auth cannot resolve a
 // client IP in production and falls back to one shared rate-limit bucket for
@@ -24,6 +23,7 @@ const PROXY_HEADERS = [
 ]
 
 export async function GET() {
+  await connection()
   if (process.env.LOG_PROXY_HEADERS === "1") {
     const h = await headers()
     const seen: Record<string, string> = {}

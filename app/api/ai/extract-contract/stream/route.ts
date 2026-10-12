@@ -18,6 +18,7 @@
  * the client dialog reads either response identically.
  */
 
+import { recordContractExtractionUsage } from "@/lib/ai/record-extract-usage"
 import { streamObject, NoObjectGeneratedError } from "ai"
 import { headers } from "next/headers"
 import { createHash } from "node:crypto"
@@ -141,6 +142,16 @@ export async function POST(req: Request) {
 
   const fileData = new Uint8Array(await file.arrayBuffer())
   const userId = session.user.id
+  const userName = session.user.name ?? session.user.email ?? "Unknown"
+  const persistExtraction = async (opts: Parameters<typeof cacheExtraction>[0]) => {
+    await cacheExtraction(opts)
+    await recordContractExtractionUsage(
+      userId,
+      userName,
+      `Extracted contract from ${file.name.slice(0, 40)}`,
+      "[extract-contract/stream]",
+    )
+  }
   // Bumped 2026-05-27: forces all cached extracts to re-run after
   // the chunked-path text-first regression that left
   // contractName/vendorName empty on every cover page. Without this,
@@ -223,7 +234,7 @@ export async function POST(req: Request) {
         logPrefix: "[extract-contract/stream]",
       })
 
-      await cacheExtraction({
+      await persistExtraction({
         userId,
         fileHash,
         filename: file.name,
@@ -320,7 +331,7 @@ export async function POST(req: Request) {
       },
       onFinish: async ({ object }) => {
         if (!object) return
-        await cacheExtraction({
+        await persistExtraction({
           userId,
           fileHash,
           filename: file.name,
@@ -421,7 +432,7 @@ export async function POST(req: Request) {
               abortSignal: req.signal,
               logPrefix: "[extract-contract/stream]",
             })
-            await cacheExtraction({
+            await persistExtraction({
               userId,
               fileHash,
               filename: file.name,

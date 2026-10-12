@@ -1,6 +1,8 @@
 import { SiteHeader } from "@/components/marketing/site-header"
 import { SiteFooter } from "@/components/marketing/site-footer"
 
+export const ensureStatic = "navigation"
+
 export default function MarketingLayout({
   children,
 }: {

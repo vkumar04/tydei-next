@@ -153,6 +153,11 @@ export async function runChunkedExtraction(opts: {
           maxPages: chunk.pageEnd - chunk.pageStart + 1,
         })
       : ""
+    if (!chunkText.hasTextLayer) {
+      console.info(
+        `${logPrefix} OCR pages ${chunk.pageStart}-${chunk.pageEnd}: ${ocrText.length} chars`,
+      )
+    }
     const ocrBlock = ocrText
       ? ({
           type: "text" as const,

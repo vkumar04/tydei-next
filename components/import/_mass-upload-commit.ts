@@ -227,6 +227,9 @@ export async function commitCompletedDocuments(
       // the rows array never crosses the wire as RSC.
       const form = new FormData()
       form.append("file", d.file)
+      const pricingVendor =
+        d.userOverrides?.vendorName ?? d.classification?.vendorName ?? null
+      if (pricingVendor) form.append("vendorHint", pricingVendor)
       const res = await fetch("/api/import-pricing", {
         method: "POST",
         body: form,

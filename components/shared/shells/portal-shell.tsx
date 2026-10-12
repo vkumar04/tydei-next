@@ -1,6 +1,6 @@
 "use client"
 
-import type { ReactNode } from "react"
+import { Suspense, type ReactNode } from "react"
 import Link from "next/link"
 import type { NavItem, PortalRole, BadgeCounts } from "@/lib/types"
 import { Shield } from "lucide-react"
@@ -15,34 +15,28 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { SidebarNav } from "@/components/shared/shells/sidebar-nav"
-import { UserMenu } from "@/components/shared/shells/user-menu"
+import { SidebarNav, SidebarNavList } from "@/components/shared/shells/sidebar-nav"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { CommandSearch } from "@/components/shared/shells/command-search"
-import { AlertBell } from "@/components/shared/shells/alert-bell"
-import { NotificationBell } from "@/components/shared/notification-bell"
+import { NotificationBell, NotificationBellPlaceholder } from "@/components/shared/notification-bell"
 
 interface PortalShellProps {
   role: PortalRole
   navItems: NavItem[]
-  user: { name: string; email: string; image?: string | null }
   badgeCounts?: BadgeCounts
   sidebarHeader?: ReactNode
-  alertCount?: number
-  facilityId?: string
-  vendorId?: string
+  userMenu: ReactNode
+  alertBell?: ReactNode
   children: ReactNode
 }
 
 export function PortalShell({
   role,
   navItems,
-  user,
   badgeCounts,
   sidebarHeader,
-  alertCount,
-  facilityId,
-  vendorId,
+  userMenu,
+  alertBell,
   children,
 }: PortalShellProps) {
   return (
@@ -88,11 +82,13 @@ export function PortalShell({
         </SidebarHeader>
         <SidebarContent className="p-0">
           <ScrollArea className="flex-1 px-3 py-4">
-            <SidebarNav items={navItems} badgeCounts={badgeCounts} />
+            <Suspense fallback={<SidebarNavList items={navItems} badgeCounts={badgeCounts} pathname={null} />}>
+              <SidebarNav items={navItems} badgeCounts={badgeCounts} />
+            </Suspense>
           </ScrollArea>
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-4">
-          <UserMenu user={user} role={role} />
+          {userMenu}
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
@@ -130,16 +126,13 @@ export function PortalShell({
             <ThemeToggle />
             {/* Alerts (triangle): off-contract purchases, price
                 discrepancies, expirations. Polls every 30s. */}
-            <AlertBell
-              role={role}
-              facilityId={facilityId}
-              vendorId={vendorId}
-              initialCount={alertCount}
-            />
+            {alertBell}
             {/* In-app notifications (bell): pending-contract decisions
                 + change-proposal events. Distinct icon from AlertBell
                 so users can tell at a glance which one's lit. */}
-            <NotificationBell />
+            <Suspense fallback={<NotificationBellPlaceholder />}>
+              <NotificationBell />
+            </Suspense>
           </div>
         </header>
 

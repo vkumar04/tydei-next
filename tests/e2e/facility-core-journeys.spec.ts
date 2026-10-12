@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test"
+import { test, expect } from "../support/test"
+import { type Page } from "@playwright/test"
 
 /**
  * E2E: facility portal core journeys.
@@ -691,6 +692,11 @@ test.describe("cog data", () => {
         `COG table is missing the "${header}" column`,
       ).toBeVisible()
     }
+
+    await expect(
+      content(page).getByRole("cell", { name: /^PO-/ }).first(),
+      "COG rows must finish loading before the sort header is clickable",
+    ).toBeVisible({ timeout: LOAD })
 
     const description = page
       .getByRole("columnheader", { name: "Description", exact: true })

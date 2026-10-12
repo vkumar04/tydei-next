@@ -5,6 +5,9 @@
 // non-async-function re-exports from "use server" modules.
 
 import { prisma } from "@/lib/db"
+import { cacheLife, cacheTag } from "next/cache"
+import { facilityAnalyticsTag } from "@/lib/actions/analytics/_cached"
+import { floorToHour } from "@/lib/dates/floor-to-hour"
 import { requireFacility } from "@/lib/actions/auth"
 import { Prisma } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
@@ -37,7 +40,28 @@ export async function getContractStats(
   // helper rather than each deciding what "all" means.
   const accessibleFacilityIds =
     scope === "all" ? await getCallerFacilityIds() : undefined
-  const where = facilityScopeClause(scope, facility.id, accessibleFacilityIds)
+  return computeContractStats(
+    facility.id,
+    scope,
+    accessibleFacilityIds ?? null,
+    floorToHour(new Date()),
+  )
+}
+
+async function computeContractStats(
+  facilityId: string,
+  scope: FacilityScope,
+  accessibleFacilityIdsOrNull: string[] | null,
+  today: Date,
+) {
+  "use cache"
+  cacheTag(
+    facilityAnalyticsTag(facilityId),
+    ...(accessibleFacilityIdsOrNull ?? []).map(facilityAnalyticsTag),
+  )
+  cacheLife("minutes")
+  const accessibleFacilityIds = accessibleFacilityIdsOrNull ?? undefined
+  const where = facilityScopeClause(scope, facilityId, accessibleFacilityIds)
 
   // Earned counts only periods that have actually closed — pre-recorded
   // rows for upcoming periods are projections, not earned. Every number
@@ -49,7 +73,6 @@ export async function getContractStats(
   // the same calendar-year floor (startOfYear ≤ payPeriodEnd ≤ today).
   // The DB-side aggregation below is the Prisma equivalent of the
   // in-memory `sumEarnedRebatesYTD` helper — keep them in sync (W1.U-B).
-  const today = new Date()
   const startOfYear = new Date(today.getFullYear(), 0, 1)
   const expiringCutoff = new Date(
     today.getTime() + EXPIRING_SOON_WINDOW_DAYS * 24 * 60 * 60 * 1000,
@@ -68,7 +91,7 @@ export async function getContractStats(
   // contract's PEER-facility rebate rows landing in this facility's total.
   //
   // Its width now follows the scope, because the scope is finally bounded:
-  //   "this" / "shared" → `facility.id`, the caller's own facility.
+  //   "this" / "shared" → `facilityId`, the caller's own facility.
   //   "all"             → `{ in: accessibleFacilityIds }`, the SAME set the
   //                       contract counts above were computed over.
   //
@@ -79,7 +102,7 @@ export async function getContractStats(
   // reach a facility the caller may not read, and `contract: where` narrows it
   // again to contracts in the same set.
   //
-  // The earlier unconditional `facility.id` bound existed because "all"
+  // The earlier unconditional `facilityId` bound existed because "all"
   // resolved to an unbounded `{}` here: widening the ledger then would have
   // summed EVERY tenant's rebate dollars into this card. That hole is closed
   // (see `facilityScopeClause`), so money and counts can sit on one hero row
@@ -89,7 +112,7 @@ export async function getContractStats(
     contract: where,
     facilityId: accessibleFacilityIds
       ? { in: accessibleFacilityIds }
-      : facility.id,
+      : facilityId,
   }
 
   // 2026-07-28 (wrong-scope bug class): `activeContracts` and

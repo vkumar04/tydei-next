@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test"
+import { test, expect } from "../support/test"
+import { type Page } from "@playwright/test"
 import { Client } from "pg"
 import { readFileSync } from "node:fs"
 import path from "node:path"

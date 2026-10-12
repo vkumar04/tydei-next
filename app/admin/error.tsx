@@ -4,10 +4,10 @@ import { ErrorBoundaryCard } from "@/components/shared/error-boundary-card"
 
 export default function AdminError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string }
-  reset: () => void
+  retry: () => void
 }) {
-  return <ErrorBoundaryCard error={error} reset={reset} segment="admin" />
+  return <ErrorBoundaryCard error={error} reset={retry} segment="admin" />
 }

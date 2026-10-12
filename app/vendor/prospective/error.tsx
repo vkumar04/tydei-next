@@ -15,10 +15,10 @@ import { Card, CardContent } from "@/components/ui/card"
 
 export default function ProspectiveError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string }
-  reset: () => void
+  retry: () => void
 }) {
   useEffect(() => {
     console.error("[vendor-prospective] route error:", error, {
@@ -40,7 +40,7 @@ export default function ProspectiveError({
             proposals and analyses are safe — this only affected the current
             view.
           </p>
-          <Button size="sm" onClick={reset}>
+          <Button size="sm" onClick={retry}>
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
             Try again
           </Button>

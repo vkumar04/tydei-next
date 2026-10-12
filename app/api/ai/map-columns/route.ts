@@ -36,7 +36,14 @@ export async function POST(request: Request) {
       )
     }
 
-    const body = requestSchema.parse(await request.json())
+    const parsedBody = requestSchema.safeParse(await request.json().catch(() => null))
+    if (!parsedBody.success) {
+      return Response.json(
+        { error: "Invalid column-mapping request", details: parsedBody.error.issues.map((i) => i.message).join("; ") },
+        { status: 400 },
+      )
+    }
+    const body = parsedBody.data
 
     // Build a dynamic Zod schema where each key is a target field
     // and the value is the matched source header (or empty string if no match)
@@ -113,7 +120,7 @@ Rules:
     if (error instanceof Error && error.name === "AbortError") {
       return new Response(null, { status: 499 })
     }
-    console.error("Column mapping error:", error)
+    console.error("[map-columns]", error)
     return Response.json({ error: "Mapping failed" }, { status: 500 })
   }
 }

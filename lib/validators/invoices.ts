@@ -21,6 +21,7 @@ export const importInvoiceSchema = z.object({
    * Used by the manual-entry dialog (which collects a number, not an id).
    */
   poNumber: z.string().optional(),
+  unlinkMissingPo: z.boolean().optional(),
   // Header-level adjustments. totalInvoiceCost is computed server-side as
   // lineSum + taxAmount + shippingAmount − discountAmount.
   taxAmount: z.number().min(0).optional(),

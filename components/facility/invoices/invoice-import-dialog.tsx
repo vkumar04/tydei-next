@@ -449,21 +449,11 @@ export function InvoiceImportDialog({
         lineItems,
       }
       try {
-        try {
-          await importInvoiceAction({
-            ...base,
-            poNumber: inv.poNumber ?? undefined,
-          })
-        } catch (err) {
-          // BIG04 PO references often aren't in tydei — retry unlinked
-          // rather than failing the whole invoice on a missing PO row.
-          const msg = err instanceof Error ? err.message : String(err)
-          if (inv.poNumber && msg.includes("was not found for this facility")) {
-            await importInvoiceAction(base)
-          } else {
-            throw err
-          }
-        }
+        await importInvoiceAction({
+          ...base,
+          poNumber: inv.poNumber ?? undefined,
+          unlinkMissingPo: true,
+        })
         imported++
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error"

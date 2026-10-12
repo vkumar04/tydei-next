@@ -23,6 +23,7 @@ vi.mock("@/lib/ai/config", () => ({
 import {
   generateStructured,
   tryUnwrapEnvelope,
+  tryDecodeStringifiedFields,
 } from "@/lib/ai/generate-structured"
 
 const schema = z.object({ payorName: z.string(), rate: z.number() })
@@ -119,5 +120,58 @@ describe("generateStructured repair ladder", () => {
       generateStructured({ schema, messages: [], actionName: "test" }),
     ).rejects.toThrow(/Invalid API key/)
     expect(generateTextMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("tryDecodeStringifiedFields", () => {
+  const listSchema = z.object({
+    clauses: z.array(z.object({ category: z.string(), text: z.string() })),
+  })
+  const clauses = [{ category: "REBATE", text: "2% of spend" }]
+
+  it("decodes a field the model returned as a JSON string", () => {
+    const err = { text: JSON.stringify({ clauses: JSON.stringify(clauses) }) }
+    expect(tryDecodeStringifiedFields(listSchema, err)).toEqual({ clauses })
+  })
+
+  it("unwraps a stringified object that repeats the field name", () => {
+    const err = { text: JSON.stringify({ clauses: JSON.stringify({ clauses }) }) }
+    expect(tryDecodeStringifiedFields(listSchema, err)).toEqual({ clauses })
+  })
+
+  it("returns null when nothing was stringified or the result still fails", () => {
+    expect(tryDecodeStringifiedFields(listSchema, { text: JSON.stringify({ clauses: "none" }) })).toBeNull()
+    expect(tryDecodeStringifiedFields(listSchema, { text: JSON.stringify({ clauses: "[1]" }) })).toBeNull()
+    expect(tryDecodeStringifiedFields(listSchema, { text: "not json" })).toBeNull()
+  })
+
+  it("generateStructured repairs a stringified field without a fallback call", async () => {
+    generateTextMock.mockRejectedValueOnce(
+      Object.assign(new Error("No object generated: response did not match schema."), {
+        name: "AI_NoObjectGeneratedError",
+        text: JSON.stringify({ clauses: JSON.stringify({ clauses }) }),
+      }),
+    )
+    const result = await generateStructured({
+      schema: listSchema,
+      actionName: "test",
+      messages: [{ role: "user", content: "x" }],
+    })
+    expect(result.output).toEqual({ clauses })
+    expect(generateTextMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("tool-call envelopes", () => {
+  const listSchema = z.object({ clauses: z.array(z.object({ category: z.string() })) })
+  const clauses = [{ category: "REBATE" }]
+
+  it("unwraps a parameters envelope", () => {
+    expect(tryUnwrapEnvelope(listSchema, { text: JSON.stringify({ parameters: { clauses } }) })).toEqual({ clauses })
+  })
+
+  it("unwraps an envelope whose field is stringified", () => {
+    const text = JSON.stringify({ arguments: { clauses: JSON.stringify(clauses) } })
+    expect(tryUnwrapEnvelope(listSchema, { text })).toEqual({ clauses })
   })
 })

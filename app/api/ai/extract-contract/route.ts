@@ -13,7 +13,7 @@ import {
 import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
-import { recordClaudeUsage } from "@/lib/ai/record-usage"
+import { recordContractExtractionUsage } from "@/lib/ai/record-extract-usage"
 import { createHash } from "node:crypto"
 
 import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extract"
@@ -134,7 +134,7 @@ ${text.trim()}`,
           { status: 422 }
         )
       }
-      await recordExtractUsage(session.user.id, session.user.name ?? session.user.email ?? "Unknown", `Extracted contract: ${extracted.contractName ?? "Untitled"}`)
+      await recordContractExtractionUsage(session.user.id, session.user.name ?? session.user.email ?? "Unknown", `Extracted contract: ${extracted.contractName ?? "Untitled"}`, "[extract-contract]")
       return Response.json({
         extracted,
         confidence: 0.9,
@@ -241,18 +241,6 @@ ${text.trim()}`,
       })
     }
 
-    // Archive original file to S3 (best-effort).
-    let s3Key: string | undefined
-    const timestamp = Date.now()
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
-    const candidateKey = `contracts/${userId}/${timestamp}-${crypto.randomUUID().slice(0, 8)}-${safeName}`
-    try {
-      await uploadFile(candidateKey, fileData, file.type || "application/octet-stream")
-      s3Key = candidateKey
-    } catch (uploadErr) {
-      console.warn("[extract-contract] S3 archival skipped:", uploadErr)
-    }
-
     // 2026-04-26: contracts are PDF-only. The previous DOCX (mammoth)
     // and TXT paths have been removed — they were rarely used and the
     // dual-input branching obscured the main code path. Any other
@@ -268,6 +256,18 @@ ${text.trim()}`,
         },
         { status: 415 },
       )
+    }
+
+    // Archive original file to S3 (best-effort).
+    let s3Key: string | undefined
+    const timestamp = Date.now()
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_")
+    const candidateKey = `contracts/${userId}/${timestamp}-${crypto.randomUUID().slice(0, 8)}-${safeName}`
+    try {
+      await uploadFile(candidateKey, fileData, file.type || "application/octet-stream")
+      s3Key = candidateKey
+    } catch (uploadErr) {
+      console.warn("[extract-contract] S3 archival skipped:", uploadErr)
     }
 
     const mediaType = "application/pdf" as const
@@ -313,7 +313,7 @@ ${text.trim()}`,
         })
         return Response.json(
           {
-            error: "AI extraction unavailable",
+            error: "Contract extraction failed: the AI service could not read this PDF. Try again, or use Manual Entry.",
             details:
               chunkErr instanceof Error
                 ? chunkErr.message.substring(0, 400)
@@ -427,7 +427,7 @@ ${text.trim()}`,
       if (!extracted) {
         return Response.json(
           {
-            error: "AI extraction unavailable",
+            error: "Contract extraction failed: the AI service could not read this PDF. Try again, or use Manual Entry.",
             details: errorMessage.substring(0, 400),
             s3Key,
           },
@@ -439,7 +439,7 @@ ${text.trim()}`,
     if (!extracted) {
       return Response.json(
         {
-          error: "Could not parse AI response",
+          error: "Contract extraction failed: the AI response did not match the contract format.",
           details:
             "The model returned a response that did not match the expected contract schema. Try uploading again or use Manual Entry.",
           s3Key,
@@ -448,10 +448,11 @@ ${text.trim()}`,
       )
     }
 
-    await recordExtractUsage(
+    await recordContractExtractionUsage(
       session.user.id,
       session.user.name ?? session.user.email ?? "Unknown",
       `Extracted contract from ${file.name.slice(0, 40)}`,
+      "[extract-contract]",
     )
 
     // Cache the successful extract (best-effort — failure here
@@ -519,31 +520,6 @@ ${text.trim()}`,
       { error: `Extraction failed: ${message.slice(0, 200)}` },
       { status: 500 }
     )
-  }
-}
-
-async function recordExtractUsage(
-  userId: string,
-  userName: string,
-  description: string,
-): Promise<void> {
-  try {
-    const member = await prisma.member.findFirst({
-      where: { userId },
-      include: {
-        organization: { include: { facility: true, vendor: true } },
-      },
-    })
-    await recordClaudeUsage({
-      facilityId: member?.organization?.facility?.id ?? null,
-      vendorId: member?.organization?.vendor?.id ?? null,
-      userId,
-      userName,
-      action: "full_contract_analysis",
-      description,
-    })
-  } catch (err) {
-    console.error("[extract-contract] usage-record failed", err, { userId })
   }
 }
 

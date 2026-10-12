@@ -1,3 +1,4 @@
+import { importErrorMessage } from "@/lib/imports/import-validation-error"
 import { NextResponse } from "next/server"
 import { headers as getHeaders } from "next/headers"
 import { unstable_rethrow } from "next/navigation"
@@ -128,16 +129,9 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
-    const KNOWN = [
-      "Facility not found",
-      "No P&L lines were recognized",
-      "out-of-range amounts",
-      "no rows",
-      "rows; a P&L statement",
-      "Provide exactly one",
-    ]
-    if (KNOWN.some((k) => message.includes(k))) {
-      return NextResponse.json({ error: message }, { status: 400 })
+    const userMessage = importErrorMessage(error)
+    if (userMessage) {
+      return NextResponse.json({ error: userMessage }, { status: 400 })
     }
     return NextResponse.json({ error: "Import failed" }, { status: 500 })
   }

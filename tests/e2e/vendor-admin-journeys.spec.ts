@@ -1,4 +1,5 @@
-import { test, expect, type Locator, type Page } from "@playwright/test"
+import { test, expect } from "../support/test"
+import { type Locator, type Page } from "@playwright/test"
 
 /**
  * E2E: the VENDOR and ADMIN surfaces nobody was watching.

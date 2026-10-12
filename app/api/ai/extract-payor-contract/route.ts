@@ -11,6 +11,9 @@ import { uploadFile } from "@/lib/storage"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
+import { denyUnlessPortalWriter } from "@/lib/api/import-route-auth"
+
+const MAX_BYTES = 25 * 1024 * 1024
 
 export async function POST(request: Request) {
   try {
@@ -27,6 +30,17 @@ export async function POST(request: Request) {
       )
     }
 
+    const denied = await denyUnlessPortalWriter(session.user.id, "facility")
+    if (denied) return denied
+
+    const contentLength = request.headers.get("content-length")
+    if (contentLength && parseInt(contentLength) > MAX_BYTES) {
+      return Response.json(
+        { error: "File too large. Maximum size is 25MB." },
+        { status: 413 },
+      )
+    }
+
     const formData = await request.formData()
     const file = formData.get("file") as File | null
 
@@ -34,9 +48,6 @@ export async function POST(request: Request) {
       return Response.json({ error: "No file provided" }, { status: 400 })
     }
 
-    // Cap upload size before reading into memory / shipping to the model
-    // (cost/DoS guard) — matches the sibling extract routes (audit 2026-06-21).
-    const MAX_BYTES = 25 * 1024 * 1024
     if (file.size > MAX_BYTES) {
       return Response.json(
         { error: "File too large. Maximum size is 25MB." },
@@ -54,7 +65,7 @@ export async function POST(request: Request) {
     const s3Key = `payor-contracts/${userId}/${timestamp}-${crypto.randomUUID().slice(0, 8)}-${safeName}`
     await uploadFile(s3Key, fileData, file.type || "application/octet-stream")
 
-    const isPDF = file.type === "application/pdf" || file.name.endsWith(".pdf")
+    const isPDF = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
     const mediaType = isPDF ? "application/pdf" : "text/plain"
 
     // Step 1: Extract text content from the payor contract

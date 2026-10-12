@@ -171,10 +171,8 @@ export async function extractClauses(
     actionName: "clause-extractor",
     primary: claudeSonnet,
     fallback: claudeSonnet,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPrompt },
-    ],
+    instructions: SYSTEM_PROMPT,
+    messages: [{ role: "user", content: userPrompt }],
   })
 
   const clauses: ContractClause[] = output.clauses

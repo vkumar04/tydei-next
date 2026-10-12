@@ -5,32 +5,39 @@
 # command (which silently destroyed prod data on schema drift). New
 # behavior:
 #
-#   1. If the database has NEVER been migrated by Prisma Migrate
-#      (the `_prisma_migrations` table is missing), mark the
-#      `0_init` baseline as applied. The baseline is generated
-#      via `prisma migrate diff --from-empty --to-schema --script`
-#      and committed at prisma/migrations/0_init/migration.sql.
-#      `migrate resolve --applied` is idempotent — running it on a
-#      DB that already has the baseline recorded is a no-op.
+#   1. If the database has tables but was NEVER migrated by Prisma
+#      Migrate (the `_prisma_migrations` table is missing), mark the
+#      `0_init` baseline as applied. An empty database skips this and
+#      gets every migration, 0_init included, from step 2. The baseline
+#      is generated via `prisma migrate diff --from-empty --to-schema
+#      --script` and committed at prisma/migrations/0_init/migration.sql.
 #
 #   2. Run `prisma migrate deploy` — applies any newer migrations
 #      in order. Safe to re-run; does not touch the schema if no
 #      pending migrations exist.
 #
-# This script is also safe for local dev: a fresh DB will record the
-# baseline + apply nothing further.
 
 set -euo pipefail
 
 CONFIG_FLAG="--config=prisma/prisma.config.ts"
 
-echo "[prisma-deploy] Marking 0_init baseline as applied (idempotent)…"
-bunx prisma migrate resolve --applied 0_init $CONFIG_FLAG || {
-  # If the migration is ALREADY recorded, `resolve --applied` errors;
-  # that's expected on every deploy after the first. Tolerate the
-  # specific "already applied" wording but bubble anything else.
-  echo "[prisma-deploy] resolve --applied returned non-zero (likely already applied) — continuing."
-}
+NEEDS_BASELINE=$(bun -e '
+import pg from "pg"
+const client = new pg.Client({ connectionString: process.env.DATABASE_URL })
+await client.connect()
+const { rows } = await client.query(`
+  select to_regclass($$public._prisma_migrations$$) is not null as has_ledger,
+         (select count(*)::int from information_schema.tables where table_schema = $$public$$) as tables`)
+await client.end()
+console.log(!rows[0].has_ledger && rows[0].tables > 0 ? "yes" : "no")
+')
+
+if [ "$NEEDS_BASELINE" = "yes" ]; then
+  echo "[prisma-deploy] Pre-migrate database detected — marking 0_init baseline as applied…"
+  bunx prisma migrate resolve --applied 0_init $CONFIG_FLAG
+else
+  echo "[prisma-deploy] Baseline not needed (ledger present or database empty)."
+fi
 
 # Self-heal the 2026-05-25 growth_rebate-drop migration. Its first
 # version was committed with snake_case column names (`term_type`,
