@@ -196,7 +196,7 @@ const parseMoney = (v: string): number => parseFloat(v.replace(/[$,]/g, "")) || 
 /**
  * Aggregation key for a file row: the normalized SKU when a reference
  * number exists (canonical `normalizeSku` — SKUs must never be compared
- * raw, CLAUDE.md), else the lowercased product name. One key = one
+ * raw, AGENTS.md), else the lowercased product name. One key = one
  * proposal product, no matter how many invoice LINES the file has.
  */
 /** Round to cents — seeded dollar figures must not carry float tails
@@ -491,7 +491,9 @@ export async function handlePricingRowsImport(
 
           mergedProducts = [...products, ...existingUsage.filter(u => !matchedUsage.has(u))]
           mergedVolume = mergedProducts.reduce((sum, p) => sum + (p.projectedVolume || 0), 0)
-          toast.success(`Merged pricing with usage: ${matched} matched of ${products.length} products`)
+          toast.success(`Merged pricing with usage: ${matched} matched of ${products.length} products`, {
+            id: "builder-pricing-usage-merge",
+          })
         }
 
         // Auto-select every distinct category from the pricing file

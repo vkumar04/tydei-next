@@ -72,13 +72,11 @@ for (const format of ["xlsx", "csv"] as const) {
         mimeType: format === "xlsx" ? XLSX : "text/csv",
         buffer,
       })
-      const remap = page.getByRole("dialog")
-      for (let i = 0; i < 3; i++) {
-        const done = page.getByText(/Imported \d+ pricing records/)
-        if (await done.isVisible().catch(() => false)) break
-        const confirm = remap.getByRole("button", { name: /import|confirm|continue|apply|save/i }).last()
-        if (await confirm.isVisible({ timeout: 5_000 }).catch(() => false)) await confirm.click()
-      }
+      const mapper = page.getByRole("dialog", { name: "Map Pricing File Columns" })
+      const realign = page.getByRole("dialog", { name: "Realign Categories" })
+      await expect(mapper.or(realign)).toBeVisible({ timeout: 30_000 })
+      if (await mapper.isVisible()) await mapper.getByRole("button", { name: "Apply Mapping" }).click()
+      await realign.getByRole("button", { name: "Apply & Import" }).click({ timeout: 30_000 })
       await expect(page.getByText(`Imported ${rows.length} pricing records`)).toBeVisible({ timeout: 120_000 })
 
       const saved = await withDb(async (c) => {
