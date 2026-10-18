@@ -7,6 +7,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
+import { assertFacilitiesInHealthSystem } from "@/lib/contracts/health-system-facilities"
 import {
   updateContractSchema,
   type UpdateContractInput,
@@ -49,6 +50,10 @@ async function _updateContractImpl(
   const { facility } = session
   await requireCanMutate()
   const data = updateContractSchema.parse(input)
+  await assertFacilitiesInHealthSystem(facility, [
+    ...(data.facilityIds ?? []),
+    ...(data.additionalFacilityIds ?? []),
+  ])
 
   // Verify ownership before updating
   await prisma.contract.findUniqueOrThrow({

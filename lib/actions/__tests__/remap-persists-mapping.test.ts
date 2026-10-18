@@ -36,7 +36,7 @@ vi.mock("@/lib/actions/auth", () => ({
 vi.mock("@/lib/cog/recompute", () => ({
   recomputeMatchStatusesForVendor: vi.fn(async () => {}),
 }))
-vi.mock("@/lib/actions/contracts/refresh-metrics", () => ({
+vi.mock("@/lib/contracts/refresh-metrics-for-vendor", () => ({
   refreshContractMetricsForVendor: vi.fn(async () => ({})),
 }))
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }))

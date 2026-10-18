@@ -5,7 +5,7 @@ import type { Prisma } from "@/lib/generated/prisma/client"
 import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
 import { requireFacility } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { computeSyntheticContractPeriods } from "@/lib/actions/contract-periods"
+import { computeSyntheticContractPeriods } from "@/lib/contracts/synthetic-periods"
 import { getContractCapitalSchedule } from "@/lib/actions/contracts/tie-in"
 import { buildReportDataRows } from "@/lib/reports/report-data-core"
 

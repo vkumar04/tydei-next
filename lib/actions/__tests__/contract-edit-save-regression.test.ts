@@ -66,6 +66,9 @@ const {
   recomputeAccrualMock: vi.fn(),
 }))
 
+vi.mock("@/lib/contracts/health-system-facilities", () => ({
+  assertFacilitiesInHealthSystem: vi.fn(async () => {}),
+}))
 vi.mock("@/lib/db", () => ({
   prisma: {
     contract: {

@@ -436,7 +436,7 @@ async function runBulkImport(
       // every contract owned by an affected vendor so the contract-
       // detail surfaces stay in sync without requiring a manual edit.
       const { refreshContractMetricsForVendor } = await import(
-        "@/lib/actions/contracts/refresh-metrics"
+        "@/lib/contracts/refresh-metrics-for-vendor"
       )
       for (const vendorId of vendorIds) {
         try {
@@ -471,8 +471,8 @@ async function runBulkImport(
       // Fan out a recompute over every active contract owned by an
       // affected vendor. Per-contract failures are collected so one
       // bad contract doesn't poison the import result.
-      const { _recomputeAccrualForContractWithFacility } = await import(
-        "@/lib/actions/contracts/recompute-accrual"
+      const { recomputeAccrualForContractWithFacility } = await import(
+        "@/lib/contracts/recompute/accrual-engine"
       )
       let affectedContracts: { id: string; name: string | null }[] = []
       try {
@@ -498,7 +498,7 @@ async function runBulkImport(
       }
       for (const contract of affectedContracts) {
         try {
-          await _recomputeAccrualForContractWithFacility(
+          await recomputeAccrualForContractWithFacility(
             contract.id,
             session.facility.id,
           )

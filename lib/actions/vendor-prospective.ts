@@ -11,7 +11,7 @@ import { dealConstructSchema } from "@/lib/prospective/deal-construct-schema"
 import {
   callerVendorDivisionIds,
   divisionScopeWhere,
-} from "@/lib/actions/division-auth"
+} from "@/lib/divisions/caller-divisions"
 import {
   divisionCategoryKeySet,
   categoryInDivisionScope,

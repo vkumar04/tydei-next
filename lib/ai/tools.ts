@@ -507,13 +507,18 @@ function prospectiveRebateTool() {
     description:
       "Calculate projected rebates for a prospective contract scenario, returning a yearly breakdown and totals",
     inputSchema: z.object({
-      annualSpend: z.number().describe("Expected annual spend in dollars"),
-      rebateRate: z.number().describe("Rebate percentage (e.g., 3 for 3%)"),
+      annualSpend: z.number().min(0).max(1e12).describe("Expected annual spend in dollars"),
+      rebateRate: z.number().min(0).max(100).describe("Rebate percentage (e.g., 3 for 3%)"),
       contractYears: z
         .number()
+        .int()
+        .min(1)
+        .max(30)
         .describe("Contract length in years (e.g., 3)"),
       growthRate: z
         .number()
+        .min(-100)
+        .max(100)
         .nullable()
         .describe("Annual growth rate as a percentage; null for no growth"),
     }),

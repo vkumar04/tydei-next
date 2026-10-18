@@ -17,7 +17,7 @@
 
 import { requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
-import { callerVendorDivisionIds } from "@/lib/actions/division-auth"
+import { callerVendorDivisionIds } from "@/lib/divisions/caller-divisions"
 import { prisma } from "@/lib/db"
 import { serialize } from "@/lib/serialize"
 import { vendorCogScopedByDivisions } from "@/lib/contracts/vendor-cog-scope"

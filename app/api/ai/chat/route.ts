@@ -39,7 +39,7 @@ const chatBodySchema = z.object({
     z
       .object({
         id: z.string(),
-        role: z.enum(["user", "assistant", "system"]),
+        role: z.enum(["user", "assistant"]),
         content: z.string().optional(),
         parts: z
           .array(
@@ -54,7 +54,7 @@ const chatBodySchema = z.object({
         (m) => typeof m.content === "string" || Array.isArray(m.parts),
         { error: "message must have content or parts" },
       ),
-  ),
+  ).max(100),
   portalType: z.enum(["facility", "vendor"]),
 })
 

@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth-server"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
+import { denyUnlessWriter } from "@/lib/api/import-route-auth"
 
 type Classification =
   | "contract"
@@ -220,6 +221,9 @@ export async function POST(request: Request) {
     if (!session) {
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const denied = await denyUnlessWriter(session.user.id)
+    if (denied) return denied
 
     const { success, retryAfterMs } = rateLimit(`ai-classify:${session.user.id}`, 30, 60_000)
     if (!success) {

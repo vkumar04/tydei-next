@@ -188,3 +188,55 @@ describe("globalSearch — invoice deep-link", () => {
     expect(res.invoices[0].href).toBe("/vendor/invoices")
   })
 })
+
+describe("globalSearch — tenant scope on every source", () => {
+  it("scopes vendor PO, alert and invoice searches to the caller's vendor", async () => {
+    asVendor("v-1")
+    await globalSearch("PO-1")
+    for (const m of [poFindManyMock, alertFindManyMock, invoiceFindManyMock]) {
+      expect(m.mock.calls[0][0].where).toMatchObject({ vendorId: "v-1" })
+      expect(m.mock.calls[0][0].where).not.toHaveProperty("facilityId")
+    }
+  })
+
+  it("scopes facility PO, alert and invoice searches to the caller's facility", async () => {
+    asFacility("f-1")
+    await globalSearch("PO-1")
+    for (const m of [poFindManyMock, alertFindManyMock, invoiceFindManyMock]) {
+      expect(m.mock.calls[0][0].where).toMatchObject({ facilityId: "f-1" })
+    }
+  })
+
+  it("returns nothing and runs no query for a caller with no facility or vendor", async () => {
+    memberFindFirstMock.mockResolvedValue(null)
+    const res = await globalSearch("PO-1")
+    expect(Object.values(res).every((group) => group.length === 0)).toBe(true)
+    for (const m of [contractFindManyMock, vendorFindManyMock, alertFindManyMock, poFindManyMock, invoiceFindManyMock, categoryFindManyMock]) {
+      expect(m).not.toHaveBeenCalled()
+    }
+  })
+})
+
+describe("globalSearch — links stay in the caller's portal", () => {
+  it("vendor hits link to /vendor routes, never /dashboard", async () => {
+    asVendor("v-1")
+    contractFindManyMock.mockResolvedValue([{ id: "c-1", name: "C", contractNumber: null, status: "active", vendor: { name: "V" } }])
+    vendorFindManyMock.mockResolvedValue([{ id: "v-1", name: "V", displayName: null, division: null }])
+    alertFindManyMock.mockResolvedValue([{ id: "a-1", title: "A", description: null, severity: "high", portalType: "vendor" }])
+    poFindManyMock.mockResolvedValue([{ id: "po-1", poNumber: "1", status: "open", totalCost: 1, vendor: { name: "V" } }])
+    categoryFindManyMock.mockResolvedValue([{ id: "cat-1", name: "Spine", description: null }])
+    const res = await globalSearch("xx")
+    const hrefs = [...res.contracts, ...res.vendors, ...res.alerts, ...res.purchaseOrders, ...res.categories].map((r) => r.href)
+    expect(hrefs.length).toBe(5)
+    for (const href of hrefs) expect(href.startsWith("/vendor/")).toBe(true)
+  })
+
+  it("facility COG links point at the cog-data route", async () => {
+    asFacility("f-1")
+    categoryFindManyMock.mockResolvedValue([{ id: "cat-1", name: "Spine", description: null }])
+    cogFindManyMock.mockResolvedValue([{ id: "r-1", vendorItemNo: "SKU1", inventoryDescription: "Cup", vendorName: "V" }])
+    const res = await globalSearch("xx")
+    expect(res.categories[0].href).toMatch(/^\/dashboard\/cog-data\?/)
+    expect(res.cogItems[0].href).toMatch(/^\/dashboard\/cog-data\?/)
+  })
+})

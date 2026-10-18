@@ -13,15 +13,21 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  * (no parallel source of truth — same code path).
  */
 
-const { memberFindManyMock } = vi.hoisted(() => ({
+const { memberFindManyMock, memberFindFirstMock, memberUpdateMock, userFindUniqueMock } = vi.hoisted(() => ({
   memberFindManyMock: vi.fn(),
+  memberFindFirstMock: vi.fn(),
+  memberUpdateMock: vi.fn(),
+  userFindUniqueMock: vi.fn(),
 }))
 
 vi.mock("@/lib/db", () => ({
   // 2026-06-09 settings audit: the hook now counts admins by BASE role
   // segment in JS (findMany + filter), because a raw Prisma
   // `role IN ('admin','owner')` count misses vendor sub-roled admins.
-  prisma: { member: { findMany: memberFindManyMock } },
+  prisma: {
+    member: { findMany: memberFindManyMock, findFirst: memberFindFirstMock, update: memberUpdateMock },
+    user: { findUnique: userFindUniqueMock },
+  },
 }))
 
 import {
@@ -29,6 +35,9 @@ import {
   _hookBeforeAcceptInvitation,
   _hookBeforeUpdateMemberRole,
   _hookBeforeRemoveMember,
+  _hookAssertActorCan,
+  _hookAfterAcceptInvitation,
+  ORG_HTTP_DISABLED_PATHS,
 } from "@/lib/auth-server"
 
 beforeEach(() => {
@@ -173,5 +182,77 @@ describe("organizationHooks — removeMember last-admin protection", () => {
         organizationId: "org-v",
       }),
     ).rejects.toThrow(/Cannot remove the last admin/)
+  })
+})
+
+describe("organizationHooks — actor access tier", () => {
+  const args = { userId: "u-1", organizationId: "org-1", permission: "members.manage" as const }
+
+  it("allows a Super member of the target org", async () => {
+    userFindUniqueMock.mockResolvedValue({ role: "facility" })
+    memberFindFirstMock.mockResolvedValue({ accessTier: "super" })
+    await expect(_hookAssertActorCan(args)).resolves.toBeUndefined()
+    expect(memberFindFirstMock).toHaveBeenCalledWith({
+      where: { userId: "u-1", organizationId: "org-1" },
+      select: { accessTier: true },
+    })
+  })
+
+  it("rejects an Advanced or read-only member even when their org role is admin", async () => {
+    userFindUniqueMock.mockResolvedValue({ role: "facility" })
+    for (const accessTier of ["advanced", "user"]) {
+      memberFindFirstMock.mockResolvedValue({ accessTier })
+      await expect(_hookAssertActorCan(args)).rejects.toThrow(/permission/)
+    }
+  })
+
+  it("rejects a caller with no membership in the target org", async () => {
+    userFindUniqueMock.mockResolvedValue({ role: "facility" })
+    memberFindFirstMock.mockResolvedValue(null)
+    await expect(_hookAssertActorCan(args)).rejects.toThrow(/permission/)
+  })
+
+  it("allows a platform admin", async () => {
+    userFindUniqueMock.mockResolvedValue({ role: "admin" })
+    memberFindFirstMock.mockResolvedValue(null)
+    await expect(_hookAssertActorCan(args)).resolves.toBeUndefined()
+  })
+})
+
+describe("organizationHooks — accepted invitations start read-only", () => {
+  it("sets the new member's access tier to user", async () => {
+    memberUpdateMock.mockResolvedValue({})
+    await _hookAfterAcceptInvitation("m-new")
+    expect(memberUpdateMock).toHaveBeenCalledWith({
+      where: { id: "m-new" },
+      data: { accessTier: "user" },
+    })
+  })
+})
+
+describe("org plugin HTTP surface", () => {
+  it("disables every member-management and org-mutation endpoint", () => {
+    for (const path of [
+      "/organization/create",
+      "/organization/update",
+      "/organization/delete",
+      "/organization/invite-member",
+      "/organization/remove-member",
+      "/organization/update-member-role",
+      "/organization/set-active",
+      "/organization/list-members",
+    ]) {
+      expect(ORG_HTTP_DISABLED_PATHS).toContain(path)
+    }
+  })
+
+  it("keeps the invitation accept / reject / lookup endpoints the UI calls", () => {
+    for (const path of [
+      "/organization/accept-invitation",
+      "/organization/reject-invitation",
+      "/organization/get-invitation",
+    ]) {
+      expect(ORG_HTTP_DISABLED_PATHS).not.toContain(path)
+    }
   })
 })

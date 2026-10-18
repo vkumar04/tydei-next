@@ -1,5 +1,3 @@
-"use server"
-
 import { prisma } from "@/lib/db"
 import { requireAuth, requireFacility } from "@/lib/actions/auth"
 import { createInAppNotificationsInternal } from "@/lib/notifications/in-app-helper"

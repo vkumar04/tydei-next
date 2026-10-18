@@ -85,7 +85,7 @@ vi.mock("@/lib/actions/contracts/recompute-accrual", () => ({
   recomputeAccrualForContract: (id: string) => recomputeAccrualMock(id),
 }))
 
-vi.mock("@/lib/actions/contracts/refresh-metrics", () => ({
+vi.mock("@/lib/contracts/refresh-metrics-for-vendor", () => ({
   refreshContractMetricsForVendor: (...a: unknown[]) => refreshMetricsMock(...a),
 }))
 

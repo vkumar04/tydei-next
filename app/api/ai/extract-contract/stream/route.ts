@@ -35,6 +35,7 @@ import {
   MAX_PAGES_PER_CHUNK,
   FALLBACK_PAGES_PER_CHUNK,
 } from "@/lib/ai/contract-extract-chunked"
+import { denyUnlessWriter } from "@/lib/api/import-route-auth"
 
 // 261-page Mako PDF chunks into ~33 parallel Anthropic calls; even
 // rate-limit-safe with parallel queuing, the whole pipeline can
@@ -105,6 +106,9 @@ function buildExtractedResponse(payload: object, s3Key: string | undefined): Res
 export async function POST(req: Request) {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 })
+
+  const denied = await denyUnlessWriter(session.user.id)
+  if (denied) return denied
 
   const { success } = rateLimit(`ai-extract-stream:${session.user.id}`, 10, 60_000)
   if (!success) {

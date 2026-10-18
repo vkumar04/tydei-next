@@ -22,6 +22,7 @@ import {
   MAX_PAGES_PER_CHUNK,
   FALLBACK_PAGES_PER_CHUNK,
 } from "@/lib/ai/contract-extract-chunked"
+import { denyUnlessWriter } from "@/lib/api/import-route-auth"
 
 // Chunked extraction can fan a large PDF into dozens of Anthropic
 // calls — same budget as the stream route.
@@ -42,6 +43,9 @@ export async function POST(request: Request) {
     if (!session) {
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const denied = await denyUnlessWriter(session.user.id)
+    if (denied) return denied
 
     const { success, retryAfterMs } = rateLimit(`ai-extract:${session.user.id}`, 10, 60_000)
     if (!success) {

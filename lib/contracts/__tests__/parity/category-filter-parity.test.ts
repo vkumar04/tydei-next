@@ -99,7 +99,7 @@ describe("parity: cross-surface category-filter wiring catalog", () => {
     const repoRoot = join(__dirname, "..", "..", "..", "..")
 
     const readSites = [
-      "lib/actions/contracts/recompute-accrual.ts", // write path to Rebate ledger
+      "lib/contracts/recompute/accrual-engine.ts", // write path to Rebate ledger
       // getAccrualTimeline's builder (detail Performance tab) — decomposed
       // 2026-08-05; the category-scoped COG queries live in these modules
       // (the action file is now a thin auth + delegate shell).
