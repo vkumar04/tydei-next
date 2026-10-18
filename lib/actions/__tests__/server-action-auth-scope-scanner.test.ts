@@ -298,7 +298,7 @@ const BASELINE_HITS = new Set<string>([
   "lib/actions/categories.ts:151",
   "lib/actions/categories.ts:196",
   // change-proposals.ts: post-mutation re-read
-  "lib/actions/change-proposals.ts:177",
+  "lib/actions/change-proposals.ts:175",
   // contract-periods.ts: post-period-mutation re-reads. Lines drift
   // (bumped 2026-05-05 after the auto-match-oldest fallback fix —
   // see Bug #2: the action now does two `findFirst`s in sequence so
@@ -321,8 +321,10 @@ const BASELINE_HITS = new Set<string>([
   // ledger fix), shifting the guarded rebate.delete from 715 → 790. The delete
   // still verifies ownership via the contractOwnershipWhere find + the scoped
   // findFirstOrThrow on {id, contractId} immediately above it.
-  "lib/actions/contract-periods.ts:492",
-  "lib/actions/contract-periods.ts:798",
+  // bumped 2026-10-18 after computeSyntheticContractPeriods moved to
+  // lib/contracts/synthetic-periods.ts (out of the "use server" surface).
+  "lib/actions/contract-periods.ts:290",
+  "lib/actions/contract-periods.ts:596",
   // contracts/proposals.ts: every read is followed by explicit
   // proposal.contract.facilityId !== facility.id throw
   "lib/actions/contracts/proposals.ts:96",

@@ -6,6 +6,7 @@ import { stripe } from "@better-auth/stripe"
 import Stripe from "stripe"
 import { Resend } from "resend"
 import { prisma } from "@/lib/db"
+import { can, type Permission } from "@/lib/auth/permissions"
 
 // Conditional init: previously these were unconditional `new Stripe(...)` /
 // `new Resend(...)` at module-load time, which threw
@@ -83,6 +84,29 @@ export async function _hookBeforeUpdateMemberRole(newRole: string): Promise<void
     throw new APIError("BAD_REQUEST", { message: "Invalid role" })
   }
 }
+export async function _hookAssertActorCan(args: {
+  userId: string
+  organizationId: string
+  permission: Permission
+}): Promise<void> {
+  const [user, member] = await Promise.all([
+    prisma.user.findUnique({ where: { id: args.userId }, select: { role: true } }),
+    prisma.member.findFirst({
+      where: { userId: args.userId, organizationId: args.organizationId },
+      select: { accessTier: true },
+    }),
+  ])
+  if (user?.role === "admin") return
+  if (member && can(args.permission, { tier: member.accessTier, side: "facility" })) return
+  console.warn("[auth-server.assertActorCan] denied", args)
+  throw new APIError("FORBIDDEN", { message: "You do not have permission to do that" })
+}
+export async function _hookAfterAcceptInvitation(memberId: string): Promise<void> {
+  await prisma.member.update({
+    where: { id: memberId },
+    data: { accessTier: "user" },
+  })
+}
 export async function _hookAfterSessionCreate(userId: string): Promise<void> {
   try {
     await prisma.user.update({
@@ -139,10 +163,47 @@ const trustedOrigins: string[] = [
   "https://tydei-app-production.up.railway.app",
 ].filter((o): o is string => typeof o === "string" && o.length > 0)
 
+export const ORG_HTTP_DISABLED_PATHS = [
+  "/organization/add-team-member",
+  "/organization/cancel-invitation",
+  "/organization/check-slug",
+  "/organization/create",
+  "/organization/create-role",
+  "/organization/create-team",
+  "/organization/delete",
+  "/organization/delete-role",
+  "/organization/get-active-member",
+  "/organization/get-active-member-role",
+  "/organization/get-full-organization",
+  "/organization/get-organization",
+  "/organization/get-role",
+  "/organization/has-permission",
+  "/organization/invite-member",
+  "/organization/leave",
+  "/organization/list",
+  "/organization/list-invitations",
+  "/organization/list-members",
+  "/organization/list-roles",
+  "/organization/list-team-members",
+  "/organization/list-teams",
+  "/organization/list-user-invitations",
+  "/organization/list-user-teams",
+  "/organization/remove-member",
+  "/organization/remove-team",
+  "/organization/remove-team-member",
+  "/organization/set-active",
+  "/organization/set-active-team",
+  "/organization/update",
+  "/organization/update-member-role",
+  "/organization/update-role",
+  "/organization/update-team",
+]
+
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_SITE_URL,
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   trustedOrigins: Array.from(new Set(trustedOrigins)),
+  disabledPaths: ORG_HTTP_DISABLED_PATHS,
   // experimental.joins (1.4+) — 2–3× perf on /get-session, but
   // disabled 2026-05-26 because the better-auth organization plugin
   // contributes an `activeOrganizationId` column to Session that our
@@ -372,6 +433,8 @@ export const auth = betterAuth({
   },
   plugins: [
     organization({
+      allowUserToCreateOrganization: false,
+      disableOrganizationDeletion: true,
       /**
        * Deliver the invitation email.
        *
@@ -421,8 +484,18 @@ export const auth = betterAuth({
         }
       },
       organizationHooks: {
-        beforeCreateInvitation: async ({ invitation }) => {
+        beforeCreateInvitation: async ({ invitation, inviter, organization: org }) => {
+          await _hookAssertActorCan({ userId: inviter.id, organizationId: org.id, permission: "members.manage" })
           await _hookBeforeCreateInvitation(invitation.role)
+        },
+        beforeCancelInvitation: async ({ cancelledBy, organization: org }) => {
+          await _hookAssertActorCan({ userId: cancelledBy.id, organizationId: org.id, permission: "members.manage" })
+        },
+        afterAcceptInvitation: async ({ member }) => {
+          await _hookAfterAcceptInvitation(member.id)
+        },
+        beforeUpdateOrganization: async ({ user, member }) => {
+          await _hookAssertActorCan({ userId: user.id, organizationId: member.organizationId, permission: "settings.manage" })
         },
         beforeAcceptInvitation: async ({ invitation }) => {
           // Belt-and-suspenders: re-validate at acceptance time so a

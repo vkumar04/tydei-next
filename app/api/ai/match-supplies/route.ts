@@ -6,6 +6,7 @@ import { supplyMatchSchema } from "@/lib/ai/schemas"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
+import { denyUnlessWriter } from "@/lib/api/import-route-auth"
 
 const matchBodySchema = z.object({
   supplyName: z.string().min(1).max(500),
@@ -23,6 +24,9 @@ export async function POST(request: Request) {
     if (!session) {
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const denied = await denyUnlessWriter(session.user.id)
+    if (denied) return denied
 
     const { success, retryAfterMs } = rateLimit(`ai-match:${session.user.id}`, 20, 60_000)
     if (!success) {

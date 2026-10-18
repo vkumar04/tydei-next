@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
+import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { logAudit } from "@/lib/audit"
@@ -30,6 +31,7 @@ export interface BackfillResult {
  */
 export async function backfillCOGEnrichment(): Promise<BackfillResult> {
   const { facility, user } = await requireFacility()
+  await requireCanMutate()
 
   const contracts = await prisma.contract.findMany({
     where: {

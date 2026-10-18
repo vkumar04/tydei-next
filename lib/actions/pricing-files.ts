@@ -27,7 +27,7 @@ import {
 import { sanitizePricingRow } from "@/lib/contracts/pricing-row-sanitize"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
-import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
+import { refreshContractMetricsForVendor } from "@/lib/contracts/refresh-metrics-for-vendor"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 import type { ContractPricingItem } from "./pricing-files-types"

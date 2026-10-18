@@ -29,7 +29,7 @@ vi.mock("@/lib/actions/auth", () => ({
   requireAdmin: vi.fn(),
 }))
 
-vi.mock("@/lib/actions/division-auth", () => ({
+vi.mock("@/lib/divisions/caller-divisions", () => ({
   callerVendorDivisionIds: vi.fn(async () => undefined),
   callerFacilityDivisionIds: vi.fn(async () => undefined),
 }))

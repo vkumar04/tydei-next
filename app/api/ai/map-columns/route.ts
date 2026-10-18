@@ -3,6 +3,7 @@ import { headers } from "next/headers"
 import { z } from "zod"
 import { auth } from "@/lib/auth-server"
 import { rateLimit } from "@/lib/rate-limit"
+import { denyUnlessWriter } from "@/lib/api/import-route-auth"
 
 const requestSchema = z.object({
   sourceHeaders: z.array(z.string()).min(1),
@@ -22,6 +23,9 @@ export async function POST(request: Request) {
     if (!session) {
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const denied = await denyUnlessWriter(session.user.id)
+    if (denied) return denied
 
     const { success, retryAfterMs } = rateLimit(
       `ai-map-cols:${session.user.id}`,

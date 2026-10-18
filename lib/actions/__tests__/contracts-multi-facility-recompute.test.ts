@@ -31,6 +31,9 @@ const {
   recomputeMock: vi.fn(),
 }))
 
+vi.mock("@/lib/contracts/health-system-facilities", () => ({
+  assertFacilitiesInHealthSystem: vi.fn(async () => {}),
+}))
 vi.mock("@/lib/db", () => {
   const prisma: Record<string, unknown> = {
     contract: {

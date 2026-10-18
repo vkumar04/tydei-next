@@ -33,6 +33,17 @@ export interface GroupedSearchResults {
   cogItems: SearchResult[]
 }
 
+const EMPTY_RESULTS: GroupedSearchResults = {
+  contracts: [],
+  vendors: [],
+  alerts: [],
+  purchaseOrders: [],
+  invoices: [],
+  reports: [],
+  categories: [],
+  cogItems: [],
+}
+
 export async function globalSearch(query: string): Promise<GroupedSearchResults> {
   const session = await requireAuth()
 
@@ -43,18 +54,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
   }
 
   const trimmed = query.trim()
-  if (!trimmed || trimmed.length < 2) {
-    return {
-      contracts: [],
-      vendors: [],
-      alerts: [],
-      purchaseOrders: [],
-      invoices: [],
-      reports: [],
-      categories: [],
-      cogItems: [],
-    }
-  }
+  if (!trimmed || trimmed.length < 2) return EMPTY_RESULTS
 
   // Scope results to user's facility or vendor
   const member = await prisma.member.findFirst({
@@ -66,6 +66,9 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
   // A vendor-portal caller has a vendor scope and no facility. Used to route
   // results (e.g. invoices) to the vendor surfaces rather than the facility ones.
   const isVendorPortal = !facilityId && Boolean(vendorId)
+  const scope = facilityId ? { facilityId } : vendorId ? { vendorId } : null
+  if (!scope) return EMPTY_RESULTS
+  const contractScope = "facilityId" in scope ? scope : contractsOwnedByVendor(scope.vendorId)
 
   const search = { contains: trimmed, mode: "insensitive" as const }
 
@@ -87,11 +90,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       // included (group-vendor-drift invariant — never bare { vendorId }).
       where: {
         AND: [
-          facilityId
-            ? { facilityId }
-            : vendorId
-              ? contractsOwnedByVendor(vendorId)
-              : {},
+          contractScope,
           {
             OR: [
               { name: search },
@@ -127,7 +126,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
     safe(prisma.alert.findMany({
       where: {
-        ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
+        ...scope,
         OR: [
           { title: search },
           { description: search },
@@ -140,7 +139,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
     safe(prisma.purchaseOrder.findMany({
       where: {
-        ...(facilityId ? { facilityId } : {}),
+        ...scope,
         OR: [
           { poNumber: search },
         ],
@@ -158,7 +157,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
 
     safe(prisma.invoice.findMany({
       where: {
-        ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
+        ...scope,
         OR: [
           { invoiceNumber: search },
         ],
@@ -228,30 +227,28 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
       description: c.contractNumber
         ? `${c.vendor.name} - ${c.contractNumber}`
         : c.vendor.name,
-      href: `/dashboard/contracts/${c.id}`,
+      href: isVendorPortal ? `/vendor/contracts/${c.id}` : `/dashboard/contracts/${c.id}`,
       type: "contract" as const,
     })),
     vendors: vendors.map((v) => ({
       id: v.id,
       name: v.displayName || v.name,
       description: v.division,
-      href: `/dashboard/contracts?search=${encodeURIComponent(v.name)}`,
+      href: isVendorPortal ? `/vendor/contracts` : `/dashboard/contracts?search=${encodeURIComponent(v.name)}`,
       type: "vendor" as const,
     })),
     alerts: alerts.map((a) => ({
       id: a.id,
       name: a.title,
       description: a.description,
-      href: a.portalType === "vendor"
-        ? `/vendor/alerts/${a.id}`
-        : `/dashboard/alerts/${a.id}`,
+      href: isVendorPortal ? `/vendor/alerts` : `/dashboard/alerts/${a.id}`,
       type: "alert" as const,
     })),
     purchaseOrders: purchaseOrders.map((po) => ({
       id: po.id,
       name: `PO ${po.poNumber}`,
       description: po.vendor.name,
-      href: `/dashboard/purchase-orders/${po.id}`,
+      href: isVendorPortal ? `/vendor/purchase-orders` : `/dashboard/purchase-orders/${po.id}`,
       type: "purchase_order" as const,
     })),
     invoices: invoices.map((inv) => ({
@@ -276,14 +273,14 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
         id: r.id,
         name: r.reportType.replace(/_/g, " "),
         description: `${r.frequency.toLowerCase()} schedule`,
-        href: `/dashboard/reports`,
+        href: isVendorPortal ? `/vendor/reports` : `/dashboard/reports`,
         type: "report" as const,
       })),
     categories: categories.map((c) => ({
       id: c.id,
       name: c.name,
       description: c.description,
-      href: `/dashboard/cog?category=${encodeURIComponent(c.name)}`,
+      href: isVendorPortal ? `/vendor/contracts` : `/dashboard/cog-data?category=${encodeURIComponent(c.name)}`,
       type: "category" as const,
     })),
     cogItems: cogItems.map((i) => ({
@@ -292,7 +289,7 @@ export async function globalSearch(query: string): Promise<GroupedSearchResults>
         ? `${i.vendorItemNo} — ${i.inventoryDescription ?? ""}`.trim()
         : i.inventoryDescription ?? "(no description)",
       description: i.vendorName,
-      href: `/dashboard/cog?search=${encodeURIComponent(i.vendorItemNo ?? "")}`,
+      href: `/dashboard/cog-data?search=${encodeURIComponent(i.vendorItemNo ?? "")}`,
       type: "cog_item" as const,
     })),
   })

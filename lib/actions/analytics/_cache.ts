@@ -1,5 +1,3 @@
-"use server"
-
 import { revalidateTag, updateTag } from "next/cache"
 import {
   contractAnalyticsTag,

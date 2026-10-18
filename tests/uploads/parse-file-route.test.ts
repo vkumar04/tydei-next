@@ -10,6 +10,8 @@ import {
 
 const getSession = vi.fn()
 
+const denyUnlessWriter = vi.hoisted(() => vi.fn(async (): Promise<Response | null> => null))
+vi.mock("@/lib/api/import-route-auth", () => ({ denyUnlessWriter }))
 vi.mock("@/lib/auth-server", () => ({
   auth: { api: { getSession: (args: unknown) => getSession(args) } },
 }))

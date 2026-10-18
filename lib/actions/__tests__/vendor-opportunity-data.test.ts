@@ -49,7 +49,7 @@ vi.mock("@/lib/actions/auth", () => ({
 
 // Enterprise caller (divisionIds undefined) → divisionCategoryKeySet returns
 // null without touching prisma, so the real category-scope module is used.
-vi.mock("@/lib/actions/division-auth", () => ({
+vi.mock("@/lib/divisions/caller-divisions", () => ({
   callerVendorDivisionIds: vi.fn().mockResolvedValue(undefined),
   divisionScopeWhere: vi.fn().mockResolvedValue({}),
 }))

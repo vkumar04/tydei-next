@@ -137,6 +137,13 @@ async function _buildCarveOutRebate(
     )
     return serialize(empty)
   }
+  if (!facilityId) {
+    const empty = calculateCarveOut(
+      { type: "CARVE_OUT", lines: [] },
+      { purchases: [], totalSpend: 0, periodLabel: "no facility" },
+    )
+    return serialize(empty)
+  }
 
   // Bug 3 (Vick 2026-06-02): grouped (tie-in) carve-out contracts span
   // several vendors. The accrual WRITER (recompute/carve-out.ts) already
@@ -159,7 +166,7 @@ async function _buildCarveOutRebate(
     }),
     prisma.cOGRecord.findMany({
       where: {
-        ...(facilityId ? { facilityId } : {}),
+        facilityId,
         OR: [
           { contractId: contract.id },
           ...(vendorIds.length
