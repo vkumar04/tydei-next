@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { queryKeys } from "@/lib/query-keys"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import {
   listReportSchedules,
   createReportSchedule,
@@ -94,6 +95,7 @@ export function ReportsScheduleDialog({
   onOpenChange,
 }: ReportsScheduleDialogProps) {
   const qc = useQueryClient()
+  const canMutate = useCanMutate()
   const [form, setForm] = useState<FormState>(INITIAL_FORM)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [mode, setMode] = useState<"list" | "form">("list")
@@ -241,17 +243,19 @@ export function ReportsScheduleDialog({
 
         {mode === "list" ? (
           <div className="space-y-3">
-            <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => {
-                  resetAndReturnToList()
-                  setMode("form")
-                }}
-              >
-                <Plus className="mr-1 h-4 w-4" /> New Schedule
-              </Button>
-            </div>
+            {canMutate ? (
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    resetAndReturnToList()
+                    setMode("form")
+                  }}
+                >
+                  <Plus className="mr-1 h-4 w-4" /> New Schedule
+                </Button>
+              </div>
+            ) : null}
             {isLoading ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 Loading…
@@ -296,25 +300,27 @@ export function ReportsScheduleDialog({
                           </Badge>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              aria-label="Edit scheduled report"
-                              onClick={() => startEdit(s)}
-                            >
-                              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              aria-label="Delete scheduled report"
-                              onClick={() => deleteMut.mutate(s.id)}
-                              disabled={deleteMut.isPending}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                            </Button>
-                          </div>
+                          {canMutate ? (
+                            <div className="flex justify-end gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                aria-label="Edit scheduled report"
+                                onClick={() => startEdit(s)}
+                              >
+                                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                aria-label="Delete scheduled report"
+                                onClick={() => deleteMut.mutate(s.id)}
+                                disabled={deleteMut.isPending}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                              </Button>
+                            </div>
+                          ) : null}
                         </td>
                       </tr>
                     ))}

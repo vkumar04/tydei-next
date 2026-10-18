@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -599,15 +600,17 @@ export function DividendImpactSection({
                   ))}
                 </SelectContent>
               </Select>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => setUploadOpen(true)}
-              >
-                <Upload className="h-4 w-4" />
-                Upload payor data
-              </Button>
+              <ReadOnlyGuard title="Read-only access can't upload data">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setUploadOpen(true)}
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload payor data
+                </Button>
+              </ReadOnlyGuard>
             </div>
             <span className="text-[11px] text-muted-foreground">
               {activeDataset
@@ -948,15 +951,17 @@ export function DividendImpactSection({
                     : "Public CMS ASC national payment rates. Upload your own for a newer publication year or a locality-adjusted table."}
                 </span>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-2"
-                onClick={() => setRatesUploadOpen(true)}
-              >
-                <Upload className="h-4 w-4" />
-                Upload rates
-              </Button>
+              <ReadOnlyGuard title="Read-only access can't upload data">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setRatesUploadOpen(true)}
+                >
+                  <Upload className="h-4 w-4" />
+                  Upload rates
+                </Button>
+              </ReadOnlyGuard>
             </div>
             <Separator />
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -1277,15 +1282,17 @@ export function DividendImpactSection({
               Reset to example
             </Button>
           ) : null}
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => setProformaUploadOpen(true)}
-          >
-            <Upload className="h-4 w-4" />
-            Upload P&amp;L
-          </Button>
+          <ReadOnlyGuard title="Read-only access can't upload data">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={() => setProformaUploadOpen(true)}
+            >
+              <Upload className="h-4 w-4" />
+              Upload P&amp;L
+            </Button>
+          </ReadOnlyGuard>
         </div>
       </div>
 

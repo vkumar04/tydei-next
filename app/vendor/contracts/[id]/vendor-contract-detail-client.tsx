@@ -4,6 +4,7 @@ import Link from "next/link"
 import { Pencil } from "lucide-react"
 import { PageHeader } from "@/components/shared/page-header"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { ContractDocumentsList } from "@/components/contracts/contract-documents-list"
 import {
   VendorContractOverview,
@@ -232,12 +233,14 @@ export function VendorContractDetailClient({
         description="Contract details"
         action={
           <div className="flex items-center gap-2">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/vendor/contracts/${contract.id}/edit`}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Propose Changes
-              </Link>
-            </Button>
+            <ReadOnlyGuard title="Read-only access can't propose changes">
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/vendor/contracts/${contract.id}/edit`}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Propose Changes
+                </Link>
+              </Button>
+            </ReadOnlyGuard>
           </div>
         }
       />

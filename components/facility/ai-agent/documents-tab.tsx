@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/dialog"
 import { deleteContractDocument } from "@/lib/actions/contracts/document-attach"
 import { UploadDocumentDialog } from "./upload-document-dialog"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import type { AiDocumentListItem } from "@/app/api/ai/documents/route"
 
 interface ContractOption {
@@ -134,6 +135,7 @@ function IndexStatusBadge({ status }: { status: string }) {
 
 export function DocumentsTab({ contracts }: DocumentsTabProps) {
   const qc = useQueryClient()
+  const canMutate = useCanMutate()
   const [search, setSearch] = useState("")
   const [submittedQuery, setSubmittedQuery] = useState<string | null>(null)
   const [typeFilter, setTypeFilter] = useState<string>("all")
@@ -268,10 +270,12 @@ export function DocumentsTab({ contracts }: DocumentsTabProps) {
               )}
               Search
             </Button>
-            <Button variant="outline" onClick={() => setUploadOpen(true)}>
-              <Upload className="mr-2 h-4 w-4" />
-              Upload
-            </Button>
+            {canMutate ? (
+              <Button variant="outline" onClick={() => setUploadOpen(true)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Upload
+              </Button>
+            ) : null}
           </div>
         </CardContent>
       </Card>
@@ -408,31 +412,33 @@ export function DocumentsTab({ contracts }: DocumentsTabProps) {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <IndexStatusBadge status={doc.indexStatus} />
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => reindexMutation.mutate(doc.id)}
-                          disabled={reindexMutation.isPending}
-                        >
-                          <RefreshCw className="mr-2 h-4 w-4" />
-                          Re-index
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => deleteMutation.mutate(doc.id)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {canMutate ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => reindexMutation.mutate(doc.id)}
+                            disabled={reindexMutation.isPending}
+                          >
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Re-index
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => deleteMutation.mutate(doc.id)}
+                            disabled={deleteMutation.isPending}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
                   </div>
                 </div>
               ))}

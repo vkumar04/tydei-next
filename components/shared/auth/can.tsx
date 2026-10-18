@@ -24,10 +24,11 @@ export function Can({
 /**
  * `<ReadOnlyGuard>…</ReadOnlyGuard>` — wraps a block of mutating controls.
  * For read-only (`user`) tier callers it renders the children inside a
- * disabled `<fieldset>` (which disables every nested form control / button)
- * and dims them, with a tooltip explaining why. Advanced/Super render
- * normally. The matching SERVER action still throws via `requireCanMutate`,
- * so this is the UX layer, not the security boundary.
+ * disabled, `inert` `<fieldset>` — disabled covers form controls, `inert`
+ * covers links (`<Button asChild><Link>`) and keyboard focus — dimmed, with
+ * a tooltip explaining why. Advanced/Super render normally. The matching
+ * SERVER action still throws via `requireCanMutate`, so this is the UX
+ * layer, not the security boundary.
  */
 export function ReadOnlyGuard({
   children,
@@ -39,13 +40,10 @@ export function ReadOnlyGuard({
   const canMutate = useCanMutate()
   if (canMutate) return <>{children}</>
   return (
-    <fieldset
-      disabled
-      title={title}
-      className="m-0 min-w-0 border-0 p-0 opacity-60 [&_*]:cursor-not-allowed"
-      aria-disabled="true"
-    >
-      {children}
-    </fieldset>
+    <div title={title} className="min-w-0 cursor-not-allowed" aria-disabled="true">
+      <fieldset disabled inert className="m-0 min-w-0 border-0 p-0 opacity-60">
+        {children}
+      </fieldset>
+    </div>
   )
 }

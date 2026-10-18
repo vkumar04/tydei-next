@@ -2,6 +2,7 @@
 
 import { Building2, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -82,10 +83,12 @@ export function VendorInvoiceControlBar({
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <Button size="sm" className="gap-2" onClick={onNewInvoiceClick}>
-          <Plus className="h-4 w-4" />
-          New invoice
-        </Button>
+        <ReadOnlyGuard title="Read-only access can't create invoices">
+          <Button size="sm" className="gap-2" onClick={onNewInvoiceClick}>
+            <Plus className="h-4 w-4" />
+            New invoice
+          </Button>
+        </ReadOnlyGuard>
       </div>
     </div>
   )

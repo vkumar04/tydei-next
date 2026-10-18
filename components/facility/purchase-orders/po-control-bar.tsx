@@ -3,6 +3,7 @@
 import { Download, Plus, Search } from "lucide-react"
 import type { POStatus } from "@/lib/generated/prisma/client"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -118,10 +119,12 @@ export function POControlBar({
           <Download className="mr-2 h-4 w-4" />
           Export
         </Button>
-        <Button size="sm" onClick={onNewPO}>
-          <Plus className="mr-2 h-4 w-4" />
-          New PO
-        </Button>
+        <ReadOnlyGuard title="Read-only access can't create purchase orders">
+          <Button size="sm" onClick={onNewPO}>
+            <Plus className="mr-2 h-4 w-4" />
+            New PO
+          </Button>
+        </ReadOnlyGuard>
       </div>
     </div>
   )

@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 
 import { AlertsRow, type AlertRowItem } from "./alerts-row"
 import { AlertsSeverityGroup } from "./alerts-severity-group"
@@ -67,6 +68,7 @@ export function AlertsInbox({
   onNavigate,
   detailHrefFor,
 }: AlertsInboxProps) {
+  const canMutate = useCanMutate()
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [severityFilter, setSeverityFilter] = useState<SeverityFilterValue>("all")
@@ -175,22 +177,26 @@ export function AlertsInbox({
           {selectedIds.size > 0 ? (
             <div className="flex flex-wrap items-center gap-2">
               <Separator orientation="vertical" className="h-4" />
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={isBulkPending}
-                onClick={() => runBulk(onBulkResolve)}
-              >
-                Resolve
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={isBulkPending}
-                onClick={() => runBulk(onBulkDismiss)}
-              >
-                Dismiss
-              </Button>
+              {canMutate ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isBulkPending}
+                    onClick={() => runBulk(onBulkResolve)}
+                  >
+                    Resolve
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isBulkPending}
+                    onClick={() => runBulk(onBulkDismiss)}
+                  >
+                    Dismiss
+                  </Button>
+                </>
+              ) : null}
               {onBulkMarkRead ? (
                 <Button
                   size="sm"

@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/table"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,6 +55,7 @@ export function UploadedPricingFilesCard({
     vendorName: string
     recordCount: number
   } | null>(null)
+  const canMutate = useCanMutate()
 
   if (isLoading) {
     return (
@@ -77,10 +80,12 @@ export function UploadedPricingFilesCard({
             </CardDescription>
           </div>
           {onImport ? (
-            <Button onClick={onImport}>
-              <Upload className="mr-2 h-4 w-4" />
-              Import Data
-            </Button>
+            <ReadOnlyGuard title="Read-only access can't import data">
+              <Button onClick={onImport}>
+                <Upload className="mr-2 h-4 w-4" />
+                Import Data
+              </Button>
+            </ReadOnlyGuard>
           ) : null}
         </CardHeader>
         <CardContent>
@@ -106,10 +111,12 @@ export function UploadedPricingFilesCard({
             </CardDescription>
           </div>
           {onImport ? (
-            <Button onClick={onImport}>
-              <Upload className="mr-2 h-4 w-4" />
-              Import Data
-            </Button>
+            <ReadOnlyGuard title="Read-only access can't import data">
+              <Button onClick={onImport}>
+                <Upload className="mr-2 h-4 w-4" />
+                Import Data
+              </Button>
+            </ReadOnlyGuard>
           ) : null}
         </CardHeader>
         <CardContent className="p-0">
@@ -164,26 +171,28 @@ export function UploadedPricingFilesCard({
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Delete pricing file for ${row.vendorName}`}
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() =>
-                          setPendingVendor({
-                            vendorId: row.vendorId,
-                            vendorName: row.vendorName,
-                            recordCount: row.recordCount,
-                          })
-                        }
-                        disabled={busy}
-                      >
-                        {busy ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </Button>
+                      {canMutate && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Delete pricing file for ${row.vendorName}`}
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() =>
+                            setPendingVendor({
+                              vendorId: row.vendorId,
+                              vendorName: row.vendorName,
+                              recordCount: row.recordCount,
+                            })
+                          }
+                          disabled={busy}
+                        >
+                          {busy ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 )

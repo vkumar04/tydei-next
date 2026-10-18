@@ -26,6 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 
 /**
  * Horizontal control bar for the COG Data page. Consolidates the previous
@@ -142,112 +143,114 @@ export function CogControlBar({
 
       <Separator orientation="vertical" className="hidden h-6 sm:block" />
 
-      <div className="ml-auto flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" onClick={onMassUpload}>
-          <FileStack className="mr-2 h-4 w-4" />
-          Mass Upload
-        </Button>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="sm" onClick={onVendorMapping}>
-                <Users className="mr-2 h-4 w-4" />
-                Vendor Mapping
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-[300px] text-xs">
-              Edit which canonical vendor each COG vendor name points to.
-              Use to combine duplicates or fix mis-matched names without
-              re-importing.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="outline" size="sm" onClick={onCategoryMapping}>
-                <Tags className="mr-2 h-4 w-4" />
-                Category Mapping
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-[300px] text-xs">
-              Map COG category variants to one canonical category — the
-              same way vendor names are mapped — so COG and price-file
-              categories line up. Applies to future imports too.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        {/*
-         * Charles 2026-04-24 (Bug 8): "Match" and "Re-run" do different
-         * things and were confusing users. Match Pricing resolves vendor
-         * NAMES → vendor IDs via the fuzzy resolver FIRST (picks up COG
-         * rows where `vendorName = "Stryker Corp"` with no vendorId yet),
-         * then recomputes matchStatus. Re-run only recomputes for rows
-         * that already have a vendorId on a contracted vendor. Tooltips
-         * now spell out the difference so the two buttons aren't
-         * read as duplicates.
-         */}
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={matchPending}
-                onClick={onMatchPricing}
-              >
-                <RefreshCw
-                  className={cn("mr-2 h-4 w-4", matchPending && "animate-spin")}
-                />
-                {matchPending ? "Matching..." : "Match Pricing"}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-[300px] text-xs">
-              Resolves vendor names → vendor IDs on unmatched rows, THEN
-              recomputes on-contract status. Use this first when new COG
-              rows come in.
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={rerunPending}
-                onClick={onRerunMatch}
-              >
-                <RefreshCw
-                  className={cn("mr-2 h-4 w-4", rerunPending && "animate-spin")}
-                />
-                Re-run match
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-[300px] text-xs">
-              Recomputes on-contract / price-variance status for rows that
-              already have a vendor ID. Faster than Match Pricing; use
-              after you change contract terms or add a new contract.
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        <Button variant="outline" size="sm" onClick={onImport}>
-          <Upload className="mr-2 h-4 w-4" />
-          Import
-        </Button>
-        <Button size="sm" onClick={onManualEntry}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Entry
-        </Button>
-        <Separator orientation="vertical" className="hidden h-6 sm:block" />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onClearAll}
-          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-        >
-          <Trash2 className="mr-2 h-4 w-4" />
-          Clear All
-        </Button>
-      </div>
+      <ReadOnlyGuard title="Read-only access can't change COG data">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onMassUpload}>
+            <FileStack className="mr-2 h-4 w-4" />
+            Mass Upload
+          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm" onClick={onVendorMapping}>
+                  <Users className="mr-2 h-4 w-4" />
+                  Vendor Mapping
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[300px] text-xs">
+                Edit which canonical vendor each COG vendor name points to.
+                Use to combine duplicates or fix mis-matched names without
+                re-importing.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm" onClick={onCategoryMapping}>
+                  <Tags className="mr-2 h-4 w-4" />
+                  Category Mapping
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[300px] text-xs">
+                Map COG category variants to one canonical category — the
+                same way vendor names are mapped — so COG and price-file
+                categories line up. Applies to future imports too.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          {/*
+           * Charles 2026-04-24 (Bug 8): "Match" and "Re-run" do different
+           * things and were confusing users. Match Pricing resolves vendor
+           * NAMES → vendor IDs via the fuzzy resolver FIRST (picks up COG
+           * rows where `vendorName = "Stryker Corp"` with no vendorId yet),
+           * then recomputes matchStatus. Re-run only recomputes for rows
+           * that already have a vendorId on a contracted vendor. Tooltips
+           * now spell out the difference so the two buttons aren't
+           * read as duplicates.
+           */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={matchPending}
+                  onClick={onMatchPricing}
+                >
+                  <RefreshCw
+                    className={cn("mr-2 h-4 w-4", matchPending && "animate-spin")}
+                  />
+                  {matchPending ? "Matching..." : "Match Pricing"}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[300px] text-xs">
+                Resolves vendor names → vendor IDs on unmatched rows, THEN
+                recomputes on-contract status. Use this first when new COG
+                rows come in.
+              </TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={rerunPending}
+                  onClick={onRerunMatch}
+                >
+                  <RefreshCw
+                    className={cn("mr-2 h-4 w-4", rerunPending && "animate-spin")}
+                  />
+                  Re-run match
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[300px] text-xs">
+                Recomputes on-contract / price-variance status for rows that
+                already have a vendor ID. Faster than Match Pricing; use
+                after you change contract terms or add a new contract.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <Button variant="outline" size="sm" onClick={onImport}>
+            <Upload className="mr-2 h-4 w-4" />
+            Import
+          </Button>
+          <Button size="sm" onClick={onManualEntry}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Entry
+          </Button>
+          <Separator orientation="vertical" className="hidden h-6 sm:block" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClearAll}
+            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Clear All
+          </Button>
+        </div>
+      </ReadOnlyGuard>
     </div>
   )
 }

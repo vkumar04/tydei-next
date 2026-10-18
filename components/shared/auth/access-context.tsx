@@ -16,12 +16,13 @@ import {
  * `<AccessProvider>`; client components read it via `useAccessTier()` /
  * `useCan()` to disable or hide mutating affordances.
  *
- * Default tier is `super` when no provider is mounted, so surfaces that
- * haven't been wrapped yet keep full behavior (the SERVER gates are the
- * real enforcement; these are courtesy affordances).
+ * Default tier is `user` (read-only) when no provider is mounted, so a
+ * surface rendered outside a gate never offers writes it can't perform
+ * (the SERVER gates are the real enforcement; these are courtesy
+ * affordances).
  */
 
-const Ctx = createContext<AccessContext>({ tier: "super", side: "facility" })
+const Ctx = createContext<AccessContext>({ tier: "user", side: "facility" })
 
 export function AccessProvider({
   tier,

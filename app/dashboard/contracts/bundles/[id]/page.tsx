@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { BundleImpactAnalysisCard } from "@/components/contracts/bundle-impact-analysis-card"
 import { BundleDeleteButton } from "@/components/contracts/bundle-delete-button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { requireFacility } from "@/lib/actions/auth"
 import { formatCurrency, formatPercent } from "@/lib/formatting"
 
@@ -47,15 +48,19 @@ export default async function BundleDetailPage({
           <Button variant="outline" asChild>
             <Link href="/dashboard/contracts/bundles">← Bundles</Link>
           </Button>
-          <Button variant="outline" asChild>
-            <Link href={`/dashboard/contracts/bundles/${bundle.id}/edit`}>
-              Edit
-            </Link>
-          </Button>
-          <BundleDeleteButton
-            bundleId={bundle.id}
-            bundleLabel={bundle.primaryContract.name}
-          />
+          <ReadOnlyGuard title="Read-only access can't edit bundles">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" asChild>
+                <Link href={`/dashboard/contracts/bundles/${bundle.id}/edit`}>
+                  Edit
+                </Link>
+              </Button>
+              <BundleDeleteButton
+                bundleId={bundle.id}
+                bundleLabel={bundle.primaryContract.name}
+              />
+            </div>
+          </ReadOnlyGuard>
         </div>
       </div>
 

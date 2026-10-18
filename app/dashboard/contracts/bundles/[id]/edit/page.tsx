@@ -4,6 +4,7 @@ import { getBundle } from "@/lib/actions/bundles"
 import { Button } from "@/components/ui/button"
 import { EditBundleForm } from "./edit-bundle-form"
 import { requireFacility } from "@/lib/actions/auth"
+import { redirectUnlessCanMutate } from "@/lib/auth/page-gates"
 
 export default async function EditBundlePage({
   params,
@@ -12,6 +13,7 @@ export default async function EditBundlePage({
 }) {
   await requireFacility()
   const { id } = await params
+  await redirectUnlessCanMutate(`/dashboard/contracts/bundles/${id}`)
   const data = await getBundle(id)
   if (!data) notFound()
   const { bundle } = data
