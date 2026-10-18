@@ -45,6 +45,8 @@ import {
   useDeleteDividendProposal,
 } from "@/hooks/use-dividend"
 import { GOOD_TONE, BAD_TONE } from "./primitives"
+import { useCanMutate } from "@/components/shared/auth/access-context"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import {
   exportDividendReportHtml,
   exportDividendReportCsv,
@@ -95,6 +97,7 @@ export function DividendProposalActions({
   const { data: proposals = [] } = useDividendProposals(vendorId)
   const saveMutation = useSaveDividendProposal()
   const deleteMutation = useDeleteDividendProposal()
+  const canMutate = useCanMutate()
 
   const openSaveDialog = () => {
     setName(currentName ?? report.purchase.productName ?? "New proposal")
@@ -149,10 +152,12 @@ export function DividendProposalActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" variant="default" className="gap-2" onClick={openSaveDialog}>
-        <Save className="h-4 w-4" />
-        {currentId ? "Save" : "Save proposal"}
-      </Button>
+      <ReadOnlyGuard title="Read-only access can't save proposals">
+        <Button size="sm" variant="default" className="gap-2" onClick={openSaveDialog}>
+          <Save className="h-4 w-4" />
+          {currentId ? "Save" : "Save proposal"}
+        </Button>
+      </ReadOnlyGuard>
 
       <Button
         size="sm"
@@ -341,19 +346,21 @@ export function DividendProposalActions({
                           "Open"
                         )}
                       </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8 text-muted-foreground hover:text-red-600"
-                        aria-label={`Delete ${p.name}`}
-                        onClick={() =>
-                          deleteMutation.mutate(p.id, {
-                            onSuccess: () => onDeleted(p.id),
-                          })
-                        }
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {canMutate && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 text-muted-foreground hover:text-red-600"
+                          aria-label={`Delete ${p.name}`}
+                          onClick={() =>
+                            deleteMutation.mutate(p.id, {
+                              onSuccess: () => onDeleted(p.id),
+                            })
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}

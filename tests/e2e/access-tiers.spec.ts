@@ -55,4 +55,11 @@ test.describe("read-only vendor user", () => {
     await page.goto("/vendor/contracts/new")
     await expect(page).toHaveURL(/\/vendor\/contracts$/)
   })
+
+  test("cannot start a new proposal", async ({ page }) => {
+    await page.goto("/vendor/prospective")
+    const button = page.getByRole("button", { name: "New Proposal" }).first()
+    await expect(button).toBeVisible()
+    await expect(page.locator("fieldset[inert]").filter({ has: button }).first()).toBeAttached()
+  })
 })
