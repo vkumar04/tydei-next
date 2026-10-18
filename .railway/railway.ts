@@ -40,6 +40,7 @@ export default defineRailway((ctx) => {
       STRIPE_PRO_PRICE_ID: preserve(),
       STRIPE_SECRET_KEY: preserve(),
       STRIPE_WEBHOOK_SECRET: preserve(),
+      TYPESAFE_API_KEY: preserve(),
     },
   });
   return project("tydei-next", {
