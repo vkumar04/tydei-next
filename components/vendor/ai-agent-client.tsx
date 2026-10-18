@@ -155,7 +155,7 @@ export function VendorAIAgentClient({ vendorId: _vendorId }: VendorAIAgentClient
             </div>
             <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">AI Vendor Assistant</h1>
             <p className="text-sm text-muted-foreground">
-              Claude Opus 4.6 — contracts, market share, pricing benchmarks, and growth across your facility accounts.
+              Claude — contracts, market share, pricing benchmarks, and growth across your facility accounts.
             </p>
           </div>
           {activeTab === "chat" && !isEmpty && (

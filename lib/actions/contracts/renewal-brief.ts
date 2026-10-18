@@ -10,7 +10,7 @@
  *      (single-contract ownership predicate).
  *   3. Normalize into `RenewalBriefInput`, hash canonical JSON → 1-hour
  *      cache lookup on `RenewalBriefCache`.
- *   4. On miss: call Claude Opus 4.6 via the Vercel AI SDK (same pattern as
+ *   4. On miss: call Claude Opus via the Vercel AI SDK (same pattern as
  *      Wave 1's `rebate-optimizer-insights`). System prompt marked
  *      `cacheControl: ephemeral` for prompt caching. 12K max output tokens.
  *   5. Validate against `renewalBriefSchema`, persist cache row, return.
@@ -232,7 +232,7 @@ Produce the JSON response exactly matching the schema. Use the rebateHistory + p
       providerOptions: {
         anthropic: {
           // Prompt caching — the system prompt is static and large enough
-          // to be worth caching. Adaptive thinking is Opus 4.6's default.
+          // to be worth caching.
           cacheControl: { type: "ephemeral" },
         },
       },

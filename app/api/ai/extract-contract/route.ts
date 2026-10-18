@@ -5,7 +5,7 @@ import {
 } from "@/lib/ai/generate-structured"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
-import { claudeModel } from "@/lib/ai/config"
+import { claudeExtractionFallback, claudeExtractionModel } from "@/lib/ai/config"
 import {
   extractedContractSchema,
   type ExtractedContractData,
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
 
       // Use the legacy (simpler) schema for raw-text parsing.
       const result = await generateText({
-        model: claudeModel,
+        model: claudeExtractionModel,
         abortSignal: request.signal,
         // Cap output — schema is bounded; 8k covers the longest
         // realistic extract while preventing runaway costs.
@@ -369,6 +369,8 @@ ${text.trim()}`,
         schema: extractedContractSchema,
         messages: [{ role: "user", content: userContent }],
         actionName: "extract-contract",
+        primary: claudeExtractionModel,
+        fallback: claudeExtractionFallback,
         abortSignal: request.signal,
       })
 

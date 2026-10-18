@@ -26,7 +26,7 @@ import { auth } from "@/lib/auth-server"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { uploadFile } from "@/lib/storage"
-import { claudeModel } from "@/lib/ai/config"
+import { claudeExtractionModel } from "@/lib/ai/config"
 import { extractedContractSchema } from "@/lib/ai/schemas"
 import { extractPdfText } from "@/lib/ai/pdf-text-helper"
 import {
@@ -284,7 +284,7 @@ export async function POST(req: Request) {
   try {
     let capturedStreamError: string | null = null
     const result = streamObject({
-      model: claudeModel,
+      model: claudeExtractionModel,
       schema: extractedContractSchema,
       abortSignal: req.signal,
       providerOptions: {
