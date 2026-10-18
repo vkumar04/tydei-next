@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Save } from "lucide-react"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import type { ProposedPricingItem, VendorProposal } from "@/lib/actions/prospective"
 import { DealScoreView } from "./deal-score-view"
 import type { DealScore } from "@/lib/actions/prospective"
@@ -633,25 +634,27 @@ export const ProposalBuilder = forwardRef<
               <strong>Analyze deal</strong> below saves and scores in one step
               — or save your progress now.
             </p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={createMutation.isPending || updateMutation.isPending}
-              onClick={async () => {
-                const created = await persist()
-                if (!created) return
-                onAutoAttach?.(created)
-                toast.success(
-                  created.name
-                    ? `Proposal "${created.name}" saved`
-                    : "Proposal saved",
-                )
-              }}
-            >
-              <Save className="mr-1.5 h-4 w-4" />
-              Save proposal
-            </Button>
+            <ReadOnlyGuard title="Read-only access can't save proposals">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={createMutation.isPending || updateMutation.isPending}
+                onClick={async () => {
+                  const created = await persist()
+                  if (!created) return
+                  onAutoAttach?.(created)
+                  toast.success(
+                    created.name
+                      ? `Proposal "${created.name}" saved`
+                      : "Proposal saved",
+                  )
+                }}
+              >
+                <Save className="mr-1.5 h-4 w-4" />
+                Save proposal
+              </Button>
+            </ReadOnlyGuard>
           </div>
         ) : (
           <ProposalActions
