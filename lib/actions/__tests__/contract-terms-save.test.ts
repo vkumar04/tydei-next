@@ -30,10 +30,7 @@ vi.mock("@/lib/db", () => ({
       create: createMock,
       update: updateMock,
       delete: deleteTermMock,
-      findUnique: findUniqueTermMock,
-      findUniqueOrThrow: vi
-        .fn()
-        .mockResolvedValue({ contractId: "c-1" }),
+      findUniqueOrThrow: findUniqueTermMock,
     },
     contractTermProduct: {
       createMany: createManyProductMock,
@@ -268,7 +265,10 @@ describe("term save triggers accrual recompute (R5.21)", () => {
   it("deleteContractTerm calls recomputeAccrualForContract so the card drops stale accruals", async () => {
     await deleteContractTerm("term-1")
     expect(findUniqueTermMock).toHaveBeenCalledWith({
-      where: { id: "term-1" },
+      where: {
+        id: "term-1",
+        contract: { OR: [{ facilityId: "fac-1" }, { contractFacilities: { some: { facilityId: "fac-1" } } }] },
+      },
       select: { contractId: true },
     })
     expect(recomputeAccrualMock).toHaveBeenCalledWith("c-1")

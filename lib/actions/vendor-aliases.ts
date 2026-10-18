@@ -18,7 +18,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
-import { requireCanMutate } from "@/lib/actions/auth-permissions"
+import { requireCan } from "@/lib/actions/auth-permissions"
 import { vendorNameKey } from "@/lib/vendors/normalize"
 import { VENDOR_ALIASES } from "@/lib/vendor-aliases"
 import { similarityRatio } from "@/lib/vendors/similarity"
@@ -70,7 +70,7 @@ export async function addVendorAlias(
   input: unknown,
 ): Promise<AddVendorAliasResult> {
   const { vendor } = await requireVendor()
-  await requireCanMutate()
+  await requireCan("settings.manage")
 
   const parsed = aliasInputSchema.safeParse(input)
   if (!parsed.success) {
@@ -151,7 +151,7 @@ export async function removeVendorAlias(
   aliasId: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const { vendor } = await requireVendor()
-  await requireCanMutate()
+  await requireCan("settings.manage")
 
   // Ownership-scoped delete: the vendorId predicate is what stops a vendor
   // deleting another vendor's alias by guessing an id.

@@ -255,6 +255,7 @@ Produce the JSON response exactly matching the schema. Include observations only
 
   // ── 5. Persist cache row + return ──────────────────────────────────
   const now = new Date()
+  // read-only-guard-skip: response cache for a read; no tenant data changes
   await prisma.rebateInsightCache.create({
     data: {
       facilityId,

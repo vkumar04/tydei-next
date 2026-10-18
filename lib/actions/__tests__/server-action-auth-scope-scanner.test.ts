@@ -47,6 +47,9 @@ const RISKY_OPS = [
   "delete",
   "findFirst",
   "findFirstOrThrow",
+  "upsert",
+  "updateMany",
+  "deleteMany",
 ] as const
 
 const SCAN_DIRS = ["lib/actions"]
@@ -156,14 +159,17 @@ async function scanFile(
     // Match `prisma.<entity>.<op>(` (or `tx.<entity>.<op>(` inside
     // transactions).
     const opMatch = line.match(
-      /\b(?:prisma|tx)\.([a-zA-Z]+)\.(findUnique|findUniqueOrThrow|update|delete|findFirst|findFirstOrThrow)\b/,
+      /\b(?:prisma|tx)\.([a-zA-Z]+)\.(findUnique|findUniqueOrThrow|update|delete|findFirst|findFirstOrThrow|upsert|updateMany|deleteMany)\b/,
     )
     if (!opMatch) continue
     const op = opMatch[2] as (typeof RISKY_OPS)[number]
     if (!RISKY_OPS.includes(op)) continue
 
     // Look ahead a few lines for the where clause (call may span lines).
-    const window = lines.slice(i, Math.min(i + 8, lines.length)).join("\n")
+    const rawWindow = lines.slice(i, Math.min(i + 8, lines.length)).join("\n")
+    const firstOp = rawWindow.search(/\b(?:prisma|tx)\.[a-zA-Z]+\.\w+\s*\(/)
+    const nextOp = rawWindow.slice(firstOp + 1).search(/\b(?:prisma|tx)\.[a-zA-Z]+\.\w+\s*\(/)
+    const window = nextOp < 0 ? rawWindow : rawWindow.slice(0, firstOp + 1 + nextOp)
 
     // No `where: { id` at all → not a single-row id lookup; skip.
     if (!/where:\s*\{[^}]*\bid\b/.test(window)) continue
@@ -178,9 +184,8 @@ async function scanFile(
     }
 
     // Compound where with a tenant id → safe.
-    const whereMatch = window.match(/where:\s*\{[^}]*\}/)
-    if (whereMatch) {
-      const w = whereMatch[0]
+    const w = balancedWhere(window)
+    if (w) {
       if (/(facilityId|vendorId|userId|organizationId|contractId)\b/.test(w)) {
         continue
       }
@@ -237,6 +242,18 @@ async function scanFile(
   }
 
   return hits
+}
+
+function balancedWhere(window: string): string | null {
+  const start = window.search(/where:\s*\{/)
+  if (start < 0) return null
+  const open = window.indexOf("{", start)
+  let depth = 0
+  for (let i = open; i < window.length; i++) {
+    if (window[i] === "{") depth++
+    else if (window[i] === "}" && --depth === 0) return window.slice(start, i + 1)
+  }
+  return window.slice(start)
 }
 
 /**

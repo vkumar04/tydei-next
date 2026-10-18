@@ -9,8 +9,8 @@
  * differences from the facility action are the auth gates:
  *
  *   - reads gate with `requireVendor()` (instead of `requireFacility()`),
- *   - saves additionally gate with `requireCanMutate()` so read-only Users
- *     (the `user` access tier) cannot persist settings.
+ *   - saves additionally gate with `requireCan("settings.manage")` so only Super users
+ *     can persist settings.
  *
  * The pure validator (`lib/renewals/alert-settings.ts`) is reused verbatim —
  * it is NOT forked here.
@@ -24,7 +24,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
-import { requireCanMutate } from "@/lib/actions/auth-permissions"
+import { requireCan } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import { serialize } from "@/lib/serialize"
 import {
@@ -84,7 +84,7 @@ export async function saveVendorRenewalAlertSettings(
   const { user } = await requireVendor()
 
   // Read-only (`user` access tier) callers throw here before any write runs.
-  await requireCanMutate()
+  await requireCan("settings.manage")
 
   // Throws `RenewalAlertSettingsValidationError` on bad shape. The action
   // intentionally lets it propagate so server-action error boundaries can

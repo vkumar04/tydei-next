@@ -15,7 +15,7 @@ import { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { contractOwnershipWhere, contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { serialize } from "@/lib/serialize"
 import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 
@@ -106,7 +106,7 @@ export async function updateCapitalLineItem(
   await requireCanMutate()
   // Resolve parent contract through the row to verify ownership.
   const existing = await prisma.contractCapitalLineItem.findUniqueOrThrow({
-    where: { id: itemId },
+    where: { id: itemId, contract: contractsOwnedByFacility(facility.id) },
     select: { contractId: true },
   })
   await prisma.contract.findFirstOrThrow({
@@ -153,7 +153,7 @@ export async function deleteCapitalLineItem(itemId: string) {
   const { facility } = await requireFacility()
   await requireCanMutate()
   const existing = await prisma.contractCapitalLineItem.findUniqueOrThrow({
-    where: { id: itemId },
+    where: { id: itemId, contract: contractsOwnedByFacility(facility.id) },
     select: { contractId: true },
   })
   await prisma.contract.findFirstOrThrow({
