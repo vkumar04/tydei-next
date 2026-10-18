@@ -4,6 +4,7 @@ import { useState, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table"
@@ -134,6 +135,7 @@ export function InvoiceValidationDetail({
     null
   )
   const [invoiceDisputeOpen, setInvoiceDisputeOpen] = useState(false)
+  const canMutate = useCanMutate()
   const flagItem = useFlagInvoiceLineItem()
   const resolveItem = useResolveInvoiceLineItem()
 
@@ -174,7 +176,7 @@ export function InvoiceValidationDetail({
         {invoice && invoice.disputeStatus !== "none" && (
           <DisputeStatusBadge status={invoice.disputeStatus} />
         )}
-        {invoice && (
+        {canMutate && invoice && (
           <Button
             variant={invoice.disputeStatus === "disputed" ? "outline" : "destructive"}
             size="sm"
@@ -342,7 +344,7 @@ export function InvoiceValidationDetail({
                         )}
                       </TableCell>
                       <TableCell>
-                        {li.isFlagged ? (
+                        {!canMutate ? null : li.isFlagged ? (
                           <Button
                             size="sm"
                             variant="outline"

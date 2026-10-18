@@ -2,6 +2,7 @@
 
 import { Download, FileSpreadsheet, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -125,10 +126,12 @@ export function VendorPOControlBar({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Button size="sm" onClick={onAddPO} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add PO
-        </Button>
+        <ReadOnlyGuard title="Read-only access can't create purchase orders">
+          <Button size="sm" onClick={onAddPO} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add PO
+          </Button>
+        </ReadOnlyGuard>
       </div>
     </div>
   )

@@ -2,6 +2,7 @@
 
 import { Check, FileText, Flag } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,7 @@ export function InvoiceDetailsDialog({
   onApprove,
   onDispute,
 }: InvoiceDetailsDialogProps) {
+  const canMutate = useCanMutate()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
@@ -80,7 +82,7 @@ export function InvoiceDetailsDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-          {invoice?.status === "pending" && (
+          {canMutate && invoice?.status === "pending" && (
             <Button
               variant="outline"
               onClick={() => {
@@ -92,7 +94,7 @@ export function InvoiceDetailsDialog({
               Approve
             </Button>
           )}
-          {invoice && (
+          {canMutate && invoice && (
             <Button
               onClick={() => {
                 onDispute(invoice)

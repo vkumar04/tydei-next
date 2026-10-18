@@ -3,6 +3,7 @@
 import { Check, Eye, FileText, Flag } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -77,6 +78,7 @@ export function InvoiceDiscrepancyTable({
   emptyMessage = "No invoices found.",
 }: InvoiceDiscrepancyTableProps) {
   const colCount = selectable ? 9 : 8
+  const canMutate = useCanMutate()
 
   return (
     <div className="rounded-lg border">
@@ -193,25 +195,27 @@ export function InvoiceDiscrepancyTable({
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      title={
-                        invoice.disputeStatus === "disputed"
-                          ? "Resolve dispute"
-                          : "Flag as disputed"
-                      }
-                      onClick={() => onDispute(invoice)}
-                    >
-                      <Flag
-                        className={
+                    {canMutate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title={
                           invoice.disputeStatus === "disputed"
-                            ? "h-4 w-4 text-red-600 dark:text-red-400"
-                            : "h-4 w-4"
+                            ? "Resolve dispute"
+                            : "Flag as disputed"
                         }
-                      />
-                    </Button>
-                    {invoice.status === "pending" && (
+                        onClick={() => onDispute(invoice)}
+                      >
+                        <Flag
+                          className={
+                            invoice.disputeStatus === "disputed"
+                              ? "h-4 w-4 text-red-600 dark:text-red-400"
+                              : "h-4 w-4"
+                          }
+                        />
+                      </Button>
+                    )}
+                    {canMutate && invoice.status === "pending" && (
                       <Button
                         variant="ghost"
                         size="sm"

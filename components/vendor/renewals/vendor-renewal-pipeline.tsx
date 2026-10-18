@@ -53,6 +53,7 @@ import { toast } from "sonner"
 import { useQuery } from "@tanstack/react-query"
 import { formatCurrency, formatDate } from "@/lib/formatting"
 import { useSubmitRenewalProposal } from "@/hooks/use-renewals"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import type { ExpiringContract } from "@/lib/actions/renewals"
 import { VendorRenewalNotesTimeline } from "./vendor-renewal-notes-timeline"
 import { getVendorRenewalRiskBatch } from "@/lib/actions/analytics/vendor-renewal-risk-batch"
@@ -108,6 +109,7 @@ export function VendorRenewalPipeline({
   const [selectedRenewal, setSelectedRenewal] =
     useState<ExpiringContract | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const canMutate = useCanMutate()
   const [proposeTermsOpen, setProposeTermsOpen] = useState(false)
   const [proposalNotes, setProposalNotes] = useState("")
 
@@ -440,15 +442,17 @@ export function VendorRenewalPipeline({
                   <Mail className="mr-2 h-4 w-4" />
                   Contact Facility
                 </Button>
-                <Button
-                  onClick={() => {
-                    setDetailsOpen(false)
-                    setProposeTermsOpen(true)
-                  }}
-                >
-                  <Send className="mr-2 h-4 w-4" />
-                  Propose Terms
-                </Button>
+                {canMutate ? (
+                  <Button
+                    onClick={() => {
+                      setDetailsOpen(false)
+                      setProposeTermsOpen(true)
+                    }}
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    Propose Terms
+                  </Button>
+                ) : null}
               </DialogFooter>
             </>
           )}

@@ -47,3 +47,18 @@ setup("authenticate as admin user", async ({ page, context }) => {
   )
   await context.storageState({ path: "tests/e2e/.auth/admin.json" })
 })
+
+setup("authenticate as read-only facility user", async ({ page, context }) => {
+  await browserSignIn(page, "demo-facility-user@tydei.com", "demo-2024", /\/dashboard/)
+  await context.storageState({ path: "tests/e2e/.auth/facility-user.json" })
+})
+
+setup("authenticate as advanced facility user", async ({ page, context }) => {
+  await browserSignIn(page, "demo-facility-adv@tydei.com", "demo-2024", /\/dashboard/)
+  await context.storageState({ path: "tests/e2e/.auth/facility-adv.json" })
+})
+
+setup("authenticate as read-only vendor user", async ({ page, context }) => {
+  await browserSignIn(page, "demo-vendor-user@tydei.com", "demo-2024", /\/vendor/)
+  await context.storageState({ path: "tests/e2e/.auth/vendor-user.json" })
+})

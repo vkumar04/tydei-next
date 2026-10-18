@@ -2,6 +2,7 @@
 
 import { Download, Flag, Package, Search, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -123,10 +124,12 @@ export function InvoiceValidationControlBar({
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        <Button variant="outline" size="sm" className="gap-2" onClick={onImportClick}>
-          <Upload className="h-4 w-4" />
-          Upload invoice
-        </Button>
+        <ReadOnlyGuard title="Read-only access can't upload invoices">
+          <Button variant="outline" size="sm" className="gap-2" onClick={onImportClick}>
+            <Upload className="h-4 w-4" />
+            Upload invoice
+          </Button>
+        </ReadOnlyGuard>
         <Button
           size="sm"
           className="gap-2"

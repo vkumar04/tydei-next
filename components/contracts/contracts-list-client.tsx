@@ -22,6 +22,8 @@ import {
 import { useFacilityPendingContracts } from "@/hooks/use-pending-contracts"
 import { filterAwaitingReview } from "@/lib/contracts/pending-awaiting-review"
 import { getContractColumns } from "@/components/contracts/contract-columns"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import { DataTable } from "@/components/shared/tables/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -99,6 +101,7 @@ export function ContractsListClient({
   userId,
 }: ContractsListClientProps) {
   const router = useRouter()
+  const canMutate = useCanMutate()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -241,15 +244,17 @@ export function ContractsListClient({
       getContractColumns(
         {
           onView: (id) => router.push(`/dashboard/contracts/${id}`),
-          onEdit: (id) => router.push(`/dashboard/contracts/${id}/edit`),
-          onDelete: (contract) => {
-            setContractToDelete({ id: contract.id, name: contract.name })
-            setDeleteDialogOpen(true)
-          },
+          ...(canMutate && {
+            onEdit: (id: string) => router.push(`/dashboard/contracts/${id}/edit`),
+            onDelete: (contract: { id: string; name: string }) => {
+              setContractToDelete({ id: contract.id, name: contract.name })
+              setDeleteDialogOpen(true)
+            },
+          }),
         },
         { selectable: true },
       ),
-    [router],
+    [router, canMutate],
   )
 
   const facilityOptions = useMemo(() => {
@@ -501,12 +506,14 @@ export function ContractsListClient({
                         Create your first contract to start tracking rebates
                         and spend.
                       </p>
-                      <Button asChild variant="outline" size="sm">
-                        <Link href="/dashboard/contracts/new">
-                          <Plus className="mr-2 h-4 w-4" />
-                          Create your first contract
-                        </Link>
-                      </Button>
+                      <ReadOnlyGuard title="Read-only access can't create contracts">
+                        <Button asChild variant="outline" size="sm">
+                          <Link href="/dashboard/contracts/new">
+                            <Plus className="mr-2 h-4 w-4" />
+                            Create your first contract
+                          </Link>
+                        </Button>
+                      </ReadOnlyGuard>
                     </>
                   )}
                 </div>

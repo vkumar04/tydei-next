@@ -3,6 +3,8 @@
 import { useState, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -103,6 +105,7 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
   const createMutation = useCreatePayorContract()
   const deleteMutation = useDeletePayorContract()
   const importRatesMutation = useImportPayorRates()
+  const canMutate = useCanMutate()
 
   // Dialog state
   const [showUploadDialog, setShowUploadDialog] = useState(false)
@@ -308,10 +311,12 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
             Upload payor contracts to calculate case margins from CPT rates
           </p>
         </div>
-        <Button onClick={() => setShowUploadDialog(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Contract
-        </Button>
+        <ReadOnlyGuard title="Read-only access can't add payor contracts">
+          <Button onClick={() => setShowUploadDialog(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Contract
+          </Button>
+        </ReadOnlyGuard>
       </div>
 
       {/* Summary Stats */}
@@ -355,10 +360,12 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
             <p className="text-sm text-muted-foreground mt-1">
               Upload a payor contract PDF to get started with margin analysis
             </p>
-            <Button className="mt-4" onClick={() => setShowUploadDialog(true)}>
-              <Upload className="mr-2 h-4 w-4" />
-              Upload Contract
-            </Button>
+            <ReadOnlyGuard title="Read-only access can't add payor contracts">
+              <Button className="mt-4" onClick={() => setShowUploadDialog(true)}>
+                <Upload className="mr-2 h-4 w-4" />
+                Upload Contract
+              </Button>
+            </ReadOnlyGuard>
           </CardContent>
         </Card>
       ) : (
@@ -400,14 +407,16 @@ export function PayorContractsManager({ facilityId }: PayorContractsManagerProps
                   >
                     <Eye className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => deleteMutation.mutate(contract.id)}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+                  {canMutate && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteMutation.mutate(contract.id)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

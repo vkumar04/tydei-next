@@ -25,6 +25,7 @@ import {
   Calculator,
 } from "lucide-react"
 import { formatCurrency } from "@/lib/formatting"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import type { RebateInsight } from "@/lib/ai/rebate-optimizer-schemas"
 
 interface RebateInsightCardProps {
@@ -57,6 +58,7 @@ export function RebateInsightCard({
   isFlagging,
   isFlagged,
 }: RebateInsightCardProps) {
+  const canMutate = useCanMutate()
   const [rationaleOpen, setRationaleOpen] = useState(false)
 
   return (
@@ -149,16 +151,23 @@ export function RebateInsightCard({
               Open in Scenario Builder
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1 text-xs"
-            onClick={() => onFlag(insight)}
-            disabled={isFlagging || isFlagged}
-          >
-            <Flag className="h-3 w-3" />
-            {isFlagged ? "Flagged" : "Flag for review"}
-          </Button>
+          {canMutate ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 text-xs"
+              onClick={() => onFlag(insight)}
+              disabled={isFlagging || isFlagged}
+            >
+              <Flag className="h-3 w-3" />
+              {isFlagged ? "Flagged" : "Flag for review"}
+            </Button>
+          ) : isFlagged ? (
+            <Badge variant="secondary" className="gap-1 text-xs">
+              <Flag className="h-3 w-3" />
+              Flagged
+            </Badge>
+          ) : null}
         </div>
       </CardContent>
     </Card>

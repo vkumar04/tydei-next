@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import {
   Building2,
   Calendar,
@@ -65,6 +66,7 @@ export interface POTableProps {
 
 export function POTable({ orders, isLoading, onUpdateStatus }: POTableProps) {
   const router = useRouter()
+  const canMutate = useCanMutate()
 
   if (isLoading) {
     return (
@@ -154,7 +156,7 @@ export function POTable({ orders, isLoading, onUpdateStatus }: POTableProps) {
                     <Eye className="mr-2 h-4 w-4" />
                     View Details
                   </DropdownMenuItem>
-                  {po.status === "draft" && (
+                  {canMutate && po.status === "draft" && (
                     <DropdownMenuItem
                       onClick={() =>
                         router.push(`/dashboard/purchase-orders/${po.id}`)
@@ -165,7 +167,7 @@ export function POTable({ orders, isLoading, onUpdateStatus }: POTableProps) {
                     </DropdownMenuItem>
                   )}
                   {/* H4: transition options come from the canonical map */}
-                  {(isPOStatus(po.status) ? PO_STATUS_FLOW[po.status] : []).map(
+                  {(canMutate && isPOStatus(po.status) ? PO_STATUS_FLOW[po.status] : []).map(
                     (next) => {
                       const meta = STATUS_ACTION_META[next]
                       const Icon = meta.icon

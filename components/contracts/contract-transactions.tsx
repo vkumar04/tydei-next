@@ -67,6 +67,8 @@ import {
   type DialogMode,
 } from "@/components/contracts/transactions/_transaction-dialog"
 import { EditTransactionDialog } from "@/components/contracts/transactions/_edit-transaction-dialog"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 
 interface ContractTransactionsProps {
   contractId: string
@@ -234,39 +236,41 @@ function AddTransactionButtons({
           share, and annual value also refresh on this click. Use Recompute
           to resync after seed/COG changes outside the normal import path.
         </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            className="gap-2"
-            onClick={() => recompute.mutate()}
-            disabled={recompute.isPending}
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${recompute.isPending ? "animate-spin" : ""}`}
-            />
-            {recompute.isPending ? "Recomputing…" : "Recompute Earned Rebates"}
-          </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            className="gap-2"
-            onClick={() => setMode({ kind: "rebate-collected" })}
-          >
-            <CreditCard className="h-4 w-4" />
-            Log Collected Rebate
-          </Button>
-          {supportsCreditPayment && (
+        <ReadOnlyGuard title="Read-only access can't log transactions">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
-              variant="outline"
               className="gap-2"
-              onClick={() => setMode({ kind: "credit-or-payment" })}
+              onClick={() => recompute.mutate()}
+              disabled={recompute.isPending}
             >
-              <DollarSign className="h-4 w-4" />
-              Log Credit / Payment
+              <RefreshCw
+                className={`h-4 w-4 ${recompute.isPending ? "animate-spin" : ""}`}
+              />
+              {recompute.isPending ? "Recomputing…" : "Recompute Earned Rebates"}
             </Button>
-          )}
-        </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="gap-2"
+              onClick={() => setMode({ kind: "rebate-collected" })}
+            >
+              <CreditCard className="h-4 w-4" />
+              Log Collected Rebate
+            </Button>
+            {supportsCreditPayment && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2"
+                onClick={() => setMode({ kind: "credit-or-payment" })}
+              >
+                <DollarSign className="h-4 w-4" />
+                Log Credit / Payment
+              </Button>
+            )}
+          </div>
+        </ReadOnlyGuard>
       </div>
       {mode !== null && (
         <TransactionDialog
@@ -293,6 +297,7 @@ function TransactionTable({
   filter: "all" | TransactionType
   onAction: (action: "edit" | "uncollect" | "delete", row: PeriodRow) => void
 }) {
+  const canMutate = useCanMutate()
   // For now all rows are "rebate" type since we derive from period data
   const filtered = filter === "all" || filter === "rebate" ? rows : []
 
@@ -382,41 +387,43 @@ function TransactionTable({
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        aria-label="Row actions"
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onAction("edit", row)}>
-                        Edit
-                      </DropdownMenuItem>
-                      {row.collectionDate ? (
-                        <DropdownMenuItem
-                          onClick={() => onAction("uncollect", row)}
+                  {canMutate && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          aria-label="Row actions"
                         >
-                          Uncollect
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onAction("edit", row)}>
+                          Edit
                         </DropdownMenuItem>
-                      ) : null}
-                      {!row.notes?.includes("[auto-accrual]") ? (
-                        <>
-                          <DropdownMenuSeparator />
+                        {row.collectionDate ? (
                           <DropdownMenuItem
-                            className="text-red-600 dark:text-red-400"
-                            onClick={() => onAction("delete", row)}
+                            onClick={() => onAction("uncollect", row)}
                           >
-                            Delete
+                            Uncollect
                           </DropdownMenuItem>
-                        </>
-                      ) : null}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                        ) : null}
+                        {!row.notes?.includes("[auto-accrual]") ? (
+                          <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-red-600 dark:text-red-400"
+                              onClick={() => onAction("delete", row)}
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
                 </TableCell>
               </TableRow>
             )

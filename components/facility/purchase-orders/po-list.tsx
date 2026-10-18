@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { Plus, ShoppingCart } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   usePurchaseOrders,
@@ -185,9 +186,11 @@ export function POList({ facilityId }: POListProps) {
             <p className="text-sm text-muted-foreground mb-6">
               Create your first purchase order to get started.
             </p>
-            <Button onClick={() => setNewPOOpen(true)}>
-              <Plus className="size-4" /> Create PO
-            </Button>
+            <ReadOnlyGuard title="Read-only access can't create purchase orders">
+              <Button onClick={() => setNewPOOpen(true)}>
+                <Plus className="size-4" /> Create PO
+              </Button>
+            </ReadOnlyGuard>
           </CardContent>
         </Card>
       ) : (

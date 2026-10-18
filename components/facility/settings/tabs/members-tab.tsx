@@ -9,6 +9,7 @@ import {
   UserPlus,
 } from "lucide-react"
 import type { TeamMember } from "@/lib/actions/settings"
+import { useCan } from "@/components/shared/auth/access-context"
 
 // Server enforces an admin|member enum (lib/actions/settings.ts
 // inviteRoleSchema / updateRoleSchema — "owner" is creator-only and
@@ -41,6 +42,7 @@ export function MembersTab({
   onInviteMember,
   onAccessTierChange,
 }: MembersTabProps) {
+  const canManageMembers = useCan("members.manage")
   return (
     <>
       <Card>
@@ -52,10 +54,12 @@ export function MembersTab({
                 Manage users and their access levels
               </CardDescription>
             </div>
-            <Button onClick={() => onSetInviteOpen(true)}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Invite Member
-            </Button>
+            {canManageMembers ? (
+              <Button onClick={() => onSetInviteOpen(true)}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Invite Member
+              </Button>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent>
@@ -81,7 +85,7 @@ export function MembersTab({
               members={teamData}
               onRemove={onRemoveMember}
               onRoleChange={onRoleChange}
-              isAdmin
+              isAdmin={canManageMembers}
               roles={TEAM_ROLES}
               onAccessTierChange={onAccessTierChange}
             />

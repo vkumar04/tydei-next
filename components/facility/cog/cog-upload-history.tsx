@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/table"
 import { EmptyState } from "@/components/shared/empty-state"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +39,7 @@ export function COGUploadHistory({ facilityId, onImport }: COGUploadHistoryProps
   const { data, isLoading } = useCOGImportHistory(facilityId)
   const deleteMutation = useDeleteCOGFile()
   const [deleteDate, setDeleteDate] = useState<string | null>(null)
+  const canMutate = useCanMutate()
 
   if (isLoading) {
     return (
@@ -74,10 +77,12 @@ export function COGUploadHistory({ facilityId, onImport }: COGUploadHistoryProps
               Purchase order and invoice files imported into the system
             </CardDescription>
           </div>
-          <Button onClick={onImport}>
-            <Upload className="mr-2 h-4 w-4" />
-            Import Data
-          </Button>
+          <ReadOnlyGuard title="Read-only access can't import data">
+            <Button onClick={onImport}>
+              <Upload className="mr-2 h-4 w-4" />
+              Import Data
+            </Button>
+          </ReadOnlyGuard>
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -125,19 +130,21 @@ export function COGUploadHistory({ facilityId, onImport }: COGUploadHistoryProps
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => setDeleteDate(entry.date)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      {deleteMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                    </Button>
+                    {canMutate && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => setDeleteDate(entry.date)}
+                        disabled={deleteMutation.isPending}
+                      >
+                        {deleteMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

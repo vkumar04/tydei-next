@@ -22,6 +22,8 @@ import { Field } from "@/components/shared/forms/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import {
   Select,
   SelectContent,
@@ -133,6 +135,7 @@ export function COGRecordsTable({
     },
   })
 
+  const canMutate = useCanMutate()
   const columns = useMemo(
     () =>
       getCOGColumns({
@@ -150,8 +153,8 @@ export function COGRecordsTable({
             notes: r.notes ?? "",
           })
         },
-      }),
-    [editForm]
+      }).filter((c) => canMutate || c.id !== "actions"),
+    [editForm, canMutate]
   )
 
   // Filtering is now server-side via the `where` clause in
@@ -298,13 +301,15 @@ export function COGRecordsTable({
                   {total.toLocaleString()} filtered
                 </Badge>
               )}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setManualOpen(true)}
-              >
-                <Plus className="mr-1 h-4 w-4" /> Add Record
-              </Button>
+              <ReadOnlyGuard title="Read-only access can't add records">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setManualOpen(true)}
+                >
+                  <Plus className="mr-1 h-4 w-4" /> Add Record
+                </Button>
+              </ReadOnlyGuard>
               <Button
                 variant="outline"
                 size="sm"
@@ -358,13 +363,15 @@ export function COGRecordsTable({
                         </span>
                       </div>
                     ) : (
-                      <Button
-                        size="sm"
-                        onClick={onRerunMatch}
-                        disabled={isRerunning}
-                      >
-                        Run Match Pricing
-                      </Button>
+                      <ReadOnlyGuard title="Read-only access can't run matching">
+                        <Button
+                          size="sm"
+                          onClick={onRerunMatch}
+                          disabled={isRerunning}
+                        >
+                          Run Match Pricing
+                        </Button>
+                      </ReadOnlyGuard>
                     )}
                   </div>
                 )}

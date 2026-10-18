@@ -2,6 +2,7 @@
 
 import { useMemo } from "react"
 import { useRouter } from "next/navigation"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import type { PurchaseOrder, POLineItem, Vendor, Contract } from "@/lib/generated/prisma/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -56,7 +57,8 @@ interface PODetailViewProps {
 export function PODetailView({ order }: PODetailViewProps) {
   const router = useRouter()
   const updateStatus = useUpdatePOStatus()
-  const nextStatuses = PO_STATUS_FLOW[order.status] ?? []
+  const canMutate = useCanMutate()
+  const nextStatuses = canMutate ? (PO_STATUS_FLOW[order.status] ?? []) : []
 
   // Lot/serial columns only render when at least one line carries a value
   // (legacy POs predate the columns; keep their table compact).

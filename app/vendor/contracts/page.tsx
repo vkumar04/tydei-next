@@ -2,6 +2,7 @@ import { requireVendor } from "@/lib/actions/auth"
 import { PageHeader } from "@/components/shared/page-header"
 import { VendorContractList } from "@/components/vendor/contracts/vendor-contract-list"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import Link from "next/link"
 import { Plus, ClipboardList } from "lucide-react"
 
@@ -20,11 +21,13 @@ export default async function VendorContractsPage() {
                 <ClipboardList className="size-4" /> Pending Submissions
               </Link>
             </Button>
-            <Button asChild>
-              <Link href="/vendor/contracts/new">
-                <Plus className="size-4" /> New Contract
-              </Link>
-            </Button>
+            <ReadOnlyGuard title="Read-only access can't create contracts">
+              <Button asChild>
+                <Link href="/vendor/contracts/new">
+                  <Plus className="size-4" /> New Contract
+                </Link>
+              </Button>
+            </ReadOnlyGuard>
           </div>
         }
       />

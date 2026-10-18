@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/shared/forms/confirm-dialog"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 
 interface ContractDocumentsListProps {
   documents: ContractDocument[]
@@ -30,8 +31,10 @@ export function ContractDocumentsList({
   documents,
   contractId,
   onUpload,
-  canManage = true,
+  canManage: canManageProp = true,
 }: ContractDocumentsListProps) {
+  const canMutate = useCanMutate()
+  const canManage = canManageProp && canMutate
   const queryClient = useQueryClient()
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const [reindexingId, setReindexingId] = useState<string | null>(null)
@@ -147,7 +150,7 @@ export function ContractDocumentsList({
     <Card>
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle>Documents</CardTitle>
-        {onUpload && (
+        {onUpload && canMutate && (
           <Button variant="outline" size="sm" onClick={onUpload}>
             <Upload className="size-4" /> Upload
           </Button>

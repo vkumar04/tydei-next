@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { PRODUCT_CATEGORIES } from "@/components/vendor/prospective/builder/types"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Download, Loader2, Scale, Upload } from "lucide-react"
@@ -300,16 +301,18 @@ export function BenchmarksSection({ vendorId }: Props) {
           <div className="flex items-start gap-3">
             {importControls}
             {templateButton}
-            <PricingFileDropzone
-              ref={dropzoneRef}
-              specs={BENCHMARK_UPLOAD_SPECS}
-              surface="vendor-benchmarks"
-              accept=".csv,.xlsx,.xls"
-              trigger={importButton}
-              onImport={handleImport}
-              confirmCopy={confirmCopy}
-              disabled={busy}
-            />
+            <ReadOnlyGuard title="Read-only access can't import benchmarks">
+              <PricingFileDropzone
+                ref={dropzoneRef}
+                specs={BENCHMARK_UPLOAD_SPECS}
+                surface="vendor-benchmarks"
+                accept=".csv,.xlsx,.xls"
+                trigger={importButton}
+                onImport={handleImport}
+                confirmCopy={confirmCopy}
+                disabled={busy}
+              />
+            </ReadOnlyGuard>
           </div>
         </CardAction>
       </CardHeader>
@@ -332,19 +335,21 @@ export function BenchmarksSection({ vendorId }: Props) {
               history. Import a CSV or Excel benchmark file to get started.
             </p>
             <div className="mt-4 flex justify-center">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy}
-                onClick={() => dropzoneRef.current?.openFilePicker()}
-              >
-                {busy ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4" />
-                )}
-                Import benchmarks
-              </Button>
+              <ReadOnlyGuard title="Read-only access can't import benchmarks">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => dropzoneRef.current?.openFilePicker()}
+                >
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                  Import benchmarks
+                </Button>
+              </ReadOnlyGuard>
             </div>
           </div>
         ) : (

@@ -5,9 +5,11 @@ import { VendorContractSubmission } from "@/components/vendor/contracts/vendor-c
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
+import { redirectUnlessCanMutate } from "@/lib/auth/page-gates"
 
 export default async function NewVendorContractPage() {
   const { vendor } = await requireVendor()
+  await redirectUnlessCanMutate("/vendor/contracts")
 
   // Charles 2026-07-27: this used to list EVERY active facility on the
   // platform. Harmless while a vendor submission always needed facility
