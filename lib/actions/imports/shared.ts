@@ -6,7 +6,7 @@
  *
  * Contents:
  *   - TargetField (type)
- *   - mapColumnsWithAI (renamed from mapColumnsWithGemini; Claude-backed)
+ *   - mapColumnsWithAI (TypeSafe Jev, then localFallbackMap)
  *   - localFallbackMap (deterministic fallback)
  *   - parseCSV / parseMoney / parseDate / toSafeDate
  *   - findOrCreateVendorByName (thin wrapper over lib/vendors/resolve)
@@ -16,12 +16,9 @@
 import { detectHeaderRowIndex } from "@/lib/utils/tabular/detect-headers"
 import { parseXlsxMatrixBounded } from "@/lib/xlsx/parse-xlsx-bounded"
 import { parseCsvTextBounded } from "@/lib/csv/parse-csv-bounded"
-import { generateText, Output } from "ai"
-import { z } from "zod"
 import { prisma } from "@/lib/db"
 import { resolveVendorId } from "@/lib/vendors/resolve"
-import { claudeSonnet } from "@/lib/ai/config"
-import { columnMappingPrompt } from "@/lib/ai/prompts"
+import { JevNotConfiguredError, mapColumnsWithJev } from "@/lib/ai/jev-column-mapping"
 import type { RichContractExtractData } from "@/lib/ai/schemas"
 import type {
   ContractType,
@@ -32,114 +29,28 @@ import type {
 
 export type TargetField = { key: string; label: string; required: boolean }
 
+export { redactPhiSampleValues } from "@/lib/ai/phi-redaction"
+
 /**
  * AI-backed column mapper. Instead of hardcoding every possible header
  * alias ("ReferenceNumber", "Product Catgory" [sic], etc.), we ask
- * Claude to semantically map the caller's source CSV/Excel headers to
- * a target schema. Falls back to a best-effort fuzzy match when the
- * model is unavailable (rate limited, transient error, no API key).
- *
- * Previously named mapColumnsWithGemini — renamed during the F16 tech
- * debt split because the underlying model is now Claude (Opus 4.6).
+ * TypeSafe Jev (one Choice per target field) to map the caller's source
+ * CSV/Excel headers to a target schema. Falls back to a best-effort fuzzy
+ * match when Jev is unavailable (no API key, timeout, HTTP error).
  */
-/**
- * Headers that signal Protected Health Information (HIPAA). Values in matching
- * columns are masked before sample rows are sent to the AI column-mapper — the
- * mapper identifies these columns from the HEADER alone, so it never needs the
- * real identifiers (minimum-necessary). Deliberately specific so it doesn't
- * catch "surgeon name" / "vendor name" (not PHI). 2026-06-18 Tier-3 audit.
- */
-const PHI_HEADER_RE =
-  /\b(patient|mrn|medical[\s_-]*record(?:[\s_-]*(?:no|number|#))?|d\.?o\.?b\.?|date[\s_-]*of[\s_-]*birth|birth[\s_-]*date|ssn|social[\s_-]*security|guarantor)\b|patient[\s_-]*(name|initials|id)/i
-
-/** Shape-preserving mask: letters→X, digits→0; punctuation/length intact. */
-function maskPhiValue(value: string): string {
-  return value.replace(/[A-Za-z]/g, "X").replace(/[0-9]/g, "0")
-}
-
-/**
- * Mask sample values in any column whose header looks like PHI, leaving all
- * other columns' values intact so the mapper still gets useful content hints.
- * Exported for unit testing.
- */
-export function redactPhiSampleValues(
-  headers: string[],
-  rows: Record<string, string>[],
-): Record<string, string>[] {
-  const phiCols = headers.filter((h) => PHI_HEADER_RE.test(h))
-  if (phiCols.length === 0) return rows
-  return rows.map((row) => {
-    const out: Record<string, string> = { ...row }
-    for (const col of phiCols) {
-      if (typeof out[col] === "string" && out[col]) {
-        out[col] = maskPhiValue(out[col])
-      }
-    }
-    return out
-  })
-}
-
 export async function mapColumnsWithAI(
   sourceHeaders: string[],
   targetFields: TargetField[],
   sampleRows: Record<string, string>[],
 ): Promise<Record<string, string>> {
-  // HIPAA minimum-necessary: never ship real patient identifiers to the AI
-  // subprocessor. Mask PHI-column sample values up front (Tier-3 audit).
-  const safeSampleRows = redactPhiSampleValues(sourceHeaders, sampleRows)
   try {
-    const mappingShape: Record<string, z.ZodTypeAny> = {}
-    for (const field of targetFields) {
-      mappingShape[field.key] = z
-        .string()
-        .describe(
-          `The source column header that best maps to "${field.label}". Return "" if no source column matches.`,
-        )
-    }
-    const schema = z.object(mappingShape)
-
-    // Prompt text is built by the centralized `columnMappingPrompt` in
-    // `lib/ai/prompts/index.ts` so there's one source of truth shared
-    // across every column-mapping surface (this action, COG rewrite,
-    // data pipeline). The builder returns a stable `system` prefix
-    // (cacheable) and a volatile `user` suffix (the actual headers +
-    // sample rows).
-    const { system, user } = columnMappingPrompt(
-      sourceHeaders,
-      targetFields,
-      safeSampleRows,
-    )
-
-    const result = await generateText({
-      // Sonnet (not Opus) — column mapping is mechanical. Matches the
-      // /api/ai/map-columns API route, which has been on Sonnet since
-      // it was extracted from this helper. The fuzzy-match fallback
-      // below picks up any case Sonnet misses, so the downgrade is
-      // safe with a guard rail.
-      model: claudeSonnet,
-      output: Output.object({ schema }),
-      system,
-      prompt: user,
-      // Mapping output is tiny — one entry per target field.
-      maxOutputTokens: 2000,
-      providerOptions: {
-        anthropic: {
-          // System prompt is the static `columnMappingPrompt` template;
-          // cache it so back-to-back imports (CSV → XLSX → second CSV)
-          // share the prefix.
-          cacheControl: { type: "ephemeral" as const },
-        },
-      },
-    })
-
-    const mapping = result.output as Record<string, string>
-    const clean: Record<string, string> = {}
-    for (const [k, v] of Object.entries(mapping)) {
-      if (v && sourceHeaders.includes(v)) clean[k] = v
-    }
-    return clean
+    return await mapColumnsWithJev(sourceHeaders, targetFields, sampleRows)
   } catch (err) {
-    console.warn("[mapColumnsWithAI] falling back to local match:", err)
+    if (err instanceof JevNotConfiguredError) {
+      console.warn("[mapColumnsWithAI] TYPESAFE_API_KEY unset, using local match")
+    } else {
+      console.error("[mapColumnsWithAI] Jev failed, falling back to local match:", err)
+    }
     return localFallbackMap(sourceHeaders, targetFields)
   }
 }

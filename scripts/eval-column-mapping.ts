@@ -3,6 +3,7 @@ import { generateText, Output } from "ai"
 import { z } from "zod"
 import { claudeSonnet } from "@/lib/ai/config"
 import { columnMappingPrompt } from "@/lib/ai/prompts"
+import { mapColumnsWithJev } from "@/lib/ai/jev-column-mapping"
 import {
   localFallbackMap,
   parseCSV,
@@ -80,6 +81,34 @@ const SUPPLY_FIELDS: TargetField[] = [
   { key: "manufacturer", label: "Manufacturer", required: false },
 ]
 
+const COG_DIALOG_FIELDS: TargetField[] = [
+  { key: "inventoryNumber", label: "Inventory Number", required: true },
+  { key: "inventoryDescription", label: "Description", required: true },
+  { key: "vendorName", label: "Vendor Name", required: false },
+  { key: "vendorItemNo", label: "Vendor Item No", required: false },
+  { key: "manufacturerNo", label: "Manufacturer No", required: false },
+  { key: "unitCost", label: "Unit Cost", required: true },
+  { key: "extendedPrice", label: "Extended Price", required: false },
+  { key: "quantity", label: "Quantity", required: false },
+  { key: "multiplier", label: "Multiplier (case pack / units per line)", required: false },
+  { key: "transactionDate", label: "Transaction Date", required: true },
+  { key: "category", label: "Category", required: false },
+  { key: "poNumber", label: "Purchase Order Number", required: false },
+]
+
+const PRICING_DIALOG_FIELDS: TargetField[] = [
+  { key: "vendorItemNo", label: "Vendor Item No", required: true },
+  { key: "productDescription", label: "Description", required: true },
+  { key: "manufacturerNo", label: "Manufacturer No", required: false },
+  { key: "listPrice", label: "List Price", required: false },
+  { key: "contractPrice", label: "Contract Price", required: false },
+  { key: "effectiveDate", label: "Effective Date", required: true },
+  { key: "expirationDate", label: "Expiration Date", required: false },
+  { key: "category", label: "Category", required: false },
+  { key: "uom", label: "UOM", required: false },
+  { key: "carveOut", label: "Carve-Out", required: false },
+]
+
 type Case = {
   name: string
   fields: TargetField[]
@@ -105,6 +134,58 @@ function synthetic(
 }
 
 const CASES: Case[] = [
+  fromFile("dialog-golden-cog", "test-fixtures/golden/golden-cog.csv", COG_DIALOG_FIELDS, {
+    inventoryNumber: "Vendor Item Number",
+    vendorItemNo: "Vendor Item Number",
+    inventoryDescription: "Item Description",
+    vendorName: "Vendor / Supplier Name",
+    unitCost: "Unit Price",
+    extendedPrice: "Extended Cost",
+    quantity: "Quantity Ordered",
+    multiplier: "Conversion Factor Ordered",
+    transactionDate: "Transaction Date",
+  }),
+  synthetic(
+    "dialog-pricing-vendor-style",
+    PRICING_DIALOG_FIELDS,
+    [
+      ["CATALOG NO", "MFG PART #", "ITEM DESCRIPTION", "LIST PRICE", "NET PRICE", "PRODUCT LINE", "UOM", "EFFECTIVE DATE"],
+      ["PX-21-001", "MFG-9001", "Hip stem", "500.00", "400.00", "Ortho", "EA", "2026-01-01"],
+      ["PX-21-002", "MFG-9002", "Acetabular cup", "300.00", "240.00", "Ortho", "EA", "2026-01-01"],
+    ],
+    {
+      vendorItemNo: "CATALOG NO",
+      manufacturerNo: "MFG PART #",
+      productDescription: "ITEM DESCRIPTION",
+      listPrice: "LIST PRICE",
+      contractPrice: "NET PRICE",
+      category: "PRODUCT LINE",
+      uom: "UOM",
+      effectiveDate: "EFFECTIVE DATE",
+    },
+  ),
+  fromFile("dialog-golden-pricing", "test-fixtures/golden/golden-pricing.csv", PRICING_DIALOG_FIELDS, {
+    vendorItemNo: "Supplier Part #",
+    manufacturerNo: "Mfg Catalog No",
+    productDescription: "Material Desc",
+    listPrice: "MSRP",
+    contractPrice: "Negotiated Unit Price",
+    effectiveDate: "Contract Start",
+    expirationDate: "Contract End",
+    category: "Product Line",
+    uom: "Pkg",
+  }),
+  fromFile("dialog-medtronic-pricing", "test-fixtures/medtronic-pricing-nonstandard.csv", PRICING_DIALOG_FIELDS, {
+    vendorItemNo: "Part Number",
+    manufacturerNo: "Mfr Part ID",
+    productDescription: "Item Name",
+    listPrice: "Base Price",
+    contractPrice: "Net Price",
+    effectiveDate: "Valid From",
+    expirationDate: "Valid Until",
+    category: "Segment",
+    uom: "Unit",
+  }),
   fromFile("golden-cog", "test-fixtures/golden/golden-cog.csv", COG_FIELDS, {
     vendorName: "Vendor / Supplier Name",
     transactionDate: "Transaction Date",
@@ -315,70 +396,10 @@ async function runSonnet(c: Case, sample: Record<string, string>[]): Promise<Run
   }
 }
 
-const NONE = "(none)"
-
-type ChoiceAnswer = { choice: string; probabilities: Record<string, number>; confidence: number }
-
-async function runJev(c: Case, sample: Record<string, string>[], run: number): Promise<RunResult> {
-  const key = process.env.TYPESAFE_API_KEY
-  if (!key) throw new Error("TYPESAFE_API_KEY is not set")
-  const criteria: Record<string, string | null> = {}
-  const order = run % 2 === 0 ? [...c.headers].reverse() : c.headers
-  for (const h of order) criteria[h] = null
-  criteria[NONE] = "No column in `headers` holds this data. Pick this rather than a column that only loosely relates."
-  const questions: Record<string, unknown> = {}
-  for (const f of c.fields) {
-    questions[f.key] = {
-      type: "choice",
-      instructions: {
-        target_field: { key: f.key, description: f.label },
-        question:
-          "A spreadsheet has the columns in `headers`, with example values in `sample_rows`. Which column holds the data described by `target_field`? Headers may be abbreviated, misspelled, or in another language.",
-      },
-      criteria,
-    }
-  }
+async function runJev(c: Case, sample: Record<string, string>[]): Promise<RunResult> {
   const t0 = performance.now()
-  const res = await fetch("https://api.typesafe.ai/v1/systemone", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "jev-latest",
-      state: { headers: c.headers, sample_rows: sample },
-      questions,
-    }),
-  })
-  const ms = performance.now() - t0
-  if (!res.ok) throw new Error(`TypeSafe ${res.status}: ${(await res.text()).slice(0, 300)}`)
-  const body = (await res.json()) as {
-    answers: Record<string, ChoiceAnswer>
-    usage: { input_tokens: number; output_tokens: number }
-  }
-  const ranked = c.fields.map((f) => {
-    const a = body.answers[f.key]
-    const order = Object.entries(a.probabilities).sort((x, y) => y[1] - x[1])
-    return { key: f.key, order, confidence: a.confidence }
-  })
-  const taken = new Set<string>()
-  const mapping: Record<string, string> = {}
-  const confidence: Record<string, number> = {}
-  const claims = ranked
-    .map((r) => ({ ...r, top: r.order[0] }))
-    .sort((x, y) => y.top[1] - x.top[1])
-  for (const r of claims) {
-    confidence[r.key] = r.confidence
-    const pick = r.order.find(([opt]) => opt === NONE || !taken.has(opt))
-    if (!pick || pick[0] === NONE) continue
-    taken.add(pick[0])
-    mapping[r.key] = pick[0]
-  }
-  return {
-    mapping,
-    confidence,
-    ms,
-    inputTokens: body.usage.input_tokens,
-    outputTokens: body.usage.output_tokens,
-  }
+  const mapping = await mapColumnsWithJev(c.headers, c.fields, sample)
+  return { mapping, ms: performance.now() - t0, inputTokens: 0, outputTokens: 0 }
 }
 
 function runLocal(c: Case): RunResult {
@@ -403,7 +424,6 @@ function grade(c: Case, mapping: Record<string, string>) {
 }
 
 const RUNS = Number(process.env.RUNS ?? 3)
-const GATE = Number(process.env.GATE ?? 0.5)
 
 type Row = {
   arm: string
@@ -429,7 +449,7 @@ async function main() {
         const sample = redactPhiSampleValues(c.headers, c.rows)
         const arms: Array<[string, () => Promise<RunResult> | RunResult]> = [
           ["sonnet", () => runSonnet(c, sample)],
-          ["jev", () => runJev(c, sample, run)],
+          ["jev", () => runJev(c, sample)],
         ]
         if (run === 1) arms.push(["local", () => runLocal(c)])
         for (const [arm, fn] of arms) {
@@ -450,7 +470,7 @@ async function main() {
   }
 
   const out = process.env.OUT ?? "column-mapping-eval.json"
-  writeFileSync(out, JSON.stringify({ rows, perf, gate: GATE, runs: RUNS }, null, 2))
+  writeFileSync(out, JSON.stringify({ rows, perf, runs: RUNS }, null, 2))
 
   const pct = (n: number, d: number) => (d ? `${((100 * n) / d).toFixed(1)}%` : "n/a")
   const median = (xs: number[]) => {
@@ -466,12 +486,6 @@ async function main() {
     )
     for (const e of p.errors) console.log(`   error: ${e}`)
   }
-  const jev = rows.filter((r) => r.arm === "jev")
-  const low = jev.filter((r) => (r.confidence ?? 1) < GATE)
-  const bad = jev.filter((r) => r.outcome !== "correct")
-  console.log(
-    `jev gate<${GATE}: flagged=${low.length} (of which wrong=${low.filter((r) => r.outcome !== "correct").length}); errors caught=${bad.filter((r) => (r.confidence ?? 1) < GATE).length}/${bad.length}`,
-  )
   console.log("\nmistakes:")
   for (const r of rows.filter((x) => x.outcome !== "correct")) {
     const conf = r.confidence === undefined ? "" : ` conf=${r.confidence.toFixed(2)}`

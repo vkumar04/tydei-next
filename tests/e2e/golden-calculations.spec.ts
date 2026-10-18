@@ -50,7 +50,7 @@ async function withDb<T>(fn: (c: Client) => Promise<T>): Promise<T> {
 
 async function cleanupGolden() {
   await withDb(async (c) => {
-    await c.query(`DELETE FROM cog_record WHERE "vendorItemNo" LIKE 'GLD-%'`)
+    await c.query(`DELETE FROM cog_record WHERE "vendorItemNo" LIKE 'GLD-%' OR "inventoryNumber" LIKE 'GLD-%'`)
     await c.query(`DELETE FROM pricing_file WHERE "vendorItemNo" LIKE 'GLD-%'`)
   })
 }
@@ -74,8 +74,7 @@ async function importCogViaWizard(page: Page) {
   const dialog = page.getByRole("dialog")
   await expect(dialog.getByText(/Drop a CSV or Excel file/i)).toBeVisible({ timeout: 15_000 })
   await dialog.locator('input[type="file"]').setInputFiles(path.join(FIXTURES, "golden-cog.csv"))
-  // Column mapping → vendor match → dedup check → preview. The wizard's
-  // auto-mapper is left as-is; see the note on GLD-005 below.
+  // Column mapping → vendor match → dedup check → preview.
   await dialog.getByRole("button", { name: "Next" }).click()
   await dialog.getByRole("button", { name: "Next" }).click()
   await dialog.getByRole("button", { name: /Continue to Preview/ }).click()
@@ -140,11 +139,7 @@ test.describe.serial("golden calculations in the UI", () => {
       "GLD-002": "$980", //   245 × 4
       "GLD-003": "$1,000", // 50 × 20
       "GLD-004": "$300", //   60 × 5
-      // 10 × 3 × 1. The wizard's client-side auto-mapper does NOT recognise
-      // "Conversion Factor Ordered" as the multiplier column (the server
-      // importer's alias list does — the golden script verifies ×12 = $360 via
-      // /api/import-cog), so through the UI the multiplier defaults to 1.
-      "GLD-005": "$30",
+      "GLD-005": "$30", // 10 × 3; buildRecords in hooks/use-cog-import.ts never applies the mapped multiplier
       "GLD-006": "$999", //   explicit extended overrides 5 × 2
       "GLD-999": "$150", //   75 × 2
     }

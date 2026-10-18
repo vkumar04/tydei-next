@@ -6,6 +6,7 @@
 import { config } from "dotenv"
 import { vi } from "vitest"
 config({ path: ".env", override: false })
+delete process.env.TYPESAFE_API_KEY
 
 // Global stub for the access-tier gates. Mutating server actions call
 // `requireCanMutate()` / `requireCan()` (which internally hit
