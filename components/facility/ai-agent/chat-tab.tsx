@@ -4,7 +4,7 @@
  * Chat tab for `/dashboard/ai-agent`.
  *
  * Wires `@ai-sdk/react`'s `useChat` to `/api/ai/chat`, which uses
- * `streamText` with Claude Opus 4.6 + facility-scoped tool calls.
+ * `streamText` with Claude + facility-scoped tool calls.
  *
  * Shows the 6 canonical suggested-question chips when empty
  * (`FACILITY_SUGGESTED_QUESTIONS` from `lib/ai/chat-suggestions`) and

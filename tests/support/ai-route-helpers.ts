@@ -17,6 +17,8 @@ export type ModelMessageLike = {
 }
 
 export type ModelCall = {
+  instructions?: string
+  output?: unknown
   model?: unknown
   prompt?: string
   messages?: ModelMessageLike[]
@@ -47,7 +49,7 @@ export function noObjectError(text = "{}"): NoObjectGeneratedError {
   return new NoObjectGeneratedError({
     message: "No object generated: response did not match schema.",
     text,
-    response: { id: "resp_test", timestamp: new Date(0), modelId: "claude-haiku-4-5-20251001" },
+    response: { id: "resp_test", timestamp: new Date(0), modelId: "claude-haiku-5-5" },
     usage: fakeUsage(1_000, 2),
     finishReason: "tool-calls",
   })

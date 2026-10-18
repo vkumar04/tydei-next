@@ -18,9 +18,9 @@ vi.mock("@/lib/ai/generate-structured", () => ({
 }))
 
 vi.mock("@/lib/ai/config", () => ({
-  claudeModel: "anthropic/claude-opus-5",
-  claudeSonnet: "anthropic/claude-sonnet-5",
-  claudeHaiku: "anthropic/claude-haiku-4-5-20251001",
+  claudeModel: "anthropic/claude-opus-5-5",
+  claudeSonnet: "anthropic/claude-sonnet-5-5",
+  claudeHaiku: "anthropic/claude-haiku-5-5",
 }))
 
 import {

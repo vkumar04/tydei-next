@@ -3,7 +3,7 @@
 /**
  * Root client for `/dashboard/ai-agent`. Renders three tabs:
  *
- *   1. Chat       — streaming chat via `/api/ai/chat` (Claude Opus 4.6)
+ *   1. Chat       — streaming chat via `/api/ai/chat` (Claude Opus)
  *   2. Documents  — list / search / upload indexed contract docs
  *   3. Reports    — structured report generation via `/api/ai/generate-report`
  *
@@ -96,7 +96,6 @@ export function AIAgentClient({
             <h1 className="text-2xl font-bold tracking-tight">AI Assistant</h1>
             <p className="text-sm text-muted-foreground">
               Chat, search documents, or generate reports powered by Claude
-              Opus 4.6
             </p>
           </div>
         </div>

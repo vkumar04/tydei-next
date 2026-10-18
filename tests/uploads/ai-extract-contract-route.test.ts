@@ -419,10 +419,11 @@ describe("POST /api/ai/extract-contract — JSON text branch", () => {
     const pasted = contractPdfLines().flat().join("\n")
     const res = await POST(jsonRequest({ text: `  ${pasted}  ` }))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ extracted: JSON.parse(JSON.stringify(extracted)), confidence: 0.9 })
+    expect(await res.json()).toEqual({ extracted: JSON.parse(JSON.stringify(extracted)), confidence: 0.9, reviewWarnings: [] })
     const call = ai.generateText.mock.calls[0]![0]
     expect(call.maxOutputTokens).toBe(8000)
-    expect(call.prompt).toContain(`Contract information:\n${pasted}`)
+    expect(promptText(call)).toContain(`Contract information:\n${pasted}`)
+    expect(call.instructions).toContain("no markdown fences")
     expect(uploadFile).not.toHaveBeenCalled()
     expect(recordClaudeUsage).toHaveBeenCalledWith(
       expect.objectContaining({ action: "full_contract_analysis", description: "Extracted contract: Supply and Rebate Agreement" }),

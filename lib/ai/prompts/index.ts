@@ -240,7 +240,7 @@ PDF TEXT END`
  * review UI. So Claude's job is correctness — false positives are
  * worse than "no match", because the user has to then un-map.
  *
- * Model routing (per spec §3): this is a mechanical task → Haiku 4.5.
+ * Model routing (per spec §3): this is a mechanical task → Haiku.
  * Callers should pass `claudeHaiku` from `lib/ai/config.ts`, not the
  * default Opus.
  */
@@ -312,7 +312,7 @@ Return a mapping object with one entry per target field.`
  * side-by-side comparison — keep it short (≤50 words), specific (why
  * THIS pair, not boilerplate), and data-grounded.
  *
- * Model routing: Haiku 4.5. Mechanical + fast.
+ * Model routing: Haiku. Mechanical + fast.
  */
 export function vendorDedupProposalPrompt(
   candidateName: string,
@@ -380,7 +380,7 @@ Propose matches. Omit candidates below 0.6 confidence.`
  * diverge: 'Suture 4-0 Vicryl' vs 'Stapler cartridge'"), not be
  * boilerplate.
  *
- * Model routing: Haiku 4.5.
+ * Model routing: Haiku.
  */
 export function itemDedupProposalPrompt(
   candidateItem: { sku: string; description: string },
@@ -443,7 +443,7 @@ Propose a recommended action for each existing match.`
  * review UI. Reasoning should cite specific words in the description
  * ("'spinal screw' → Ortho Spine division") so the user can sanity-check.
  *
- * Model routing: Haiku 4.5.
+ * Model routing: Haiku.
  */
 export function divisionInferencePrompt(
   itemDescription: string,
@@ -503,7 +503,7 @@ Pick one division (or null) and explain why.`
  * identical inputs. So keep the prompt free of per-row volatile data
  * beyond what the caller passes — any extra noise tanks the cache.
  *
- * Model routing: Haiku 4.5 (per-row; speed matters).
+ * Model routing: Haiku (per-row; speed matters).
  */
 export function matchStatusExplainerPrompt(
   matchStatus: string,

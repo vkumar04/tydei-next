@@ -1,11 +1,10 @@
-import { generateText, Output } from "ai"
+import { NoObjectGeneratedError } from "ai"
 import {
   generateStructured,
-  withCacheControl,
 } from "@/lib/ai/generate-structured"
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth-server"
-import { claudeModel } from "@/lib/ai/config"
+import { claudeExtractionFallback, claudeExtractionModel } from "@/lib/ai/config"
 import {
   extractedContractSchema,
   type ExtractedContractData,
@@ -16,7 +15,8 @@ import { prisma } from "@/lib/db"
 import { recordContractExtractionUsage } from "@/lib/ai/record-extract-usage"
 import { createHash } from "node:crypto"
 
-import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extract"
+import { extractContractSingle } from "@/lib/ai/contract-extract-single"
+import { checkContractExtractWithJev } from "@/lib/ai/jev-contract-check"
 import {
   runChunkedExtraction,
   MAX_PAGES_PER_CHUNK,
@@ -74,22 +74,20 @@ export async function POST(request: Request) {
         return Response.json({ error: "No text provided" }, { status: 400 })
       }
 
-      // Use the legacy (simpler) schema for raw-text parsing.
-      const result = await generateText({
-        model: claudeModel,
-        abortSignal: request.signal,
-        // Cap output — schema is bounded; 8k covers the longest
-        // realistic extract while preventing runaway costs.
-        maxOutputTokens: 8000,
-        providerOptions: {
-          anthropic: {
-            // Cache the static instruction prefix — same prompt
-            // template across every raw-text extract call.
-            cacheControl: { type: "ephemeral" as const },
-          },
-        },
-        output: Output.object({ schema: extractedContractSchema }),
-        prompt: `Parse this contract information into structured data. Be precise with numbers and dates.
+      let extracted: ExtractedContractData | undefined
+      try {
+        const structured = await generateStructured({
+          schema: extractedContractSchema,
+          outputMode: "plain",
+          actionName: "extract-contract",
+          primary: claudeExtractionModel,
+          fallback: claudeExtractionFallback,
+          abortSignal: request.signal,
+          maxOutputTokens: 8000,
+          messages: [
+            {
+              role: "user",
+              content: `Parse this contract information into structured data. Be precise with numbers and dates.
 
 CONTRACT TYPE RULES (choose the most specific match):
 - "usage" = contract has rebate tiers based on spend thresholds or volume commitments.
@@ -119,14 +117,15 @@ Return valid JSON only — no markdown fences.
 
 Contract information:
 ${text.trim()}`,
-      })
-
-      let extracted: ExtractedContractData | undefined
-      try {
-        extracted = result.output
-      } catch {
-        const rawText = result.text ?? ""
-        extracted = tryParseLegacy(rawText)
+            },
+          ],
+        })
+        extracted = structured.output
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return new Response(null, { status: 499 })
+        }
+        if (!NoObjectGeneratedError.isInstance(err)) throw err
       }
       if (!extracted) {
         return Response.json(
@@ -135,9 +134,16 @@ ${text.trim()}`,
         )
       }
       await recordContractExtractionUsage(session.user.id, session.user.name ?? session.user.email ?? "Unknown", `Extracted contract: ${extracted.contractName ?? "Untitled"}`, "[extract-contract]")
+      const reviewWarnings = await checkContractExtractWithJev({
+        extracted,
+        text,
+        signal: request.signal,
+        logPrefix: "[extract-contract]",
+      })
       return Response.json({
         extracted,
         confidence: 0.9,
+        reviewWarnings,
       })
     }
 
@@ -329,59 +335,17 @@ ${text.trim()}`,
     // >16 union-typed fields which Anthropic's tool-input JSON Schema
     // validator rejects.
     if (!extracted) try {
-      const userContent: Array<
-        | { type: "text"; text: string }
-        | {
-            type: "file"
-            data: Uint8Array
-            mediaType: "application/pdf"
-            filename: string
-            providerOptions?: {
-              anthropic?: { cacheControl?: { type: "ephemeral" } }
-            }
-          }
-      > = [
-        {
-          type: "text",
-          text:
-            getActiveContractExtractPrompt().prompt +
-            (userInstructions
-              ? `\n\nAdditional user instructions:\n${userInstructions}`
-              : ""),
-        },
-        {
-          type: "file",
-          data: fileData,
-          mediaType,
-          filename: file.name,
-          // Cache the PDF representation for ~5 min — re-uploads /
-          // retries hit the cache instead of re-parsing the file.
-          ...withCacheControl(),
-        },
-      ]
-
-      // generateStructured handles:
-      //   - Anthropic structuredOutputMode='jsonTool' (avoids the
-      //     24-optional-param limit + grammar overload)
-      //   - Opus → Sonnet fallback on transient errors
-      //   - Logging the model used so retries are observable.
-      const structured = await generateStructured({
-        schema: extractedContractSchema,
-        messages: [{ role: "user", content: userContent }],
-        actionName: "extract-contract",
+      const single = await extractContractSingle({
+        fileData,
+        fileName: file.name,
+        mediaType,
+        userInstructionsHint: userInstructions
+          ? `\n\nAdditional user instructions:\n${userInstructions}`
+          : "",
         abortSignal: request.signal,
+        actionName: "extract-contract",
       })
-
-      try {
-        extracted = structured.output
-      } catch {
-        const rawText = structured.text
-        console.error(
-          "[extract-contract] Schema validation failed. Raw AI response:",
-          rawText.slice(0, 2000)
-        )
-        extracted = tryParseLegacy(rawText)
-      }
+      extracted = single.extracted
     } catch (aiError: unknown) {
       if (aiError instanceof Error && aiError.name === "AbortError") {
         return new Response(null, { status: 499 })
@@ -482,12 +446,22 @@ ${text.trim()}`,
       console.warn("[extract-contract] cache write failed:", cacheErr)
     }
 
+    const reviewWarnings = await checkContractExtractWithJev({
+      extracted,
+      text: pdfTextLayer || null,
+      fileData,
+      pageCount: pdfPageCount,
+      signal: request.signal,
+      logPrefix: "[extract-contract]",
+    })
+
     return Response.json({
       success: true,
       extracted,
       confidence: 0.9,
       s3Key,
       cached: false,
+      reviewWarnings,
       pdfText: pdfTextLayer,
     })
   } catch (error) {
@@ -523,40 +497,3 @@ ${text.trim()}`,
   }
 }
 
-/** Try multiple JSON-parsing strategies to rescue a malformed AI response. */
-function tryParseLegacy(rawText: string): ExtractedContractData | undefined {
-  const attempts = buildParseAttempts(rawText)
-  for (const attempt of attempts) {
-    try {
-      return extractedContractSchema.parse(attempt())
-    } catch {
-      // try next
-    }
-  }
-  return undefined
-}
-
-function buildParseAttempts(rawText: string): Array<() => unknown> {
-  return [
-    // Strategy 1: Strip markdown fences
-    () => {
-      const cleaned = rawText
-        .replace(/```(?:json)?\s*\n?/g, "")
-        .replace(/```\s*$/g, "")
-        .trim()
-      return JSON.parse(cleaned)
-    },
-    // Strategy 2: Extract JSON object from surrounding text
-    () => {
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) throw new Error("No JSON object found")
-      return JSON.parse(jsonMatch[0])
-    },
-    // Strategy 3: Extract JSON from within markdown code block
-    () => {
-      const codeBlockMatch = rawText.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/)
-      if (!codeBlockMatch?.[1]) throw new Error("No code block found")
-      return JSON.parse(codeBlockMatch[1])
-    },
-  ]
-}
