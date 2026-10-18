@@ -2,7 +2,7 @@
 
 import { Suspense, type ReactNode } from "react"
 import Link from "next/link"
-import type { NavItem, PortalRole, BadgeCounts } from "@/lib/types"
+import type { PortalRole } from "@/lib/types"
 import { Shield } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -15,15 +15,13 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { SidebarNav, SidebarNavList } from "@/components/shared/shells/sidebar-nav"
 import { ThemeToggle } from "@/components/shared/theme-toggle"
 import { CommandSearch } from "@/components/shared/shells/command-search"
 import { NotificationBell, NotificationBellPlaceholder } from "@/components/shared/notification-bell"
 
 interface PortalShellProps {
   role: PortalRole
-  navItems: NavItem[]
-  badgeCounts?: BadgeCounts
+  nav: ReactNode
   sidebarHeader?: ReactNode
   userMenu: ReactNode
   alertBell?: ReactNode
@@ -32,8 +30,7 @@ interface PortalShellProps {
 
 export function PortalShell({
   role,
-  navItems,
-  badgeCounts,
+  nav,
   sidebarHeader,
   userMenu,
   alertBell,
@@ -82,9 +79,7 @@ export function PortalShell({
         </SidebarHeader>
         <SidebarContent className="p-0">
           <ScrollArea className="flex-1 px-3 py-4">
-            <Suspense fallback={<SidebarNavList items={navItems} badgeCounts={badgeCounts} pathname={null} />}>
-              <SidebarNav items={navItems} badgeCounts={badgeCounts} />
-            </Suspense>
+            {nav}
           </ScrollArea>
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-4">

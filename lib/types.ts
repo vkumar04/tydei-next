@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import type { UserRole } from "@/lib/generated/prisma/client"
+import type { Permission } from "@/lib/auth/permissions"
 
 export type PortalRole = "facility" | "vendor" | "admin"
 
@@ -8,6 +9,7 @@ export interface NavItem {
   href: string
   icon: string
   badgeKey?: string
+  permission?: Permission
 }
 
 export interface BadgeCounts {

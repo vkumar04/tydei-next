@@ -18,7 +18,7 @@ export const facilityNav: NavItem[] = [
   { label: "Reports", href: "/dashboard/reports", icon: "BarChart3" },
   { label: "Alerts", href: "/dashboard/alerts", icon: "AlertTriangle" },
   { label: "AI Agent", href: "/dashboard/ai-agent", icon: "Bot" },
-  { label: "Settings", href: "/dashboard/settings", icon: "Settings" },
+  { label: "Settings", href: "/dashboard/settings", icon: "Settings", permission: "settings.view" },
 ]
 
 // ─── Vendor Portal Nav ────────────────────────────────────────────
@@ -35,7 +35,7 @@ export const vendorNav: NavItem[] = [
   { label: "Alerts", href: "/vendor/alerts", icon: "AlertTriangle" },
   { label: "Reports", href: "/vendor/reports", icon: "BarChart3" },
   { label: "AI Assistant", href: "/vendor/ai-agent", icon: "Bot" },
-  { label: "Settings", href: "/vendor/settings", icon: "Settings" },
+  { label: "Settings", href: "/vendor/settings", icon: "Settings", permission: "settings.view" },
 ]
 
 // ─── Admin Portal Nav ─────────────────────────────────────────────
