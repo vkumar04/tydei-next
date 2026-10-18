@@ -1,13 +1,19 @@
 import { getPrincipal } from "@/lib/auth/principal"
+import { getCurrentAccessContext } from "@/lib/actions/auth-permissions"
+import { can } from "@/lib/auth/permissions"
 import type { PortalRole } from "@/lib/types"
 import { Skeleton } from "@/components/ui/skeleton"
 import { UserMenu } from "@/components/shared/shells/user-menu"
 
 export async function PortalUserMenu({ role }: { role: PortalRole }) {
-  const principal = await getPrincipal()
+  const [principal, ctx] = await Promise.all([getPrincipal(), getCurrentAccessContext()])
   if (!principal) return null
   const { name, email, image } = principal.session.user
-  return <UserMenu user={{ name, email, image }} role={role} />
+  return <UserMenu
+      user={{ name, email, image }}
+      role={role}
+      canViewSettings={ctx !== null && can("settings.view", ctx)}
+    />
 }
 
 export function UserMenuSkeleton() {

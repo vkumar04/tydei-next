@@ -20,9 +20,10 @@ import {
 interface UserMenuProps {
   user: { name: string; email: string; image?: string | null }
   role?: PortalRole
+  canViewSettings?: boolean
 }
 
-export function UserMenu({ user, role }: UserMenuProps) {
+export function UserMenu({ user, role, canViewSettings = false }: UserMenuProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
 
@@ -37,7 +38,7 @@ export function UserMenu({ user, role }: UserMenuProps) {
     role === "vendor"
       ? "/vendor/settings"
       : role === "admin"
-        ? "/admin/settings"
+        ? null
         : "/dashboard/settings"
 
   async function handleSignOut() {
@@ -77,13 +78,17 @@ export function UserMenu({ user, role }: UserMenuProps) {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>My Account</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href={settingsHref}>
-            <Settings className="mr-2 h-4 w-4" />
-            Settings
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
+        {canViewSettings && settingsHref && (
+          <>
+            <DropdownMenuItem asChild>
+              <Link href={settingsHref}>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuItem onClick={handleSignOut} className="text-destructive">
           <LogOut className="mr-2 h-4 w-4" />
           Sign out
