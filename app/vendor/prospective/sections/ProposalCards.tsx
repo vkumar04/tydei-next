@@ -44,6 +44,8 @@ import type { OppEngineHandoff } from "./OpportunityEngineSection"
 import { StatusBadge, RecommendationBadge } from "./shared"
 import { ProposalDetailDialog } from "./ProposalDetailDialog"
 import { useDeleteProposal } from "@/hooks/use-prospective"
+import { useCanMutate } from "@/components/shared/auth/access-context"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import type { VendorProposal } from "@/lib/actions/prospective"
 
 interface Props {
@@ -72,6 +74,7 @@ export function ProposalCards({
   const [deleteTarget, setDeleteTarget] = useState<VendorProposal | null>(null)
   const [viewTarget, setViewTarget] = useState<VendorProposal | null>(null)
   const deleteMut = useDeleteProposal()
+  const canMutate = useCanMutate()
 
   // Only proposals that have a real, server-attached deal score show a
   // numeric score. Previously this list rendered a deterministic mock
@@ -103,10 +106,12 @@ export function ProposalCards({
             Scorer tab, or delete and recreate to rework
           </p>
         </div>
-        <Button size="sm" onClick={onNewProposal}>
-          <Plus className="mr-2 h-4 w-4" />
-          New Proposal
-        </Button>
+        <ReadOnlyGuard title="Read-only access can't create proposals">
+          <Button size="sm" onClick={onNewProposal}>
+            <Plus className="mr-2 h-4 w-4" />
+            New Proposal
+          </Button>
+        </ReadOnlyGuard>
       </div>
 
       {dividendProposals.length > 0 ? (
@@ -309,25 +314,27 @@ export function ProposalCards({
                         Opportunity Engine
                       </Button>
                     )}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Open menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        {/* Edit lives in the detail dialog (View → Edit,
-                            lifecycle 5/4); legacy Alert rows hide it there. */}
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={() => setDeleteTarget(p)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {canMutate && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Open menu</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {/* Edit lives in the detail dialog (View → Edit,
+                              lifecycle 5/4); legacy Alert rows hide it there. */}
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => setDeleteTarget(p)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -342,10 +349,12 @@ export function ProposalCards({
             <p className="mt-1 text-sm text-muted-foreground">
               Create a new proposal to get started
             </p>
-            <Button size="sm" className="mt-4" onClick={onNewProposal}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Proposal
-            </Button>
+            <ReadOnlyGuard title="Read-only access can't create proposals">
+              <Button size="sm" className="mt-4" onClick={onNewProposal}>
+                <Plus className="mr-2 h-4 w-4" />
+                New Proposal
+              </Button>
+            </ReadOnlyGuard>
           </CardContent>
         </Card>
       )}
@@ -356,7 +365,7 @@ export function ProposalCards({
           onClose={() => setViewTarget(null)}
           // Legacy pre-split Alert rows can't be saved by updateProposal —
           // offering Edit would fail AFTER the user redoes the form (D9).
-          onEdit={viewTarget.editable ? onEditProposal : undefined}
+          onEdit={viewTarget.editable && canMutate ? onEditProposal : undefined}
         />
       )}
 
