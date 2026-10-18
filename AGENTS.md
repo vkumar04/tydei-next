@@ -59,10 +59,17 @@ Run all of these before saying "ship it":
    Set `PORT` (plus `BETTER_AUTH_URL` / `NEXT_PUBLIC_SITE_URL` to match) when
    3000 is taken.
 
-After file renames or server-action-heavy changes, `.next/` can cache stale
-action hashes (`Server Action '<hash>' was not found on the server`). Fix with
-`rm -rf .next`. If it survives a clean build, a client bundle is importing a
-removed server-action export — grep for the name.
+`bun dev` runs `scripts/clear-stale-dev-cache.ts` first: when the set of
+`"use server"` files has changed since the last run (a rename or delete), it
+clears `.next/dev` so Turbopack can't serve a stale action id
+(`Server Action '<hash>' was not found on the server`). If that error still
+appears after a clean `.next`, a client bundle is importing a removed
+server-action export — grep for the name.
+
+Next's `next dev` agent-rules block is disabled (`agentRules: false` in
+`next.config.ts`); this file is hand-maintained. Version-specific Next
+guidance lives in `node_modules/next/dist/docs/` — read it before writing
+framework code.
 
 ## Hard rules
 
@@ -88,12 +95,13 @@ These caused real production incidents. Each is enforced by a scanner test in
   Dev works; prod doesn't. The from-form (`export type { X } from "…"`) is
   fine. Guarded by `use-server-async-export-scanner.test.ts`.
 - **No `any`.** Strict mode is on.
-- **TypeScript 7 only works paired with `experimental.useTypeScriptCli`.**
-  TS 7 removed the JS compiler API; Next falls back to shelling out to `tsc`
-  only with that flag (next ≥16.2.12). Dropping the flag or downgrading next
-  makes `next build` die with a silent SIGSEGV and zero diagnostics. Scripts
-  that need the compiler API import `@typescript/typescript6`, never
-  `typescript`. Guarded by `typescript-version-pairing.test.ts`.
+- **TypeScript 7 needs next ≥ 16.3.0.** TS 7 removed the JS compiler API;
+  from 16.3.0 `next build` type-checks through the local `tsc` CLI by default,
+  so no flag is needed. Downgrading next below 16.3.0, or setting
+  `experimental.useTypeScriptCli: false`, makes `next build` die with a silent
+  SIGSEGV and zero diagnostics. Scripts that need the compiler API import
+  `@typescript/typescript6`, never `typescript`. Guarded by
+  `typescript-version-pairing.test.ts`.
 
 ## Conventions
 
@@ -166,13 +174,3 @@ Jev use with `scripts/eval-column-mapping.ts` or
 Demo login buttons are gated by the **`SHOW_DEMO_LOGINS`** server env var (not
 `NEXT_PUBLIC` — when off, credentials never reach the client). Before launch:
 set `SHOW_DEMO_LOGINS=false` **and** delete the demo users from the database.
-
-<!-- BEGIN:nextjs-agent-rules -->
-
-## This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->

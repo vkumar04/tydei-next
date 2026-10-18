@@ -6,7 +6,7 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "bun scripts/clear-stale-dev-cache.ts && next dev --turbopack",
     "build": "prisma generate && next build && bash scripts/standalone-postbuild.sh",
     "build:analyze": "ANALYZE=true bun run build",
     "start": "HOSTNAME=0.0.0.0 bun .next/standalone/server.js",
