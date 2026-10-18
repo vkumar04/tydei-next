@@ -5,8 +5,9 @@ import { join } from "node:path"
 /**
  * Assert the typescript↔next version pairing invariant:
  *
- *   typescript major >= 7  REQUIRES  next >= 16.2.12
- *                          AND       `experimental.useTypeScriptCli` in next.config.ts
+ *   typescript major >= 7  REQUIRES  next >= 16.3.0 (CLI type checker is the default)
+ *                          OR        next 16.2.12+ with `experimental.useTypeScriptCli: true`
+ *                          AND NEVER `useTypeScriptCli: false`
  *
  * Why this exists: TypeScript 7.0 (the Go-native "Corsa" rewrite, npm
  * `latest` since 2026-07-08) DELETED `typescript/lib/typescript.js` — the
@@ -95,27 +96,28 @@ export function checkTypeScriptPairing(input: PairingInput): string | null {
   if (Number.isNaN(tsMajor) || tsMajor < 7) return null
 
   const [nextMajor, nextMinor, nextPatch] = majorMinorPatch(input.nextRange)
-  // TS 7 support landed on the 16.2.x line in 16.2.12 (vercel/next.js#95831
-  // backported the useTypeScriptCli backend from canary), and on 16.3+.
-  // Before 16.2.12, typescript@7 makes `next build` die with a silent
-  // SIGSEGV — see the header comment.
-  const nextSupportsTs7 =
-    nextMajor > 16 ||
-    (nextMajor === 16 && nextMinor > 2) ||
-    (nextMajor === 16 && nextMinor === 2 && nextPatch >= 12)
-  const hasFlag = /useTypeScriptCli/.test(input.nextConfigSource)
+  const cliIsDefault = nextMajor > 16 || (nextMajor === 16 && nextMinor >= 3)
+  const cliIsOptIn = nextMajor === 16 && nextMinor === 2 && nextPatch >= 12
+  const flagOn = /useTypeScriptCli\s*:\s*true/.test(input.nextConfigSource)
+  const flagOff = /useTypeScriptCli\s*:\s*false/.test(input.nextConfigSource)
 
-  if (nextSupportsTs7 && hasFlag) return null
+  if (cliIsDefault && !flagOff) return null
+  if (cliIsOptIn && flagOn) return null
 
   const reasons: string[] = []
-  if (!nextSupportsTs7) {
+  if (!cliIsDefault && !cliIsOptIn) {
     reasons.push(
-      `next is pinned to "${input.nextRange}" but TypeScript 7 needs next >= 16.2.12`,
+      `next is pinned to "${input.nextRange}" but TypeScript 7 needs next >= 16.2.12 (CLI checker opt-in) or >= 16.3.0 (CLI checker default)`,
     )
   }
-  if (!hasFlag) {
+  if (cliIsOptIn && !flagOn) {
     reasons.push(
-      "next.config.ts is missing `experimental: { useTypeScriptCli: true }`",
+      "next 16.2.x needs `experimental: { useTypeScriptCli: true }` in next.config.ts",
+    )
+  }
+  if (flagOff) {
+    reasons.push(
+      "next.config.ts sets `useTypeScriptCli: false`, which forces the removed JS compiler API",
     )
   }
 
@@ -128,8 +130,8 @@ export function checkTypeScriptPairing(input: PairingInput): string | null {
     "SIGSEGV/SIGABRT and NO diagnostics — including on Railway, and even with",
     "typescript.ignoreBuildErrors: true. See vercel/next.js#95801.",
     "",
-    "Fix: bump typescript and next TOGETHER and set the flag, or revert",
-    "typescript to ^6.x. Full upgrade steps are in this file's header comment.",
+    "Fix: keep next >= 16.3.0 (the CLI checker is the default there) and do",
+    "not set useTypeScriptCli: false, or revert typescript to ^6.x.",
   ].join("\n")
 }
 
@@ -189,13 +191,32 @@ describe("typescript ↔ next version pairing", () => {
     expect(failure).toContain("needs next >= 16.2.12")
   })
 
-  it("flags TypeScript 7 on next 16.3 when the CLI flag is missing", () => {
+  it("allows TypeScript 7 on next 16.3+ with no flag — the CLI checker is the default there", () => {
+    expect(
+      checkTypeScriptPairing({
+        typescriptRange: "^7.0.2",
+        nextRange: "^16.3.0",
+        nextConfigSource: "export default { experimental: {} }",
+      }),
+    ).toBeNull()
+  })
+
+  it("rejects an explicit useTypeScriptCli: false under TypeScript 7", () => {
     const failure = checkTypeScriptPairing({
       typescriptRange: "^7.0.2",
-      nextRange: "^16.3.0",
+      nextRange: "^16.4.2",
+      nextConfigSource: "export default { experimental: { useTypeScriptCli: false } }",
+    })
+    expect(failure).toContain("useTypeScriptCli: false")
+  })
+
+  it("flags TypeScript 7 on next 16.2.12 when the CLI opt-in flag is missing", () => {
+    const failure = checkTypeScriptPairing({
+      typescriptRange: "^7.0.2",
+      nextRange: "^16.2.12",
       nextConfigSource: "export default { experimental: {} }",
     })
-    expect(failure).toContain("useTypeScriptCli")
+    expect(failure).toContain("useTypeScriptCli: true")
   })
 
   it("allows TypeScript 7 once next >= 16.3 and the flag is set", () => {
