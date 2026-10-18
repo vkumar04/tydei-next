@@ -18,7 +18,7 @@ Healthcare contract management SaaS with dual portals for facilities and vendors
 | Data Fetching | TanStack Query |
 | Tables | TanStack Table |
 | Charts | Recharts |
-| AI | Vercel AI SDK + Anthropic Claude & Google Gemini |
+| AI | Vercel AI SDK 7 + Anthropic Claude 5.5 (Opus / Sonnet / Haiku); TypeSafe Jev for import column mapping and extraction cross-checks |
 | File Storage | S3-compatible (Railway Object Storage) |
 | Payments | Stripe (via @better-auth/stripe) |
 | Icons | Lucide React |
@@ -97,8 +97,13 @@ NEXT_PUBLIC_STRIPE_PRICE_ID=# price_...
 # Email (Resend)
 RESEND_API_KEY=             # re_...
 
-# AI (Gemini)
-GOOGLE_API_KEY=             # AIza...
+# AI
+ANTHROPIC_API_KEY=          # sk-ant-... — every Claude surface (extraction, chat, insights, reports)
+TYPESAFE_API_KEY=           # TypeSafe Jev — import column mapping + extraction cross-check
+                            # (unset → local header matching, no cross-check)
+
+# Cron
+CRON_SECRET=                # bearer for the alert-synthesis cron route (unset → route 404s)
 
 # File Storage (S3-compatible)
 S3_ENDPOINT=                # https://....storageapi.dev
@@ -125,6 +130,12 @@ bun run db:seed      # Seed demo data
 bun run db:studio    # Open Prisma Studio
 
 bun run lint         # Run Oxlint
+bun run test:unit    # Vitest (excludes integration tests)
+bun run test:e2e     # Playwright e2e project
+bun run test:visual  # Playwright visual project
+
+bun scripts/eval-column-mapping.ts        # Sonnet vs Jev vs local header matching on the import fixtures
+bun scripts/eval-contract-extraction.ts   # per-model contract-extraction accuracy (CHECK=1 scores the Jev cross-check)
 ```
 
 ## Project Structure
@@ -195,8 +206,9 @@ tydei-next/
 │   │   ├── alerts.ts        # Alert CRUD + generation
 │   │   ├── admin/           # Admin-scoped actions (6 files)
 │   │   └── ...              # 150+ more action files
-│   ├── validators/          # Zod schemas (19 files)
-│   ├── ai/                  # AI config, prompts, tools, schemas
+│   ├── validators/          # Zod schemas (21 files)
+│   ├── ai/                  # Claude model handles, prompts, schemas, generate-structured (plain-JSON mode),
+│   │                        # Jev column mapping + extraction cross-check
 │   ├── alerts/              # Alert generation logic
 │   ├── analysis/            # MACRS depreciation, forecasting
 │   ├── auth-server.ts       # Better Auth server config
@@ -209,14 +221,14 @@ tydei-next/
 │   ├── constants.ts         # Nav configs, status badge configs
 │   ├── query-keys.ts        # TanStack Query key factory
 │   └── utils.ts             # cn() helper
-├── hooks/                   # TanStack Query hooks (36 files)
+├── hooks/                   # TanStack Query hooks (38 files)
 ├── prisma/
-│   ├── schema.prisma        # 73 models, 43 enums
+│   ├── schema.prisma        # 80 models, 43 enums
 │   ├── prisma.config.ts     # Prisma 7 config with dotenv
 │   └── seed.ts              # Demo data seeder
 ├── proxy.ts                 # Next.js 16 route protection
 ├── docker-compose.yml       # PostgreSQL 16
-├── railway.toml             # Railway deployment config
+├── .railway/railway.ts      # Railway IaC (railway.toml is the legacy copy Railway retires on 2026-12-01)
 └── package.json
 ```
 
@@ -240,7 +252,7 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 - **Tenant isolation is enforced per-query.** Every read/write that takes a client id is scoped to the caller's own facility/vendor via canonical helpers — `contractOwnershipWhere` / `contractsOwnedByFacility` (`lib/actions/contracts-auth.ts`) and `contractsOwnedByVendor` (`lib/actions/contracts-vendor-auth.ts`). A static guard, `lib/actions/__tests__/server-action-auth-scope-scanner.test.ts`, fails the build on any unscoped `where: { id }` in a `"use server"` file, preventing cross-tenant IDORs.
 - **File uploads** are bounded against decompression bombs — all `.xlsx` parsing flows through `parseXlsxMatrixBounded` (`lib/xlsx/parse-xlsx-bounded.ts`), which checks the ZIP's declared uncompressed size/ratio before decompressing.
 
-### Data Model (73 Prisma Models)
+### Data Model (80 Prisma Models)
 
 **Core:** HealthSystem, Facility, Vendor, Contract, ContractTerm, ContractTier, ContractPricing
 
@@ -268,7 +280,8 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 
 ### Notable surfaces
 
-- **Contracts** — per-type terms/tiers (usage/service/capital/tie-in/grouped/pricing), AI contract extraction (PDF → terms + capital line items, with OCR for scanned docs), rebate accrual engine, tie-in capital amortization.
+- **Contracts** — per-type terms/tiers (usage/service/capital/tie-in/grouped/pricing), AI contract extraction (PDF → terms + capital line items, with OCR for scanned docs), rebate accrual engine, tie-in capital amortization. Extraction runs on Sonnet 5.5 through `generateStructured`'s plain-JSON mode; TypeSafe Jev then re-reads the document and any disagreement on vendor, contract number, type, dates or amounts shows up as a review item in the extraction dialog.
+- **Imports (COG, pricing, case costing)** — source column headers are mapped to the import schema by TypeSafe Jev (one Choice per field, local fuzzy matching as the fallback); patient-identifier sample values are masked before anything leaves the server.
 - **Case Costing** — surgeon scorecards, payor-mix, and a per-procedure **True-Margin** report (revenue from CPT payor-rate reimbursement, rebate allocated by matching each supply's product number to its contract's rebate terms).
 - **Reports** — facility Reports Hub and a vendor-scoped **Vendor Reports Hub** at full parity (Overview / per-contract-type / By Rebate Type / Calculations), reusing the same presentational components. The vendor hub's **facility filter** scopes every trend/table to one facility the vendor serves (`scopeContractWhereToFacility`). Report cards (Rebate Statement / Performance Summary / Contract Roster) export **PDF or CSV** — PDFs render server-side through the one generator in `lib/pdf.ts` (`generateTableReportPDF`) via `/api/reports/pdf`, never a client-side jsPDF.
 - **Analysis (facility CFO dashboard)** — assumption-driven current-state model: Current Vendor Spend, Net Revenue, EBITDA, and a **DCF enterprise value** (explicit-period PV **plus a Gordon-Growth terminal value** — `TV = FCF_N × (1+g) / (r − g)`). Net Revenue is an **Actuals / Manual** control (summed case-costing reimbursement, or avg-reimbursement-per-case × cases) — never the old spend ÷ 30% proxy; **Annual cases** is editable. PDF/CSV export leads with a plain-English **narrative** of the data, not just tables.
@@ -277,7 +290,9 @@ All portals share a single `PortalShell` layout component. Nav items, auth guard
 ## Deployment (Railway)
 
 ```bash
-# railway.toml is pre-configured
+# .railway/railway.ts holds the service config; railway.toml is the legacy
+# Config-as-Code copy that Railway retires on 2026-12-01.
+# Environments: production deploys from `main`, dev from `dev`.
 # 1. Create Railway project with Postgres
 # 2. Set env vars (use Railway variable references for DATABASE_URL)
 # 3. Deploy
@@ -327,12 +342,12 @@ If one fails, fix the code — not the test.
 
 | Metric | Count |
 |--------|-------|
-| TypeScript/TSX files | ~1,520 |
-| Pages | 66 |
-| Components | 442 |
-| Server Action files | 157 |
-| API routes | 26 |
-| Hooks | 36 |
-| Prisma Models | 73 |
+| TypeScript/TSX files | ~1,900 |
+| Pages | 67 |
+| Components | 472 |
+| Server Action files | 175 |
+| API routes | 33 |
+| Hooks | 38 |
+| Prisma Models | 80 |
 | Prisma Enums | 43 |
-| Tests | 3,717 passing |
+| Tests | 5,150 passing |
