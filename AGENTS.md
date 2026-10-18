@@ -32,7 +32,10 @@ bun run db:seed          # seed demo data + qa sanity check
 bun run db:studio        # Prisma Studio
 bun run lint             # oxlint
 bun run test:unit        # vitest (excludes integration)
-bun run test:e2e         # playwright
+bun run test:e2e         # playwright e2e
+bun run test:visual      # playwright visual
+bun scripts/eval-column-mapping.ts        # Sonnet vs Jev vs local header matching
+bun scripts/eval-contract-extraction.ts   # per-model extraction accuracy; CHECK=1 scores the Jev cross-check
 ```
 
 The authoritative `DATABASE_URL` is in `.env` — trust it over any value
@@ -141,6 +144,22 @@ Every `"use server"` action calling the Anthropic API must:
    only debugging path.
 2. Surface a message naming the action and the failure kind — never let the
    client see "An error occurred in the Server Components render."
+
+Model handles live in `lib/ai/config.ts` (Opus / Sonnet / Haiku 5.5;
+`claudeExtractionModel` for contract extraction). The 5.5 models reject forced
+tool use, so the SDK sends native structured output, which caps a schema at 24
+optional and 16 nullable/union fields. A schema over either limit
+(`extractedContractSchema` is) must go through
+`generateStructured({ outputMode: "plain" })`; smaller schemas keep the
+default. `temperature` is rejected on 5.5.
+
+TypeSafe Jev (`TYPESAFE_API_KEY`) has two jobs: import column mapping
+(`lib/ai/jev-column-mapping.ts`, local fuzzy fallback) and the post-extraction
+cross-check (`lib/ai/jev-contract-check.ts`, surfaced as review warnings). It
+selects from candidates that code finds in the text; it never generates
+values, so it is not a replacement for a Claude extraction. Measure any new
+Jev use with `scripts/eval-column-mapping.ts` or
+`scripts/eval-contract-extraction.ts` (`CHECK=1`) before switching a surface.
 
 ## Launch hardening
 
