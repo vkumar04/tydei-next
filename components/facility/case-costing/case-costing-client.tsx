@@ -20,6 +20,7 @@ import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
 import { Upload, BarChart3, Trash2, Loader2, PencilLine } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -141,68 +142,72 @@ export function CaseCostingClient({
             Reports
           </Button>
         </Link>
-        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="outline"
-              className="text-destructive hover:text-destructive"
-              disabled={heroStats.totalCases === 0 || deleteAll.isPending}
-            >
-              {deleteAll.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="mr-2 h-4 w-4" />
-              )}
-              Delete All Cases
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                Delete all {heroStats.totalCases.toLocaleString()} case
-                {heroStats.totalCases === 1 ? "" : "s"}?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                This permanently removes every case, along with its supplies
-                and procedures, for {facilityName}. Payor contracts are not
-                affected. This cannot be undone — re-import to restore data.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={deleteAll.isPending}>
-                Cancel
-              </AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                disabled={deleteAll.isPending}
-                onClick={(e) => {
-                  // Keep the dialog open until the mutation resolves so the
-                  // user sees the pending state; close on success.
-                  e.preventDefault()
-                  deleteAll.mutate(undefined, {
-                    onSuccess: () => {
-                      refetchAll()
-                      setDeleteOpen(false)
-                    },
-                  })
-                }}
+        <ReadOnlyGuard title="Read-only access can't change case data">
+          <div className="flex flex-wrap items-center gap-2">
+          <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                disabled={heroStats.totalCases === 0 || deleteAll.isPending}
               >
                 {deleteAll.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : null}
-                Delete all cases
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
-        <Button variant="outline" onClick={() => setManualOpen(true)}>
-          <PencilLine className="mr-2 h-4 w-4" />
-          Manual entry
-        </Button>
-        <Button onClick={() => setImportOpen(true)}>
-          <Upload className="mr-2 h-4 w-4" />
-          Upload Data
-        </Button>
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" />
+                )}
+                Delete All Cases
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Delete all {heroStats.totalCases.toLocaleString()} case
+                  {heroStats.totalCases === 1 ? "" : "s"}?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently removes every case, along with its supplies
+                  and procedures, for {facilityName}. Payor contracts are not
+                  affected. This cannot be undone — re-import to restore data.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleteAll.isPending}>
+                  Cancel
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={deleteAll.isPending}
+                  onClick={(e) => {
+                    // Keep the dialog open until the mutation resolves so the
+                    // user sees the pending state; close on success.
+                    e.preventDefault()
+                    deleteAll.mutate(undefined, {
+                      onSuccess: () => {
+                        refetchAll()
+                        setDeleteOpen(false)
+                      },
+                    })
+                  }}
+                >
+                  {deleteAll.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : null}
+                  Delete all cases
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Button variant="outline" onClick={() => setManualOpen(true)}>
+            <PencilLine className="mr-2 h-4 w-4" />
+            Manual entry
+          </Button>
+          <Button onClick={() => setImportOpen(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Upload Data
+          </Button>
+          </div>
+        </ReadOnlyGuard>
       </div>
 
       <PayorContractMarginCard />

@@ -22,6 +22,7 @@ import { ArrowLeft, Pencil, Save, X } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import type { TermFormValues, TierInput } from "@/lib/validators/contract-terms"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 
 interface ContractTermsPageClientProps {
   contractId: string
@@ -240,9 +241,11 @@ export function ContractTermsPageClient({ contractId }: ContractTermsPageClientP
                 </Button>
               </>
             ) : (
-              <Button size="sm" onClick={startEditing}>
-                <Pencil className="size-4" /> Edit Terms
-              </Button>
+              <ReadOnlyGuard title="Read-only access can't edit terms">
+                <Button size="sm" onClick={startEditing}>
+                  <Pencil className="size-4" /> Edit Terms
+                </Button>
+              </ReadOnlyGuard>
             )}
           </div>
         }

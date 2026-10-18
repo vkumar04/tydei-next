@@ -7,6 +7,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
+import { assertFacilitiesInHealthSystem } from "@/lib/contracts/health-system-facilities"
 import {
   createContractSchema,
   type CreateContractInput,
@@ -24,7 +25,7 @@ import { idempotencyGet, idempotencyPut } from "@/lib/idempotency"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
 import { recomputeCaseSupplyContractStatus } from "@/lib/case-costing/recompute-supply"
-import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
+import { refreshContractMetricsForVendor } from "@/lib/contracts/refresh-metrics-for-vendor"
 import {
   termFormSchemaWithTierCheck,
   type TermFormValues,
@@ -100,6 +101,10 @@ async function _createContractImpl(
   const session = await requireFacility()
   await requireCanMutate()
   const data = createContractSchema.parse(input)
+  await assertFacilitiesInHealthSystem(session.facility, [
+    ...(data.facilityIds ?? []),
+    ...(data.additionalFacilityIds ?? []),
+  ])
   // Terms travel alongside the validated contract payload rather than as
   // part of it — embedding them in createContractSchema makes react-hook-form's
   // zodResolver unhappy because termFormSchema defaults force the infer'd

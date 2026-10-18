@@ -20,6 +20,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Trash2, MessageSquare, Loader2 } from "lucide-react"
 import { toast } from "sonner"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import {
   listRenewalNotes,
   createRenewalNote,
@@ -40,6 +41,7 @@ export function RenewalNotesSection({
   currentUserId,
 }: RenewalNotesSectionProps) {
   const qc = useQueryClient()
+  const canMutate = useCanMutate()
   const [draft, setDraft] = useState("")
 
   const { data, isLoading, isError } = useQuery({
@@ -83,35 +85,37 @@ export function RenewalNotesSection({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <Textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Add a renewal note — negotiation touchpoints, action items, etc."
-          rows={3}
-          aria-label="New renewal note"
-          disabled={createMutation.isPending}
-        />
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            {trimmed.length}/5000
-          </span>
-          <Button
-            size="sm"
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-          >
-            {createMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Saving…
-              </>
-            ) : (
-              "Add Note"
-            )}
-          </Button>
+      {canMutate ? (
+        <div className="space-y-2">
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Add a renewal note — negotiation touchpoints, action items, etc."
+            rows={3}
+            aria-label="New renewal note"
+            disabled={createMutation.isPending}
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              {trimmed.length}/5000
+            </span>
+            <Button
+              size="sm"
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+            >
+              {createMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                "Add Note"
+              )}
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {isLoading ? (
         <div className="space-y-2">
@@ -125,7 +129,7 @@ export function RenewalNotesSection({
       ) : !data || data.length === 0 ? (
         <div className="flex items-center gap-2 rounded-md border border-dashed p-6 text-sm text-muted-foreground">
           <MessageSquare className="h-4 w-4" />
-          No notes yet. Add the first one above.
+          {canMutate ? "No notes yet. Add the first one above." : "No notes yet."}
         </div>
       ) : (
         <ul className="space-y-2">
@@ -141,7 +145,7 @@ export function RenewalNotesSection({
                       })}
                     </p>
                   </div>
-                  {n.authorId === currentUserId ? (
+                  {canMutate && n.authorId === currentUserId ? (
                     <Button
                       size="icon"
                       variant="ghost"

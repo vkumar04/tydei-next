@@ -1,5 +1,3 @@
-"use server"
-
 /**
  * AI usage recorder — logs one `AIUsageRecord` row per Claude call and
  * debits the owning `AICredit.usedCredits`.

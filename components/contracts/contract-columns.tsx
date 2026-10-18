@@ -54,8 +54,8 @@ const typeLabels: Record<string, string> = {
 
 interface ColumnActions {
   onView: (id: string) => void
-  onEdit: (id: string) => void
-  onDelete: (contract: ContractWithVendor) => void
+  onEdit?: (id: string) => void
+  onDelete?: (contract: ContractWithVendor) => void
 }
 
 function SortableHeader({
@@ -363,18 +363,26 @@ export function getContractColumns(
               icon: Eye,
               onClick: () => actions.onView(row.original.id),
             },
-            {
-              label: "Edit",
-              icon: Pencil,
-              onClick: () => actions.onEdit(row.original.id),
-            },
-            {
-              label: "Delete",
-              icon: Trash2,
-              variant: "destructive",
-              separatorBefore: true,
-              onClick: () => actions.onDelete(row.original),
-            },
+            ...(actions.onEdit
+              ? [
+                  {
+                    label: "Edit",
+                    icon: Pencil,
+                    onClick: () => actions.onEdit?.(row.original.id),
+                  },
+                ]
+              : []),
+            ...(actions.onDelete
+              ? [
+                  {
+                    label: "Delete",
+                    icon: Trash2,
+                    variant: "destructive" as const,
+                    separatorBefore: true,
+                    onClick: () => actions.onDelete?.(row.original),
+                  },
+                ]
+              : []),
           ]}
         />
       ),

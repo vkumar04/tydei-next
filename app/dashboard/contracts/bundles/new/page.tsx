@@ -3,9 +3,11 @@ import { requireFacility } from "@/lib/actions/auth"
 import { prisma } from "@/lib/db"
 import { Button } from "@/components/ui/button"
 import { NewBundleForm } from "./new-bundle-form"
+import { redirectUnlessCanMutate } from "@/lib/auth/page-gates"
 
 export default async function NewBundlePage() {
   const { facility } = await requireFacility()
+  await redirectUnlessCanMutate("/dashboard/contracts/bundles")
 
   // Pull the facility's active contracts for the member picker. Kept
   // lean — id, name, vendor name — to avoid hydration bloat.

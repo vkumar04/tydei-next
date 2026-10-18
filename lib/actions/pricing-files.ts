@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { contractOwnershipWhere, contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import {
   resolveCategoryNamesBulk,
   isPlaceholderCategory,
@@ -27,7 +27,7 @@ import {
 import { sanitizePricingRow } from "@/lib/contracts/pricing-row-sanitize"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
-import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
+import { refreshContractMetricsForVendor } from "@/lib/contracts/refresh-metrics-for-vendor"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { toSafeResult, type SafeResult } from "@/lib/actions/safe-result"
 import type { ContractPricingItem } from "./pricing-files-types"
@@ -783,7 +783,7 @@ export async function updateContractPricing(id: string, data: {
   const { facility } = await requireFacility()
   await requireCanMutate()
   const existing = await prisma.contractPricing.findUniqueOrThrow({
-    where: { id },
+    where: { id, contract: contractsOwnedByFacility(facility.id) },
     select: { contractId: true },
   })
   await prisma.contract.findUniqueOrThrow({
@@ -846,7 +846,7 @@ export async function deleteContractPricing(id: string) {
   const { facility } = await requireFacility()
   await requireCanMutate()
   const existing = await prisma.contractPricing.findUniqueOrThrow({
-    where: { id },
+    where: { id, contract: contractsOwnedByFacility(facility.id) },
     select: { contractId: true },
   })
   await prisma.contract.findUniqueOrThrow({

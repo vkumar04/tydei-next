@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireVendor } from "@/lib/actions/auth"
 import { serialize } from "@/lib/serialize"
-import { computeSyntheticContractPeriods } from "@/lib/actions/contract-periods"
+import { computeSyntheticContractPeriods } from "@/lib/contracts/synthetic-periods"
 import { buildReportDataRows } from "@/lib/reports/report-data-core"
 import {
   contractsOwnedByVendor,

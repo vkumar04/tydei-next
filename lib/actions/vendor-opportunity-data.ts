@@ -21,7 +21,7 @@ import { serialize } from "@/lib/serialize"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
 import { getTrailing12MonthWindow } from "@/lib/dates/trailing-window"
 import { contractsOwnedByVendor } from "@/lib/actions/contracts-vendor-auth"
-import { callerVendorDivisionIds } from "@/lib/actions/division-auth"
+import { callerVendorDivisionIds } from "@/lib/divisions/caller-divisions"
 import {
   divisionCategoryKeySet,
   categoryInDivisionScope,

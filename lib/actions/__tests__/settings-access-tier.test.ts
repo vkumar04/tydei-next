@@ -150,6 +150,20 @@ describe("updateMemberAccessTier — access-tier gating", () => {
     expect(memberUpdateMock).not.toHaveBeenCalled()
   })
 
+  it("refuses to demote the last Super user of the org", async () => {
+    grantCapability()
+    memberFindUniqueOrThrowMock.mockResolvedValue({ organizationId: "org-1", role: "member" })
+    memberFindFirstMock.mockResolvedValue({ role: "owner" })
+    memberFindManyMock.mockResolvedValue([{ id: "m-target" }])
+
+    await expect(updateMemberAccessTier("m-target", "user")).rejects.toThrow(/last Super user/)
+    expect(memberFindManyMock).toHaveBeenCalledWith({
+      where: { organizationId: "org-1", accessTier: "super" },
+      select: { id: true },
+    })
+    expect(memberUpdateMock).not.toHaveBeenCalled()
+  })
+
   it("Super caller + valid tier + owns the org → member.update with { accessTier }", async () => {
     grantCapability()
     // target member lookup
@@ -159,6 +173,7 @@ describe("updateMemberAccessTier — access-tier gating", () => {
     })
     // assertCallerCanManage → caller is an admin/owner of org-1
     memberFindFirstMock.mockResolvedValue({ role: "owner" })
+    memberFindManyMock.mockResolvedValue([{ id: "m-target" }, { id: "m-other" }])
     memberUpdateMock.mockResolvedValue({})
 
     await expect(

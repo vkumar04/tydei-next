@@ -62,6 +62,7 @@ import { VendorsTab } from "@/components/facility/settings/tabs/vendors-tab"
 import { CategoriesTab } from "@/components/facility/settings/tabs/categories-tab"
 import { AlertsTab } from "@/components/facility/settings/tabs/alerts-tab"
 import { FacilityAssignmentTab } from "@/components/facility/settings/tabs/facility-assignment-tab"
+import { useCan } from "@/components/shared/auth/access-context"
 
 interface SettingsClientProps {
   facilityId: string
@@ -69,6 +70,7 @@ interface SettingsClientProps {
 }
 
 export function SettingsClient({ facilityId, organizationId }: SettingsClientProps) {
+  const canManageMembers = useCan("members.manage")
   const [activeTab, setActiveTab] = useState("profile")
   const [inviteOpen, setInviteOpen] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -264,7 +266,7 @@ export function SettingsClient({ facilityId, organizationId }: SettingsClientPro
         <TabsContent value="access" className="space-y-6">
           <FacilityAssignmentTab
             orgId={organizationId}
-            canManage
+            canManage={canManageMembers}
           />
         </TabsContent>
 

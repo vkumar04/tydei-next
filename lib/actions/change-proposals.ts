@@ -19,12 +19,10 @@ export async function getChangeProposal(id: string) {
   })
   const facilityId = member?.organization?.facility?.id
   const vendorId = member?.organization?.vendor?.id
+  if (!facilityId && !vendorId) throw new Error("Not found")
 
   const proposal = await prisma.contractChangeProposal.findFirst({
-    where: {
-      id,
-      ...(facilityId ? { facilityId } : vendorId ? { vendorId } : {}),
-    },
+    where: facilityId ? { id, facilityId } : { id, vendorId },
     include: { contract: { select: { name: true, vendorName: true } } },
   })
 

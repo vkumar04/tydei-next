@@ -15,11 +15,11 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { contractOwnershipWhere, contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import { contractVendorIds } from "@/lib/contracts/contract-vendor-ids"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
 import { recomputeAccrualForContract } from "@/lib/actions/contracts/recompute-accrual"
-import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
+import { refreshContractMetricsForVendor } from "@/lib/contracts/refresh-metrics-for-vendor"
 import { suggestTarget } from "@/lib/categories/category-suggest"
 import { removeInverseCategoryMapping } from "@/lib/categories/resolve"
 import { canonicalizeCategoryName } from "@/lib/contracts/category-canonical"
@@ -386,15 +386,16 @@ export async function remapCOGCategory(input: {
       where: { name: { equals: to, mode: "insensitive" } },
     })
     if (oldCat && newCat && oldCat.id !== newCat.id) {
-      // Primary-category pointers move to the new category.
+      // Primary-category pointers move to the new category — only on
+      // contracts this facility owns; other tenants keep theirs.
       await tx.contract.updateMany({
-        where: { productCategoryId: oldCat.id },
+        where: { productCategoryId: oldCat.id, ...contractsOwnedByFacility(facility.id) },
         data: { productCategoryId: newCat.id },
       })
       // Join rows: drop would-be duplicates first (@@unique on
       // [contractId, productCategoryId]), then retarget the rest.
       const haveNew = await tx.contractProductCategory.findMany({
-        where: { productCategoryId: newCat.id },
+        where: { productCategoryId: newCat.id, contract: contractsOwnedByFacility(facility.id) },
         select: { contractId: true },
       })
       await tx.contractProductCategory.deleteMany({
@@ -404,25 +405,11 @@ export async function remapCOGCategory(input: {
         },
       })
       await tx.contractProductCategory.updateMany({
-        where: { productCategoryId: oldCat.id },
+        where: { productCategoryId: oldCat.id, contract: contractsOwnedByFacility(facility.id) },
         data: { productCategoryId: newCat.id },
       })
-      // Reparent children (guard the degenerate cycle where the new
-      // category is itself a child of the old one).
-      if (newCat.parentId === oldCat.id) {
-        // auth-scope-scanner-skip: ProductCategory is global taxonomy (no
-        // facilityId column); row was resolved by name above.
-        await tx.productCategory.update({
-          where: { id: newCat.id },
-          data: { parentId: oldCat.parentId ?? null },
-        })
-      }
-      await tx.productCategory.updateMany({
-        where: { parentId: oldCat.id },
-        data: { parentId: newCat.id },
-      })
-      // Global zero-reference check before deleting the taxonomy row.
-      const [cogN, cpN, pfN, pbN, termN] = await Promise.all([
+      // Global zero-reference check before touching the taxonomy row.
+      const [cogN, cpN, pfN, pbN, termN, contractN, joinN] = await Promise.all([
         tx.cOGRecord.count({
           where: { category: { equals: oldCat.name, mode: "insensitive" } },
         }),
@@ -438,8 +425,26 @@ export async function remapCOGCategory(input: {
         tx.contractTerm.count({
           where: { categories: { has: oldCat.name } },
         }),
+        tx.contract.count({ where: { productCategoryId: oldCat.id } }),
+        tx.contractProductCategory.count({ where: { productCategoryId: oldCat.id } }),
       ])
-      if (cogN + cpN + pfN + pbN + termN === 0) {
+      if (cogN + cpN + pfN + pbN + termN + contractN + joinN === 0) {
+        // Reparent children (guard the degenerate cycle where the new
+        // category is itself a child of the old one).
+        if (newCat.parentId === oldCat.id) {
+          // auth-scope-scanner-skip: ProductCategory is global taxonomy (no
+          // facilityId column); row was resolved by name above.
+          await tx.productCategory.update({
+            where: { id: newCat.id },
+            data: { parentId: oldCat.parentId ?? null },
+          })
+        }
+        // auth-scope-scanner-skip: ProductCategory is global taxonomy (no
+        // facilityId column); reparented only once the old row is unreferenced.
+        await tx.productCategory.updateMany({
+          where: { parentId: oldCat.id },
+          data: { parentId: newCat.id },
+        })
         // auth-scope-scanner-skip: global taxonomy row, resolved by name
         // above and verified unreferenced everywhere.
         await tx.productCategory.delete({ where: { id: oldCat.id } })

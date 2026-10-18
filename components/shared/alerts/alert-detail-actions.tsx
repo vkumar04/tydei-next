@@ -6,6 +6,7 @@ import type { AlertType } from "@/lib/generated/prisma/client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 
 interface AlertDetailActionsProps {
   alertType: AlertType
@@ -32,6 +33,7 @@ export function AlertDetailActions({
   onResolve,
   onDismiss,
 }: AlertDetailActionsProps) {
+  const canMutate = useCanMutate()
   const actionLabel = ACTION_LABELS[alertType] ?? "View Details"
   const isResolved = status === "resolved"
   const isDismissed = status === "dismissed"
@@ -51,7 +53,7 @@ export function AlertDetailActions({
           </Button>
         ) : null}
 
-        {!isResolved && !isDismissed ? (
+        {canMutate && !isResolved && !isDismissed ? (
           <Button
             variant="outline"
             className="w-full"
@@ -63,7 +65,7 @@ export function AlertDetailActions({
           </Button>
         ) : null}
 
-        {!isDismissed ? (
+        {canMutate && !isDismissed ? (
           <Button
             variant="ghost"
             className="w-full"

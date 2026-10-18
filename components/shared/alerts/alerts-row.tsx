@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import { extractAlertAmount, formatAlertAmount } from "@/lib/alerts/alert-amount"
 
 import {
@@ -44,6 +45,7 @@ export function AlertsRow({
   onDismiss,
   detailHref,
 }: AlertsRowProps) {
+  const canMutate = useCanMutate()
   const typeConfig = alertTypeIconConfig[alert.alertType]
   const severityConfig = alertSeverityBadgeConfig[alert.severity]
   const Icon = typeConfig?.icon
@@ -141,7 +143,7 @@ export function AlertsRow({
             {severityConfig.label}
           </Badge>
         ) : null}
-        {alert.status !== "resolved" ? (
+        {canMutate && alert.status !== "resolved" ? (
           <Button
             size="sm"
             variant="ghost"
@@ -153,7 +155,7 @@ export function AlertsRow({
             <span className="sr-only">Resolve</span>
           </Button>
         ) : null}
-        {onDismiss ? (
+        {canMutate && onDismiss ? (
           <Button
             size="sm"
             variant="ghost"

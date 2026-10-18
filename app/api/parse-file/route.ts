@@ -8,6 +8,7 @@ import {
   parseXlsxMatrixBounded,
   XlsxLimitError,
 } from "@/lib/xlsx/parse-xlsx-bounded"
+import { denyUnlessWriter } from "@/lib/api/import-route-auth"
 
 export async function POST(request: Request) {
   try {
@@ -15,6 +16,9 @@ export async function POST(request: Request) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const denied = await denyUnlessWriter(session.user.id)
+    if (denied) return denied
 
     const { success, retryAfterMs } = rateLimit(`parse-file:${session.user.id}`, 30, 60_000)
     if (!success) {

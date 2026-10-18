@@ -31,6 +31,7 @@ import { splitPdfByPages } from "@/lib/ai/pdf-chunker"
 import { MAX_PAGES_PER_CHUNK } from "@/lib/ai/contract-extract-chunked"
 import { recordClaudeUsage } from "@/lib/ai/record-usage"
 import { prisma } from "@/lib/db"
+import { denyUnlessWriter } from "@/lib/api/import-route-auth"
 
 export const maxDuration = 300
 
@@ -97,6 +98,9 @@ export async function POST(request: Request) {
     if (!session) {
       return Response.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const denied = await denyUnlessWriter(session.user.id)
+    if (denied) return denied
 
     const { success, retryAfterMs } = rateLimit(
       `ai-extract-invoice:${session.user.id}`,

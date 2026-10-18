@@ -3,6 +3,7 @@ import { getCategories } from "@/lib/actions/categories"
 import { EditContractClient } from "@/components/contracts/edit-contract-client"
 import { requireFacility } from "@/lib/actions/auth"
 import { mappedCategoryUniverse } from "@/lib/contracts/mapped-category-universe"
+import { redirectUnlessCanMutate } from "@/lib/auth/page-gates"
 
 export default async function EditContractPage({
   params,
@@ -11,6 +12,7 @@ export default async function EditContractPage({
 }) {
   const { facility } = await requireFacility()
   const { id } = await params
+  await redirectUnlessCanMutate(`/dashboard/contracts/${id}`)
   const [vendors, categories, mappedCategories] = await Promise.all([
     getVendors(),
     getCategories(),

@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility, requireVendor } from "@/lib/actions/auth"
-import { requireCanMutate } from "@/lib/actions/auth-permissions"
+import { requireCan } from "@/lib/actions/auth-permissions"
 import { logAudit } from "@/lib/audit"
 import type { ConnectionMode } from "@/lib/generated/prisma/client"
 
@@ -23,14 +23,14 @@ import type { ConnectionMode } from "@/lib/generated/prisma/client"
 
 /**
  * Vendor sets the interaction mode for one of its facility connections.
- * Scoped to the caller's own vendor (no IDOR) and gated for read-only
- * users via `requireCanMutate`.
+ * Scoped to the caller's own vendor (no IDOR) and gated to Super
+ * users via `requireCan("settings.manage")`.
  */
 export async function setConnectionMode(
   connectionId: string,
   mode: ConnectionMode,
 ): Promise<{ id: string; mode: ConnectionMode }> {
-  await requireCanMutate()
+  await requireCan("settings.manage")
   const { vendor } = await requireVendor()
 
   // Scope the update to the caller's own vendor — a vendor can only set
@@ -65,7 +65,7 @@ export async function getVendorOperatingMode(): Promise<ConnectionMode | null> {
 export async function setVendorOperatingMode(
   mode: ConnectionMode,
 ): Promise<{ mode: ConnectionMode }> {
-  await requireCanMutate()
+  await requireCan("settings.manage")
   const { vendor } = await requireVendor()
   await prisma.vendor.update({
     where: { id: vendor.id },
@@ -92,7 +92,7 @@ export async function setConnectionAutoActivate(
   connectionId: string,
   enabled: boolean,
 ): Promise<{ id: string; autoActivateContracts: boolean }> {
-  await requireCanMutate()
+  await requireCan("settings.manage")
   const { facility, user } = await requireFacility()
 
   // The facilityId predicate is the ownership check — a facility can only grant

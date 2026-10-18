@@ -11,6 +11,8 @@ const db = vi.hoisted(() => ({ member: { findFirst: vi.fn() } }))
 const recordClaudeUsage = vi.hoisted(() => vi.fn())
 const getSession = vi.hoisted(() => vi.fn())
 
+const denyUnlessWriter = vi.hoisted(() => vi.fn(async (): Promise<Response | null> => null))
+vi.mock("@/lib/api/import-route-auth", () => ({ denyUnlessWriter }))
 vi.mock("ai", async (importActual) => ({
   ...(await importActual<typeof import("ai")>()),
   generateObject: ai.generateObject,

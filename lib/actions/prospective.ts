@@ -17,7 +17,7 @@ import { blendConstructsToScenarios } from "@/lib/prospective-analysis/blend-con
 import {
   callerVendorDivisionIds,
   divisionScopeWhere,
-} from "@/lib/actions/division-auth"
+} from "@/lib/divisions/caller-divisions"
 import {
   divisionCategoryKeySet,
   categoryInDivisionScope,

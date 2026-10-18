@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
 import { recomputeMatchStatusesForVendor } from "@/lib/cog/recompute"
-import { refreshContractMetricsForVendor } from "@/lib/actions/contracts/refresh-metrics"
+import { refreshContractMetricsForVendor } from "@/lib/contracts/refresh-metrics-for-vendor"
 import { revalidatePath } from "next/cache"
 
 export interface CogVendorMapping {

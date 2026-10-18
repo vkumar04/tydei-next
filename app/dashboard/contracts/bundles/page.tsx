@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { requireFacility } from "@/lib/actions/auth"
 
 export default async function BundlesPage() {
@@ -32,9 +33,11 @@ export default async function BundlesPage() {
           <Button variant="outline" asChild>
             <Link href="/dashboard/contracts">← Contracts</Link>
           </Button>
-          <Button asChild>
-            <Link href="/dashboard/contracts/bundles/new">+ New bundle</Link>
-          </Button>
+          <ReadOnlyGuard title="Read-only access can't create bundles">
+            <Button asChild>
+              <Link href="/dashboard/contracts/bundles/new">+ New bundle</Link>
+            </Button>
+          </ReadOnlyGuard>
         </div>
       </div>
 

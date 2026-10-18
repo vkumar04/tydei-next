@@ -109,6 +109,19 @@ async function assertNotLastAdmin(
   }
 }
 
+async function assertNotLastSuper(
+  organizationId: string,
+  targetMemberId: string,
+): Promise<void> {
+  const supers = await prisma.member.findMany({
+    where: { organizationId, accessTier: "super" },
+    select: { id: true },
+  })
+  if (supers.length <= 1 && supers.some((m) => m.id === targetMemberId)) {
+    throw new Error("Cannot remove the last Super user of this organization")
+  }
+}
+
 // ─── Facility Profile ────────────────────────────────────────────
 
 export interface FacilityProfile {
@@ -487,6 +500,7 @@ export async function removeTeamMember(memberId: string): Promise<void> {
   assertOwnerProtected(target.role, caller.role)
   // Charles audit C3: prevent bricking the org by removing the last admin.
   await assertNotLastAdmin(target.organizationId, memberId)
+  await assertNotLastSuper(target.organizationId, memberId)
   await prisma.member.delete({ where: { id: memberId } })
 }
 
@@ -538,6 +552,9 @@ export async function updateMemberAccessTier(
   })
   const caller = await assertCallerCanManage(session.user.id, target.organizationId)
   assertOwnerProtected(target.role, caller.role)
+  if (parsedTier !== "super") {
+    await assertNotLastSuper(target.organizationId, memberId)
+  }
   await prisma.member.update({
     where: { id: memberId },
     data: { accessTier: parsedTier },

@@ -22,6 +22,7 @@ import { Trash2 } from "lucide-react"
 import type { TeamMember } from "@/lib/actions/settings"
 import { ACCESS_TIERS, ACCESS_TIER_LABELS } from "@/lib/auth/permissions"
 import { formatDate } from "@/lib/formatting"
+import { useCan } from "@/components/shared/auth/access-context"
 
 interface TeamTableProps {
   members: TeamMember[]
@@ -52,6 +53,7 @@ export function TeamTable({
   roles = DEFAULT_ROLES,
   onAccessTierChange,
 }: TeamTableProps) {
+  const canEdit = useCan("members.manage") && isAdmin
   const showAccess = Boolean(onAccessTierChange)
   return (
     <Table>
@@ -61,7 +63,7 @@ export function TeamTable({
           <TableHead>Role</TableHead>
           {showAccess && <TableHead>Access</TableHead>}
           <TableHead>Joined</TableHead>
-          {isAdmin && <TableHead className="w-[60px]" />}
+          {canEdit && <TableHead className="w-[60px]" />}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -85,7 +87,7 @@ export function TeamTable({
               {/* Owner is creator-only: not in the assignable enum and
                   protected server-side (only an owner can modify the
                   owner) — render as a static badge, not a Select. */}
-              {isAdmin && m.role !== "owner" ? (
+              {canEdit && m.role !== "owner" ? (
                 <Select
                   value={m.role}
                   onValueChange={(v) => onRoleChange(m.id, v)}
@@ -109,7 +111,7 @@ export function TeamTable({
               <TableCell>
                 {/* Owner keeps full access implicitly; don't offer to
                     down-tier the owner here. */}
-                {m.role !== "owner" ? (
+                {canEdit && m.role !== "owner" ? (
                   <Select
                     value={m.accessTier}
                     onValueChange={(v) => onAccessTierChange?.(m.id, v)}
@@ -126,14 +128,16 @@ export function TeamTable({
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Badge variant="outline">{ACCESS_TIER_LABELS.super}</Badge>
+                  <Badge variant="outline">
+                    {ACCESS_TIER_LABELS[m.role === "owner" ? "super" : m.accessTier]}
+                  </Badge>
                 )}
               </TableCell>
             )}
             <TableCell className="text-sm text-muted-foreground">
               {formatDate(m.createdAt)}
             </TableCell>
-            {isAdmin && (
+            {canEdit && (
               <TableCell>
                 {m.role !== "owner" && (
                   <Button

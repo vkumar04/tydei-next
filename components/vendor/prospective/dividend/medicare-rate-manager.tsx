@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -314,20 +315,22 @@ export function MedicareRateManager({
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-2"
-        onClick={() => setOpen(true)}
-      >
-        <SlidersHorizontal className="h-4 w-4" />
-        Medicare rates
-        {overrideCount > 0 ? (
-          <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px]">
-            {overrideCount}
-          </Badge>
-        ) : null}
-      </Button>
+      <ReadOnlyGuard title="Read-only access can't edit Medicare rates">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => setOpen(true)}
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          Medicare rates
+          {overrideCount > 0 ? (
+            <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px]">
+              {overrideCount}
+            </Badge>
+          ) : null}
+        </Button>
+      </ReadOnlyGuard>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col gap-0 p-0">

@@ -70,3 +70,14 @@ export async function denyUnlessPortalWriter(
   }
   return null
 }
+
+export async function denyUnlessWriter(userId: string): Promise<NextResponse | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  })
+  if (user?.role !== "facility" && user?.role !== "vendor") {
+    return NextResponse.json({ error: "Not authorized" }, { status: 403 })
+  }
+  return denyUnlessPortalWriter(userId, user.role)
+}

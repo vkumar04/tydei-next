@@ -44,7 +44,7 @@ vi.mock("@/lib/db", () => ({
   },
 }))
 vi.mock("@/lib/serialize", () => ({ serialize: <T,>(v: T) => v }))
-vi.mock("@/lib/actions/contract-periods", () => ({
+vi.mock("@/lib/contracts/synthetic-periods", () => ({
   computeSyntheticContractPeriods: vi.fn(),
 }))
 vi.mock("@/lib/actions/contracts/tie-in", () => ({

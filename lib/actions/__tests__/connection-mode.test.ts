@@ -5,8 +5,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
  * (`lib/actions/connection-mode.ts`).
  *
  *  - `setConnectionMode` is vendor-scoped (no IDOR): the write is bound to
- *    the caller's own `vendor.id` and gated by `requireCanMutate` (read-only
- *    users are blocked).
+ *    the caller's own `vendor.id` and gated by `requireCan("settings.manage")`
+ *    (Advanced and read-only users are blocked).
  *
  * (The unused facility-side gate `vendorContractsVisibleToFacility` and the
  * unused `getConnectionMode` read were removed 2026-07-03 — Vick "remove
@@ -23,8 +23,8 @@ const { requireVendorMock } = vi.hoisted(() => ({
   requireVendorMock: vi.fn(),
 }))
 
-const { requireCanMutateMock } = vi.hoisted(() => ({
-  requireCanMutateMock: vi.fn(),
+const { requireCanMock } = vi.hoisted(() => ({
+  requireCanMock: vi.fn(),
 }))
 
 vi.mock("@/lib/db", () => ({
@@ -40,7 +40,7 @@ vi.mock("@/lib/actions/auth", () => ({
 }))
 
 vi.mock("@/lib/actions/auth-permissions", () => ({
-  requireCanMutate: requireCanMutateMock,
+  requireCan: requireCanMock,
 }))
 
 import { setConnectionMode } from "@/lib/actions/connection-mode"
@@ -49,18 +49,19 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe("setConnectionMode — vendor-scoped write, gated (IDOR + read-only)", () => {
-  it("blocks the write when requireCanMutate throws (read-only user)", async () => {
-    requireCanMutateMock.mockRejectedValue(new Error("read-only"))
+describe("setConnectionMode — vendor-scoped write, gated (IDOR + Super-only)", () => {
+  it("blocks the write when requireCan('settings.manage') throws (non-Super user)", async () => {
+    requireCanMock.mockRejectedValue(new Error("read-only"))
     requireVendorMock.mockResolvedValue({ vendor: { id: "vendor-caller" } })
 
     await expect(setConnectionMode("conn-1", "two_way")).rejects.toThrow()
 
+    expect(requireCanMock).toHaveBeenCalledWith("settings.manage")
     expect(connectionUpdateManyMock).not.toHaveBeenCalled()
   })
 
   it("scopes the updateMany to the caller's vendorId (NOT a bare { id })", async () => {
-    requireCanMutateMock.mockResolvedValue(undefined)
+    requireCanMock.mockResolvedValue(undefined)
     requireVendorMock.mockResolvedValue({ vendor: { id: "vendor-caller" } })
     connectionUpdateManyMock.mockResolvedValue({ count: 1 })
 
@@ -77,7 +78,7 @@ describe("setConnectionMode — vendor-scoped write, gated (IDOR + read-only)", 
   })
 
   it("throws 'Connection not found' when count === 0 (foreign id, not owned)", async () => {
-    requireCanMutateMock.mockResolvedValue(undefined)
+    requireCanMock.mockResolvedValue(undefined)
     requireVendorMock.mockResolvedValue({ vendor: { id: "vendor-caller" } })
     connectionUpdateManyMock.mockResolvedValue({ count: 0 })
 
@@ -87,7 +88,7 @@ describe("setConnectionMode — vendor-scoped write, gated (IDOR + read-only)", 
   })
 
   it("returns { id, mode } on a successful scoped update", async () => {
-    requireCanMutateMock.mockResolvedValue(undefined)
+    requireCanMock.mockResolvedValue(undefined)
     requireVendorMock.mockResolvedValue({ vendor: { id: "vendor-caller" } })
     connectionUpdateManyMock.mockResolvedValue({ count: 1 })
 

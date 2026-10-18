@@ -51,6 +51,7 @@ import { DivisionsTab } from "@/components/vendor/settings/tabs/divisions-tab"
 import { CogsTab } from "@/components/vendor/settings/tabs/cogs-tab"
 import { AlertsTab } from "@/components/vendor/settings/tabs/alerts-tab"
 import { IdentityTab } from "@/components/vendor/settings/tabs/identity-tab"
+import { useCan } from "@/components/shared/auth/access-context"
 
 interface VendorSettingsClientProps {
   vendorId: string
@@ -62,6 +63,7 @@ export function VendorSettingsClient({
   vendorId,
   vendorName,
 }: VendorSettingsClientProps) {
+  const canManageMembers = useCan("members.manage")
   const [activeTab, setActiveTab] = useState("profile")
   const [showPassword, setShowPassword] = useState(false)
   const [inviteFacilityDialogOpen, setInviteFacilityDialogOpen] = useState(false)
@@ -327,7 +329,7 @@ export function VendorSettingsClient({
         </TabsContent>
 
         <TabsContent value="divisions" className="space-y-6">
-          <DivisionsTab vendorId={vendorId} canManage />
+          <DivisionsTab vendorId={vendorId} canManage={canManageMembers} />
         </TabsContent>
 
         <TabsContent value="cogs" className="space-y-6">

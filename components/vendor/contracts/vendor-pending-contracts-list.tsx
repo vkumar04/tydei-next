@@ -4,6 +4,8 @@ import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
+import { useCanMutate } from "@/components/shared/auth/access-context"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useVendorPendingContracts } from "@/hooks/use-pending-contracts"
 import { formatDate, formatCurrency } from "@/lib/formatting"
@@ -36,6 +38,7 @@ const STATUS_META: Record<
 
 export function VendorPendingContractsList({ vendorId }: VendorPendingContractsListProps) {
   const { data: pending, isLoading } = useVendorPendingContracts(vendorId)
+  const canMutate = useCanMutate()
 
   if (isLoading) {
     return (
@@ -53,11 +56,13 @@ export function VendorPendingContractsList({ vendorId }: VendorPendingContractsL
         <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
           <FileText className="size-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">No contract submissions yet.</p>
-          <Button asChild size="sm">
-            <Link href="/vendor/contracts/new">
-              <Plus className="size-4" /> Submit a Contract
-            </Link>
-          </Button>
+          <ReadOnlyGuard title="Read-only access can't submit contracts">
+            <Button asChild size="sm">
+              <Link href="/vendor/contracts/new">
+                <Plus className="size-4" /> Submit a Contract
+              </Link>
+            </Button>
+          </ReadOnlyGuard>
         </CardContent>
       </Card>
     )
@@ -98,9 +103,10 @@ export function VendorPendingContractsList({ vendorId }: VendorPendingContractsL
               </div>
               {/* Charles 2026-06-10: rejected submissions are fixable too —
                   edit + resubmit puts them back in the facility's queue. */}
-              {(pc.status === "revision_requested" ||
-                pc.status === "rejected" ||
-                pc.status === "draft") && (
+              {canMutate &&
+                (pc.status === "revision_requested" ||
+                  pc.status === "rejected" ||
+                  pc.status === "draft") && (
                 <Button asChild variant="outline" size="sm" className="shrink-0">
                   <Link href={`/vendor/contracts/pending/${pc.id}/edit`}>
                     <Pencil className="size-4" />{" "}

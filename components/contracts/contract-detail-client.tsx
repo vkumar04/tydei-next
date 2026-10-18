@@ -92,6 +92,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import {
   Tabs,
   TabsContent,
@@ -423,17 +424,21 @@ export function ContractDetailClient({
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() =>
-              router.push(`/dashboard/contracts/${contractId}/edit`)
-            }
-          >
-            <Pencil className="mr-2 size-4" /> Edit Contract
-          </Button>
-          <Button variant="outline" onClick={() => setShowAmendment(true)}>
-            <Plus className="mr-2 size-4" /> Add Amendment
-          </Button>
+          <ReadOnlyGuard title="Read-only access can't edit contracts">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  router.push(`/dashboard/contracts/${contractId}/edit`)
+                }
+              >
+                <Pencil className="mr-2 size-4" /> Edit Contract
+              </Button>
+              <Button variant="outline" onClick={() => setShowAmendment(true)}>
+                <Plus className="mr-2 size-4" /> Add Amendment
+              </Button>
+            </div>
+          </ReadOnlyGuard>
           {/*
            * Renewal Brief (Tier 4 AI) — only surfaced when the contract is
            * within ~180 days of expiration, since that's when a negotiation
@@ -456,14 +461,16 @@ export function ContractDetailClient({
             )}
             Export
           </Button>
-          <Button
-            variant="destructive"
-            size="icon"
-            onClick={() => setShowDelete(true)}
-            aria-label="Delete contract"
-          >
-            <Trash2 className="size-4" />
-          </Button>
+          <ReadOnlyGuard title="Read-only access can't delete contracts">
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={() => setShowDelete(true)}
+              aria-label="Delete contract"
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          </ReadOnlyGuard>
         </div>
       </div>
 

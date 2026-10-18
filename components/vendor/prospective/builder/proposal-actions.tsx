@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button"
+import { ReadOnlyGuard } from "@/components/shared/auth/can"
 import { Plus, Check, Loader2 } from "lucide-react"
 
 export interface ProposalActionsProps {
@@ -19,24 +20,26 @@ export function ProposalActions({
       <Button variant="outline" onClick={onCancel}>
         Cancel
       </Button>
-      <Button onClick={onSubmit} disabled={isPending}>
-        {isPending ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Submitting...
-          </>
-        ) : editingProposalId ? (
-          <>
-            <Check className="mr-2 h-4 w-4" />
-            Save &amp; build the deal
-          </>
-        ) : (
-          <>
-            <Plus className="mr-2 h-4 w-4" />
-            Save &amp; build the deal
-          </>
-        )}
-      </Button>
+      <ReadOnlyGuard title="Read-only access can't save proposals">
+        <Button onClick={onSubmit} disabled={isPending}>
+          {isPending ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Submitting...
+            </>
+          ) : editingProposalId ? (
+            <>
+              <Check className="mr-2 h-4 w-4" />
+              Save &amp; build the deal
+            </>
+          ) : (
+            <>
+              <Plus className="mr-2 h-4 w-4" />
+              Save &amp; build the deal
+            </>
+          )}
+        </Button>
+      </ReadOnlyGuard>
     </div>
   )
 }

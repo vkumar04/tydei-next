@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const getSession = vi.hoisted(() => vi.fn())
 
+const denyUnlessWriter = vi.hoisted(() => vi.fn(async (): Promise<Response | null> => null))
+vi.mock("@/lib/api/import-route-auth", () => ({ denyUnlessWriter }))
 vi.mock("@/lib/auth-server", () => ({
   auth: { api: { getSession: (args: unknown) => getSession(args) } },
 }))
@@ -89,6 +91,13 @@ describe("POST /api/ai/map-columns", () => {
   it("rejects an unauthenticated caller with 401", async () => {
     getSession.mockResolvedValue(null)
     expect((await POST(mapRequest(validBody))).status).toBe(401)
+    expect(jev).not.toHaveBeenCalled()
+  })
+
+  it("returns the writer gate's 403 for a read-only or tenantless caller without calling Jev", async () => {
+    denyUnlessWriter.mockResolvedValueOnce(Response.json({ error: "Your access is read-only" }, { status: 403 }))
+    expect((await POST(mapRequest(validBody))).status).toBe(403)
+    expect(denyUnlessWriter).toHaveBeenCalledWith(userId)
     expect(jev).not.toHaveBeenCalled()
   })
 
