@@ -24,8 +24,8 @@ export const claudeModel = anthropic("claude-opus-5-5")
 export const claudeSonnet = anthropic("claude-sonnet-5-5")
 export const claudeHaiku = anthropic("claude-haiku-5-5")
 
-export const claudeExtractionModel = anthropic("claude-sonnet-5")
-export const claudeExtractionFallback = anthropic("claude-haiku-5-5")
+export const claudeExtractionModel = claudeSonnet
+export const claudeExtractionFallback = claudeHaiku
 
 export const AI_CREDIT_COSTS = {
   document_extraction_per_page: 2,

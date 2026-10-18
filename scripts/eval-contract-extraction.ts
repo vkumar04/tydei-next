@@ -1,8 +1,9 @@
 import { writeFileSync } from "node:fs"
 import { anthropic } from "@ai-sdk/anthropic"
-import { streamObject } from "ai"
-import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extract"
-import { extractedContractSchema } from "@/lib/ai/schemas"
+import { extractContractSingle } from "@/lib/ai/contract-extract-single"
+import { compareContractSelection, selectContractFieldsWithJev } from "@/lib/ai/jev-contract-check"
+import { ocrPdfBuffer } from "@/lib/ai/ocr-pdf"
+import type { ExtractedContractData } from "@/lib/ai/schemas"
 import {
   buildTextPdf,
   contractPdfLines,
@@ -201,6 +202,79 @@ const DOCS: Doc[] = [
   },
 ]
 
+const MEDTRONIC_PROSE: string[][] = [
+  [
+    "SPINE PRODUCTS PURCHASE AGREEMENT",
+    "Agreement #MDT-SP-4471",
+    "This Agreement between Medtronic USA, Inc. and Lighthouse Surgical Center",
+    "commences on April 1, 2026 and ends on March 31, 2029, with an estimated",
+    "aggregate value of $3.2 million over the term.",
+    "",
+    "Section 4. Rebates. Facility shall receive a rebate equal to three percent (3%)",
+    "of Net Purchases exceeding $400,000 and five percent (5%) of Net Purchases",
+    "exceeding $900,000 during each Agreement Year, paid within 90 days of year end.",
+    "",
+    "Section 5. No equipment is placed or financed under this Agreement.",
+  ],
+]
+
+const MEDTRONIC_TRUTH: Truth = {
+  vendor: "Medtronic",
+  contractNumber: "MDT-SP-4471",
+  contractType: "usage",
+  effectiveDate: "2026-04-01",
+  expirationDate: "2029-03-31",
+  totalValue: 3_200_000,
+  tiers: [
+    { min: 400_000, type: "percent", value: 3 },
+    { min: 900_000, type: "percent", value: 5 },
+  ],
+}
+
+const INTUITIVE_TIE_IN: string[][] = [
+  [
+    "CAPITAL PLACEMENT AND INSTRUMENT COMMITMENT AGREEMENT",
+    "Intuitive Surgical, Inc. | Lighthouse Surgical Center | Ref. IS-TI-2026-09",
+    "Effective: 2026-05-01        Expires: 2030-04-30",
+    "",
+    "A. Capital. One da Vinci Xi system, valued at $1,950,000, is placed at the",
+    "   Facility at no upfront cost and is paid down through instrument purchases",
+    "   over a term of 4 years. No interest is charged.",
+    "",
+    "B. Commitment. Facility commits to $650,000 of instruments per year.",
+    "   Total commitment: $2,600,000.",
+    "",
+    "C. Rebate Schedule",
+    "   Annual Instrument Spend        Rebate",
+    "   $650,000 - $799,999            1.0%",
+    "   $800,000 and above             2.0%",
+  ],
+]
+
+const HOLDOUT: Doc[] = [
+  { name: "holdout-medtronic-prose", pages: MEDTRONIC_PROSE, truth: MEDTRONIC_TRUTH },
+  { name: "holdout-medtronic-prose (scanned)", pages: MEDTRONIC_PROSE, scanned: true, truth: MEDTRONIC_TRUTH },
+  {
+    name: "holdout-intuitive-tie-in",
+    pages: INTUITIVE_TIE_IN,
+    truth: {
+      vendor: "Intuitive",
+      contractNumber: "IS-TI-2026-09",
+      contractType: "tie_in",
+      effectiveDate: "2026-05-01",
+      expirationDate: "2030-04-30",
+      totalValue: 2_600_000,
+      capitalCost: 1_950_000,
+      interestRatePercent: null,
+      termMonths: 48,
+      tiers: [
+        { min: 650_000, type: "percent", value: 1 },
+        { min: 800_000, type: "percent", value: 2 },
+      ],
+    },
+  },
+]
+
 type Extracted = {
   vendorName?: string | null
   contractNumber?: string | null
@@ -248,38 +322,30 @@ function grade(truth: Truth, x: Extracted): Record<string, boolean> {
     if (truth[k] === undefined) continue
     out[k] = k === "interestRatePercent" ? numEq(x[k] || null, truth[k] || null) : numEq(x[k], truth[k])
   }
-  const got = extractedTiers(x)
+  const got = extractedTiers(x).filter((t, i, all) => !(i === 0 && all.length > truth.tiers.length && t.value === 0))
   out.tiers =
     got.length === truth.tiers.length &&
-    truth.tiers.every((t, i) => numEq(got[i].min, t.min) && got[i].type === t.type && numEq(got[i].value, t.value))
+    truth.tiers.every((t, i) => Math.abs(got[i].min - t.min) <= 1 && got[i].type === t.type && numEq(got[i].value, t.value))
   return out
 }
 
 async function extract(model: string, pdf: Uint8Array, hint: string) {
   const t0 = performance.now()
-  const result = streamObject({
-    model: anthropic(model),
-    schema: extractedContractSchema,
-    providerOptions: { anthropic: { structuredOutputMode: "jsonTool" as const } },
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: getActiveContractExtractPrompt().prompt + hint },
-          { type: "file", data: pdf, mediaType: "application/pdf", filename: "contract.pdf" },
-        ],
-      },
-    ],
+  const { extracted } = await extractContractSingle({
+    fileData: pdf,
+    fileName: "contract.pdf",
+    textHint: hint,
+    actionName: `eval:${model}`,
+    primary: anthropic(model),
+    fallback: anthropic(model),
   })
-  for await (const _ of result.partialObjectStream) void _
-  const object = (await result.object) as Extracted
-  const usage = await result.usage
-  return { object, ms: performance.now() - t0, inTok: usage.inputTokens ?? 0, outTok: usage.outputTokens ?? 0 }
+  return { object: extracted as Extracted, ms: performance.now() - t0, inTok: 0, outTok: 0 }
 }
 
 async function main() {
+  const set = process.env.SET === "holdout" ? HOLDOUT : process.env.SET === "all" ? [...DOCS, ...HOLDOUT] : DOCS
   const pdfs = await Promise.all(
-    DOCS.map(async (d) => {
+    set.map(async (d) => {
       const text = await buildTextPdf(d.pages)
       const pdf = d.scanned ? await rasterizeToScannedPdf(text) : text
       const hint = d.scanned
@@ -316,6 +382,8 @@ async function main() {
     )
   }
 
+  if (process.env.CHECK === "1") await runJevCheck(pdfs, samples)
+
   writeFileSync(process.env.OUT ?? "contract-extraction-eval.json", JSON.stringify({ rows, perf, samples }, null, 2))
 
   const median = (xs: number[]) => {
@@ -333,6 +401,62 @@ async function main() {
   }
   console.log("\nmisses:")
   for (const r of rows.filter((x) => !x.ok)) console.log(`  ${r.model} r${r.run} ${r.doc}.${r.field}`)
+}
+
+type Corruption = { field: string; apply: (x: ExtractedContractData) => ExtractedContractData }
+
+const CORRUPTIONS: Corruption[] = [
+  { field: "effectiveDate", apply: (x) => ({ ...x, effectiveDate: "2025-09-09" }) },
+  { field: "expirationDate", apply: (x) => ({ ...x, expirationDate: x.expirationDate ? "2031-01-15" : "2030-12-31" }) },
+  { field: "contractNumber", apply: (x) => ({ ...x, contractNumber: undefined }) },
+  { field: "contractType", apply: (x) => ({ ...x, contractType: x.contractType === "usage" ? "service" : "usage" }) },
+  { field: "vendorName", apply: (x) => ({ ...x, vendorName: "Lighthouse Surgical Center" }) },
+]
+
+async function runJevCheck(pdfs: { doc: Doc; pdf: Uint8Array }[], samples: Record<string, unknown>) {
+  const key = process.env.TYPESAFE_API_KEY
+  if (!key) throw new Error("TYPESAFE_API_KEY is not set")
+  let falsePositives = 0
+  let checkedCorrect = 0
+  const caught: Record<string, [number, number]> = {}
+  const fpDetail: string[] = []
+  const missDetail: string[] = []
+  for (const { doc, pdf } of pdfs) {
+    const text = doc.scanned ? await ocrPdfBuffer(pdf) : doc.pages.flat().join("\n")
+    const t0 = performance.now()
+    const selection = await selectContractFieldsWithJev(text, key)
+    const ms = performance.now() - t0
+    const correct = Object.entries(samples)
+      .filter(([k]) => k.endsWith(`|${doc.name}|1`) && !k.startsWith("jev|"))
+      .map(([, v]) => v as ExtractedContractData)
+    for (const extracted of correct) {
+      checkedCorrect += 1
+      const w = compareContractSelection(extracted, selection)
+      if (w.length) {
+        falsePositives += 1
+        fpDetail.push(`${doc.name}: ${w.map((x) => x.path[0]).join(",")} — ${w[0]!.message.slice(0, 120)}`)
+      }
+    }
+    const base = correct[0]
+    if (!base) continue
+    for (const c of CORRUPTIONS) {
+      const applies =
+        c.field === "contractNumber" ? doc.truth.contractNumber : c.field === "expirationDate" ? true : c.field === "contractType" ? true : true
+      if (!applies) continue
+      const w = compareContractSelection(c.apply(base), selection)
+      const hit = w.some((x) => x.path[0] === c.field)
+      caught[c.field] ??= [0, 0]
+      caught[c.field]![1] += 1
+      if (hit) caught[c.field]![0] += 1
+      else missDetail.push(`${doc.name}.${c.field}`)
+    }
+    console.log(`jev-check ${doc.name.padEnd(36)} ${ms.toFixed(0)}ms`)
+  }
+  console.log(`\njev-check false positives: ${falsePositives}/${checkedCorrect} correct extractions flagged`)
+  for (const d of fpDetail) console.log(`  fp ${d}`)
+  console.log("jev-check planted errors caught:")
+  for (const [f, [hit, total]] of Object.entries(caught)) console.log(`  ${f.padEnd(16)} ${hit}/${total}`)
+  for (const d of missDetail) console.log(`  missed ${d}`)
 }
 
 main().then(

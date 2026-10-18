@@ -34,11 +34,13 @@
 
 import {
   generateText,
+  NoObjectGeneratedError,
   Output,
   type LanguageModel,
   type ModelMessage,
 } from "ai"
 import type { z } from "zod"
+import { toJSONSchema } from "zod/v4/core"
 import { claudeModel, claudeSonnet } from "@/lib/ai/config"
 
 export interface GenerateStructuredInput<T> {
@@ -49,6 +51,8 @@ export interface GenerateStructuredInput<T> {
   actionName: string
   primary?: LanguageModel
   fallback?: LanguageModel
+  outputMode?: "native" | "plain"
+  maxOutputTokens?: number
   /**
    * Client-cancellation signal. When the user navigates away or hits
    * Cancel in the UI, the fetch is aborted and `request.signal` fires;
@@ -123,7 +127,7 @@ export function tryUnwrapEnvelope<T>(
   const entries = Object.entries(parsed as Record<string, unknown>)
   if (entries.length !== 1) return null
   const [key, value] = entries[0]
-  if (!/^(input|data|response|result|output|payload|parameters|arguments|args)$/i.test(key)) {
+  if (!/^(input|data|response|result|output|payload|parameters|arguments|args|json|object)$/i.test(key)) {
     return null
   }
   const res = schema.safeParse(value)
@@ -176,6 +180,38 @@ function decodeStringifiedFields<T>(schema: z.ZodSchema<T>, parsed: unknown): T 
   return res.success ? res.data : null
 }
 
+export function jsonOutputInstructions(schema: z.ZodTypeAny): string {
+  const json = JSON.stringify(toJSONSchema(schema, { target: "draft-7", io: "input", reused: "inline" }))
+  return `Respond with exactly one JSON object that conforms to this JSON Schema. Output the raw JSON only: no markdown fences, no prose before or after it, and no wrapper object around it.\n\n${json}`
+}
+
+function jsonCandidates(text: string): string[] {
+  const trimmed = text.trim()
+  const out = [trimmed]
+  const fenced = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
+  if (fenced?.[1]) out.push(fenced[1].trim())
+  const first = trimmed.indexOf("{")
+  const last = trimmed.lastIndexOf("}")
+  if (first >= 0 && last > first) out.push(trimmed.slice(first, last + 1))
+  return [...new Set(out)]
+}
+
+export function parseJsonOutput<T>(schema: z.ZodSchema<T>, text: string): T | null {
+  for (const candidate of jsonCandidates(text)) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(candidate)
+    } catch {
+      continue
+    }
+    const direct = schema.safeParse(parsed)
+    if (direct.success) return direct.data
+    const repaired = tryRepair(schema, { text: candidate })
+    if (repaired !== null) return repaired
+  }
+  return null
+}
+
 function tryRepair<T>(schema: z.ZodSchema<T>, err: unknown): T | null {
   return tryUnwrapEnvelope(schema, err) ?? tryDecodeStringifiedFields(schema, err)
 }
@@ -194,21 +230,43 @@ export async function generateStructured<T>(
   const primary = input.primary ?? claudeModel
   const fallback = input.fallback ?? claudeSonnet
 
-  const callOpts = {
-    output: Output.object({ schema: input.schema }),
-    instructions: input.instructions,
-    messages: input.messages,
-    providerOptions: ANTHROPIC_TOOL_MODE_OPTIONS,
-    abortSignal: input.abortSignal,
+  const plain = input.outputMode === "plain"
+  const callOpts = plain
+    ? {
+        instructions: [input.instructions, jsonOutputInstructions(input.schema)].filter(Boolean).join("\n\n"),
+        messages: input.messages,
+        abortSignal: input.abortSignal,
+        maxOutputTokens: input.maxOutputTokens,
+      }
+    : {
+        output: Output.object({ schema: input.schema }),
+        instructions: input.instructions,
+        messages: input.messages,
+        providerOptions: ANTHROPIC_TOOL_MODE_OPTIONS,
+        abortSignal: input.abortSignal,
+        maxOutputTokens: input.maxOutputTokens,
+      }
+
+  const run = async (model: LanguageModel): Promise<{ output: T; text: string }> => {
+    const result = await generateText({ model, ...callOpts })
+    const text = result.text ?? ""
+    if (!plain) return { output: (result as { output: T }).output, text }
+    const output = parseJsonOutput(input.schema, text)
+    if (output === null) {
+      throw new NoObjectGeneratedError({
+        message: "No object generated: response did not match schema.",
+        text,
+        response: result.response,
+        usage: result.usage,
+        finishReason: result.finishReason,
+      })
+    }
+    return { output, text }
   }
 
   try {
-    const result = await generateText({ model: primary, ...callOpts })
-    return {
-      output: result.output,
-      text: result.text ?? "",
-      modelUsed: "primary",
-    }
+    const result = await run(primary)
+    return { ...result, modelUsed: "primary" }
   } catch (primaryErr: unknown) {
     // Envelope repair first — cheaper than any retry, and the content is
     // often perfect underneath.
@@ -237,12 +295,8 @@ export async function generateStructured<T>(
       msg,
     )
     try {
-      const result = await generateText({ model: fallback, ...callOpts })
-      return {
-        output: result.output,
-        text: result.text ?? "",
-        modelUsed: "fallback",
-      }
+      const result = await run(fallback)
+      return { ...result, modelUsed: "fallback" }
     } catch (fallbackErr: unknown) {
       const repairedFallback = tryRepair(input.schema, fallbackErr)
       if (repairedFallback !== null) {

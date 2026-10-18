@@ -19,22 +19,22 @@
  */
 
 import { recordContractExtractionUsage } from "@/lib/ai/record-extract-usage"
-import { streamObject, NoObjectGeneratedError } from "ai"
+import { NoObjectGeneratedError } from "ai"
 import { headers } from "next/headers"
 import { createHash } from "node:crypto"
 import { auth } from "@/lib/auth-server"
 import { rateLimit } from "@/lib/rate-limit"
 import { prisma } from "@/lib/db"
 import { uploadFile } from "@/lib/storage"
-import { claudeExtractionModel } from "@/lib/ai/config"
-import { extractedContractSchema } from "@/lib/ai/schemas"
+import type { ExtractedContractData } from "@/lib/ai/schemas"
+import { extractContractSingle } from "@/lib/ai/contract-extract-single"
+import { checkContractExtractWithJev } from "@/lib/ai/jev-contract-check"
 import { extractPdfText } from "@/lib/ai/pdf-text-helper"
 import {
   runChunkedExtraction,
   MAX_PAGES_PER_CHUNK,
   FALLBACK_PAGES_PER_CHUNK,
 } from "@/lib/ai/contract-extract-chunked"
-import { getActiveContractExtractPrompt } from "@/lib/ai/prompts/contract-extract"
 
 // 261-page Mako PDF chunks into ~33 parallel Anthropic calls; even
 // rate-limit-safe with parallel queuing, the whole pipeline can
@@ -233,6 +233,14 @@ export async function POST(req: Request) {
         abortSignal: req.signal,
         logPrefix: "[extract-contract/stream]",
       })
+      const reviewWarnings = await checkContractExtractWithJev({
+        extracted: merged,
+        text: pdfText.hasTextLayer ? pdfText.text : null,
+        fileData,
+        pageCount: pdfText.pageCount,
+        signal: req.signal,
+        logPrefix: "[extract-contract/stream]",
+      })
 
       await persistExtraction({
         userId,
@@ -247,6 +255,7 @@ export async function POST(req: Request) {
           extracted: merged,
           confidence: 0.9,
           s3Key,
+          reviewWarnings,
           chunked: { chunks: chunkCount, pages: pdfText.pageCount },
           done: true,
         },
@@ -282,201 +291,84 @@ export async function POST(req: Request) {
   }
 
   try {
-    let capturedStreamError: string | null = null
-    const result = streamObject({
-      model: claudeExtractionModel,
-      schema: extractedContractSchema,
-      abortSignal: req.signal,
-      providerOptions: {
-        anthropic: { structuredOutputMode: "jsonTool" as const },
-      },
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text:
-                getActiveContractExtractPrompt().prompt +
-                textHint +
-                userInstructionsHint,
-            },
-            {
-              type: "file",
-              data: fileData,
-              mediaType: "application/pdf",
-              filename: file.name,
-              providerOptions: {
-                anthropic: { cacheControl: { type: "ephemeral" as const } },
-              },
-            },
-          ],
-        },
-      ],
-      onError: ({ error }) => {
-        // AGENTS.md AI-action error path: log full context server-side
-        // before the SDK surfaces the failure to the client.
-        console.error("[extract-contract/stream]", error, {
-          userId,
-          file: file.name,
-          size: file.size,
+    let extracted: ExtractedContractData
+    try {
+      extracted = (
+        await extractContractSingle({
+          fileData,
+          fileName: file.name,
+          textHint,
+          userInstructionsHint,
+          abortSignal: req.signal,
+          actionName: "extract-contract/stream",
         })
-        // Capture for the client envelope (see custom ReadableStream
-        // below). Without this the AI SDK swallows streaming errors and
-        // the client falls through to a generic "Empty response from
-        // extractor" message that hides the real cause (missing
-        // ANTHROPIC_API_KEY, schema mismatch, 429, etc.).
-        capturedStreamError =
-          error instanceof Error ? error.message : String(error)
-      },
-      onFinish: async ({ object }) => {
-        if (!object) return
-        await persistExtraction({
-          userId,
-          fileHash,
-          filename: file.name,
-          extracted: object as object,
+      ).extracted
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return new Response(null, { status: 499 })
+      }
+      console.error("[extract-contract/stream]", err, {
+        userId,
+        file: file.name,
+        size: file.size,
+      })
+      if (!NoObjectGeneratedError.isInstance(err)) {
+        return buildExtractedResponse(
+          { streamError: err instanceof Error ? err.message : String(err) },
           s3Key,
+        )
+      }
+      try {
+        console.info(
+          `[extract-contract/stream] single call returned no object for ${file.name} — falling back to chunked extraction`,
+        )
+        const { merged } = await runChunkedExtraction({
+          fileData,
+          fileName: file.name,
+          pageCount: pdfText.pageCount,
+          maxPagesPerChunk: FALLBACK_PAGES_PER_CHUNK,
+          userInstructionsHint,
+          abortSignal: req.signal,
+          logPrefix: "[extract-contract/stream]",
         })
-      },
-    })
+        extracted = merged
+      } catch (fallbackErr) {
+        console.error(
+          "[extract-contract/stream] chunked fallback also failed:",
+          fallbackErr,
+          { userId, file: file.name, pageCount: pdfText.pageCount },
+        )
+        return buildExtractedResponse(
+          {
+            streamError:
+              "the AI returned a response that did not match the contract schema, and the per-page retry could not recover it. Try re-uploading, or use Manual Entry.",
+          },
+          s3Key,
+        )
+      }
+    }
 
-    // Charles 2026-04-30 bug doc — "No documents here for a faculty
-    // to review". Root cause: this stream route uploaded the PDF to
-    // S3 (above) AND wrote the s3Key into the cache row, but the
-    // response stream itself never told the client what the key was.
-    // The client (ai-extract-dialog.tsx:205) expected `lastValid.s3Key`
-    // from the streamed JSON and got undefined every time, so vendor
-    // submissions landed with documents:[] on the PendingContract
-    // row — the facility-side review then correctly showed the "No
-    // documents…" empty state.
-    //
-    // Fix: use the `X-S3-Key` response header to surface the archived
-    // PDF location alongside the streaming JSON body. Header-based
-    // metadata avoids changing the existing JSON-parse loop on the
-    // client (which assembles a single progressive JSON object across
-    // chunks); the client reads the header before consuming the body.
-    // Wrap the AI SDK text stream so onError surfaces to the client.
-    // Default toTextStreamResponse() closes silently on error → client
-    // shows useless "Empty response from extractor". Here we forward
-    // every chunk untouched and, if the stream closed with an error
-    // and produced no extractable JSON, append a sentinel JSON envelope
-    // {"streamError": "..."} the client recognizes.
-    const encoder = new TextEncoder()
-    const wrapped = new ReadableStream({
-      async start(controller) {
-        let emittedAnyChunk = false
-        let noObjectGenerated = false
-        try {
-          for await (const chunk of result.textStream) {
-            emittedAnyChunk = true
-            controller.enqueue(encoder.encode(chunk))
-          }
-        } catch (err) {
-          if (NoObjectGeneratedError.isInstance(err)) noObjectGenerated = true
-          if (!capturedStreamError) {
-            capturedStreamError =
-              err instanceof Error ? err.message : String(err)
-          }
-        }
-        // AI SDK 6 + Anthropic tool-mode (structuredOutputMode: "jsonTool"):
-        // the structured object resolves via a tool call, so `textStream`
-        // can emit nothing even though onFinish receives a complete object.
-        // Forwarding only textStream then closes the body empty and the
-        // client shows "Empty response from extractor" (while onFinish has
-        // already cached the object — hence re-uploading the same file
-        // "works" via the cache-hit path). Fall back to the resolved object
-        // as a single JSON document so the client always gets the extraction.
-        if (!emittedAnyChunk && !capturedStreamError) {
-          try {
-            const finalObject = await result.object
-            if (finalObject) {
-              controller.enqueue(encoder.encode(JSON.stringify(finalObject)))
-              emittedAnyChunk = true
-            }
-          } catch (err) {
-            if (NoObjectGeneratedError.isInstance(err)) noObjectGenerated = true
-            if (!capturedStreamError) {
-              capturedStreamError =
-                err instanceof Error ? err.message : String(err)
-            }
-          }
-        }
-
-        // ─── Chunked fallback on NoObjectGeneratedError ──────────────
-        //
-        // Root cause (Vick prod report, "could not parse the response",
-        // 2026-06-07): on a SCANNED small PDF (no text layer → vision-
-        // only), the single Opus `jsonTool` pass is flaky — Anthropic
-        // returns an empty `{}` tool input ~75% of the time, failing
-        // Zod's required contractName/vendorName. Repro: the 8-page
-        // Arthrex "CogsART01012024" contract failed 3/4 one-shot runs
-        // but the chunked Haiku path (relaxed per-chunk identity +
-        // forced vision on chunk 1) succeeded 3/3.
-        //
-        // So when the single call produced no object, re-slice into
-        // SMALL chunks and run the chunked extractor before giving up.
-        // This is the same fallback the chunked path already retries
-        // internally; here we promote the WHOLE small-PDF path to it.
-        if (!emittedAnyChunk && noObjectGenerated) {
-          try {
-            console.info(
-              `[extract-contract/stream] single-call returned no object for ${file.name} — falling back to chunked extraction`,
-            )
-            const { merged } = await runChunkedExtraction({
-              fileData,
-              fileName: file.name,
-              pageCount: pdfText.pageCount,
-              maxPagesPerChunk: FALLBACK_PAGES_PER_CHUNK,
-              userInstructionsHint,
-              abortSignal: req.signal,
-              logPrefix: "[extract-contract/stream]",
-            })
-            await persistExtraction({
-              userId,
-              fileHash,
-              filename: file.name,
-              extracted: merged as object,
-              s3Key,
-            })
-            controller.enqueue(encoder.encode(JSON.stringify(merged)))
-            emittedAnyChunk = true
-            capturedStreamError = null
-          } catch (fallbackErr) {
-            console.error(
-              "[extract-contract/stream] chunked fallback also failed:",
-              fallbackErr,
-              { userId, file: file.name, pageCount: pdfText.pageCount },
-            )
-            // Keep the original single-call error as the surfaced cause,
-            // but make it specific so the user knows WHY (the model
-            // returned a payload that didn't match the contract schema,
-            // and the per-page retry couldn't recover it either).
-            capturedStreamError =
-              "the AI returned a response that did not match the contract schema, and the per-page retry could not recover it. Try re-uploading, or use Manual Entry."
-          }
-        }
-
-        if (capturedStreamError && !emittedAnyChunk) {
-          controller.enqueue(
-            encoder.encode(
-              JSON.stringify({ streamError: capturedStreamError }),
-            ),
-          )
-        }
-        controller.close()
-      },
+    const reviewWarnings = await checkContractExtractWithJev({
+      extracted,
+      text: pdfText.text,
+      fileData,
+      pageCount: pdfText.pageCount,
+      signal: req.signal,
+      logPrefix: "[extract-contract/stream]",
     })
-    const response = new Response(wrapped, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    await persistExtraction({
+      userId,
+      fileHash,
+      filename: file.name,
+      extracted: extracted as object,
+      s3Key,
     })
-    if (s3Key) response.headers.set("X-S3-Key", s3Key)
-    return response
+    return buildExtractedResponse({ extracted, s3Key, reviewWarnings, done: true }, s3Key)
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       return new Response(null, { status: 499 })
     }
-    console.error("[extract-contract/stream] streamObject error:", error, {
+    console.error("[extract-contract/stream] extraction error:", error, {
       userId,
       file: file.name,
     })

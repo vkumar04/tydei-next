@@ -17,6 +17,8 @@ export type ModelMessageLike = {
 }
 
 export type ModelCall = {
+  instructions?: string
+  output?: unknown
   model?: unknown
   prompt?: string
   messages?: ModelMessageLike[]
