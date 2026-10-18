@@ -1,7 +1,7 @@
 /**
  * Column mapping utility — AI-first with local fallback.
  *
- * 1. Tries Gemini via /api/ai/map-columns
+ * 1. Tries TypeSafe Jev via /api/ai/map-columns
  * 2. If that fails (offline, rate-limited, error), falls back to
  *    normalised string matching with common aliases.
  */
