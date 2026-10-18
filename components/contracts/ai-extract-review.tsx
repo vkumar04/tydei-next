@@ -32,7 +32,7 @@ import {
 import type { ExtractedContractData } from "@/lib/ai/schemas"
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
 import { parsePricingFile } from "@/lib/utils/parse-pricing-file"
-import { findContractWarnings } from "@/lib/ai/cross-field-warnings"
+import { findContractWarnings, type ContractWarning } from "@/lib/ai/cross-field-warnings"
 
 interface AIExtractReviewProps {
   extracted: ExtractedContractData
@@ -45,6 +45,7 @@ interface AIExtractReviewProps {
    * AI lifts a counter-party / affiliate name from the PDF.
    */
   lockedVendorName?: string
+  reviewWarnings?: ContractWarning[]
 }
 
 export function AIExtractReview({
@@ -52,6 +53,7 @@ export function AIExtractReview({
   confidence,
   onAccept,
   lockedVendorName,
+  reviewWarnings,
 }: AIExtractReviewProps) {
   const [data, setData] = useState(() =>
     lockedVendorName
@@ -191,7 +193,7 @@ export function AIExtractReview({
 
   // 2026-04-26: cross-field warnings re-evaluate as the user edits
   // (date typo gets flagged; fixing it makes the warning disappear).
-  const warnings = useMemo(() => findContractWarnings(data), [data])
+  const warnings = useMemo(() => [...(reviewWarnings ?? []), ...findContractWarnings(data)], [data, reviewWarnings])
 
   // `data` can be a PARTIAL streamObject payload — ai-extract-dialog calls
   // setExtracted() on every parsed chunk — so arrays the model hasn't emitted

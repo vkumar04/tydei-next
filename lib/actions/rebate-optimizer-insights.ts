@@ -197,16 +197,10 @@ Produce the JSON response exactly matching the schema. Include observations only
       system: SYSTEM_PROMPT,
       prompt: userMessage,
       maxOutputTokens: MAX_OUTPUT_TOKENS,
-      // Charles 2026-04-24 (Bug 2): temperature 0 so regenerations that
-      // DO miss the cache still produce the same ranking/prose for the
-      // same input. Without it, two mounts within the 15-minute cache
-      // window could race to insert and return different rows.
-      temperature: 0,
       providerOptions: {
         anthropic: {
           // Prompt caching — tag the (large, static) system prompt so repeat
-          // calls within ~5 minutes reuse the cached prefix. Adaptive thinking
-          // is set on the model side by default for Opus 4.6.
+          // calls within ~5 minutes reuse the cached prefix.
           cacheControl: { type: "ephemeral" },
         },
       },
@@ -378,7 +372,7 @@ function hashInput(input: RebateInsightsInput): string {
 
 /**
  * Collapse time-drifting fields (`daysRemaining`) into weekly buckets for
- * cache-key stability. See Charles 2026-04-24 Bug 2 note at the call site.
+ * cache-key stability (Charles 2026-04-24 Bug 2).
  */
 function bucketForHash(input: RebateInsightsInput): RebateInsightsInput {
   return {

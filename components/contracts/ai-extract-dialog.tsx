@@ -20,6 +20,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AIExtractReview } from "@/components/contracts/ai-extract-review"
 import type { ExtractedContractData } from "@/lib/ai/schemas"
+import type { ContractWarning } from "@/lib/ai/cross-field-warnings"
 import type { ContractPricingItem } from "@/lib/actions/pricing-files"
 import { toast } from "sonner"
 
@@ -65,6 +66,7 @@ export function AIExtractDialog({
   const [stepIndex, setStepIndex] = useState(0)
   const [extracted, setExtracted] = useState<ExtractedContractData | null>(null)
   const [s3Key, setS3Key] = useState<string | null>(null)
+  const [reviewWarnings, setReviewWarnings] = useState<ContractWarning[]>([])
   const [confidence, setConfidence] = useState(0)
   const [error, setError] = useState("")
   const [fileName, setFileName] = useState("")
@@ -176,7 +178,7 @@ export function AIExtractDialog({
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ""
-      let lastValid: { extracted?: unknown; confidence?: number; s3Key?: string; cached?: boolean } | null = null
+      let lastValid: { extracted?: unknown; confidence?: number; s3Key?: string; cached?: boolean; reviewWarnings?: ContractWarning[] } | null = null
 
       while (true) {
         const { value, done } = await reader.read()
@@ -289,6 +291,7 @@ export function AIExtractDialog({
       // the body's value when present (cache hits) since it's already
       // correlated with the cached extracted output.
       setS3Key(lastValid.s3Key ?? headerS3Key ?? null)
+      setReviewWarnings(Array.isArray(lastValid.reviewWarnings) ? lastValid.reviewWarnings : [])
       setConfidence(lastValid.confidence ?? 0.9)
       setStage("review")
     } catch (err) {
@@ -443,6 +446,7 @@ export function AIExtractDialog({
             confidence={confidence}
             onAccept={handleAccept}
             lockedVendorName={lockedVendorName}
+            reviewWarnings={reviewWarnings}
           />
         )}
 

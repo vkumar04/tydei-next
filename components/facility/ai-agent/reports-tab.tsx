@@ -403,7 +403,7 @@ export function ReportsTab({ contracts }: ReportsTabProps) {
                   Generating Your Report
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-md">
-                  Claude Opus 4.6 is analyzing your prompt, routing to the
+                  Claude is analyzing your prompt, routing to the
                   right template, and assembling structured rows.
                 </p>
               </div>
@@ -477,7 +477,7 @@ export function ReportsTab({ contracts }: ReportsTabProps) {
                   No Report Generated Yet
                 </h3>
                 <p className="text-sm max-w-md">
-                  Pick a report type and click Generate to let Claude Opus 4.6
+                  Pick a report type and click Generate to let Claude
                   produce a structured table from your contract data.
                 </p>
               </div>

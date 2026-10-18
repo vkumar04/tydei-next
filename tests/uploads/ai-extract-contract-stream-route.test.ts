@@ -47,6 +47,7 @@ import {
   fakeChunk,
   fakeContract,
   fakeObjectResult,
+  fakeTextResult,
   fileOf,
   fileParts,
   multiPagePdf,
@@ -99,42 +100,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-type StreamScript = {
-  chunks?: string[]
-  object?: unknown
-  objectError?: unknown
-  streamError?: unknown
-}
-
-function scriptStream(script: StreamScript) {
-  ai.streamObject.mockImplementation((call: ModelCall) => {
-    let objectPromise: Promise<unknown> | null = null
-    const settleObject = () => {
-      objectPromise ??= script.objectError ? Promise.reject(script.objectError) : Promise.resolve(script.object)
-      return objectPromise
-    }
-    async function* textStream() {
-      for (const c of script.chunks ?? []) yield c
-      if (script.streamError) {
-        call.onError?.({ error: script.streamError })
-        return
-      }
-      if (!script.objectError) await call.onFinish?.({ object: script.object })
-    }
-    return {
-      textStream: textStream(),
-      get object() {
-        return settleObject()
-      },
-    }
-  })
-}
-
-function jsonPieces(value: unknown, size = 40): string[] {
-  const s = JSON.stringify(value)
-  const out: string[] = []
-  for (let i = 0; i < s.length; i += size) out.push(s.slice(i, i + size))
-  return out
+function scriptSingle(script: { object?: unknown; text?: string; error?: unknown }) {
+  if (script.error) {
+    ai.generateText.mockRejectedValue(script.error)
+    return
+  }
+  ai.generateText.mockResolvedValue(fakeTextResult(script.object, script.text ?? JSON.stringify(script.object)))
 }
 
 async function uploadPdf(bytes: Uint8Array, name = "omx-agreement.pdf", extra: Record<string, string> = {}) {
@@ -210,10 +181,10 @@ describe("POST /api/ai/extract-contract/stream — cache", () => {
   })
 })
 
-describe("POST /api/ai/extract-contract/stream — single streamed call", () => {
-  it("streams partial JSON chunks, exposes X-S3-Key, includes the text layer hint, and caches on finish", async () => {
+describe("POST /api/ai/extract-contract/stream — single call", () => {
+  it("returns one done envelope, exposes X-S3-Key, includes the text layer hint, and caches", async () => {
     const extracted = fakeContract()
-    scriptStream({ chunks: jsonPieces(extracted), object: extracted })
+    scriptSingle({ object: extracted })
     const { res, status, text } = await uploadPdf(textPdf, "OMX Agreement.pdf", { userInstructions: "Robot is capital." })
 
     expect(status).toBe(200)
@@ -221,15 +192,17 @@ describe("POST /api/ai/extract-contract/stream — single streamed call", () => 
     const s3Key = res.headers.get("X-S3-Key")
     expect(s3Key).toMatch(new RegExp(`^contracts/${userId}/\\d+-[0-9a-f]{8}-OMX_Agreement\\.pdf$`))
     expect(uploadFile).toHaveBeenCalledWith(s3Key, expect.any(Uint8Array), "application/pdf")
-    expect(JSON.parse(text)).toEqual(JSON.parse(JSON.stringify(extracted)))
+    expect(JSON.parse(text)).toEqual({ extracted: JSON.parse(JSON.stringify(extracted)), s3Key, reviewWarnings: [], done: true })
 
-    expect(ai.streamObject).toHaveBeenCalledTimes(1)
+    expect(ai.generateText).toHaveBeenCalledTimes(1)
     expect(ai.generateObject).not.toHaveBeenCalled()
-    const call = ai.streamObject.mock.calls[0]![0]
+    const call = ai.generateText.mock.calls[0]![0]
     const prompt = promptText(call)
     expect(prompt).toContain("here is the extracted text layer of the PDF")
     expect(prompt).toContain(CONTRACT_FIXTURE.contractNumber)
     expect(prompt).toContain("Additional user instructions:\nRobot is capital.")
+    expect(call.instructions).toContain("no markdown fences")
+    expect(call.output).toBeUndefined()
     expect(fileParts(call)[0]).toMatchObject({ mediaType: "application/pdf", filename: "OMX Agreement.pdf" })
 
     expect(db.contractExtractionCache.upsert).toHaveBeenCalledWith(
@@ -239,15 +212,15 @@ describe("POST /api/ai/extract-contract/stream — single streamed call", () => 
     )
   })
 
-  it("emits the resolved object when jsonTool mode leaves textStream empty", async () => {
-    const extracted = fakeContract({ contractName: "Tool-mode Agreement" })
-    scriptStream({ chunks: [], object: extracted })
+  it("accepts JSON the model wrapped in markdown fences or prose", async () => {
+    const extracted = fakeContract({ contractName: "Fenced Agreement" })
+    scriptSingle({ object: extracted, text: `Here is the extraction:\n\n\`\`\`json\n${JSON.stringify(extracted)}\n\`\`\`` })
     const { text } = await uploadPdf(textPdf)
-    expect(JSON.parse(text)).toMatchObject({ contractName: "Tool-mode Agreement" })
+    expect(JSON.parse(text).extracted).toMatchObject({ contractName: "Fenced Agreement" })
   })
 
   it("surfaces a streamError envelope naming the provider failure instead of an empty body", async () => {
-    scriptStream({ streamError: new Error("invalid x-api-key") })
+    scriptSingle({ error: new Error("invalid x-api-key") })
     const { status, text } = await uploadPdf(textPdf)
     expect(status).toBe(200)
     expect(JSON.parse(text)).toEqual({ streamError: "invalid x-api-key" })
@@ -259,18 +232,17 @@ describe("POST /api/ai/extract-contract/stream — single streamed call", () => 
     expect(db.contractExtractionCache.upsert).not.toHaveBeenCalled()
   })
 
-  it("omits X-S3-Key when archival fails but still streams the extraction", async () => {
+  it("omits X-S3-Key when archival fails but still returns the extraction", async () => {
     uploadFile.mockRejectedValue(new Error("NoSuchBucket"))
     const extracted = fakeContract()
-    scriptStream({ chunks: jsonPieces(extracted), object: extracted })
+    scriptSingle({ object: extracted })
     const { res, text } = await uploadPdf(textPdf)
     expect(res.headers.get("X-S3-Key")).toBeNull()
-    expect(JSON.parse(text).vendorName).toBe(CONTRACT_FIXTURE.vendor)
+    expect(JSON.parse(text).extracted.vendorName).toBe(CONTRACT_FIXTURE.vendor)
   })
 
-  it("records AI usage for a successful streamed extraction", async () => {
-    const extracted = fakeContract()
-    scriptStream({ chunks: jsonPieces(extracted), object: extracted })
+  it("records AI usage for a successful extraction", async () => {
+    scriptSingle({ object: fakeContract() })
     await uploadPdf(textPdf)
     expect(recordClaudeUsage).toHaveBeenCalledTimes(1)
   })
@@ -305,18 +277,18 @@ describe("POST /api/ai/extract-contract/stream — chunked path", () => {
     expect(ai.streamObject).not.toHaveBeenCalled()
   })
 
-  it("falls back to 4-page chunks when the single call yields NoObjectGeneratedError", async () => {
-    scriptStream({ chunks: [], objectError: noObjectError() })
+  it("falls back to 4-page chunks when neither model returns parseable JSON", async () => {
+    scriptSingle({ object: undefined, text: "Sorry, I cannot read this document." })
     ai.generateObject.mockResolvedValue(fakeObjectResult(fakeChunk({ contractName: "Recovered via chunks" })))
     const { text } = await uploadPdf(textPdf)
-    expect(ai.streamObject).toHaveBeenCalledTimes(1)
+    expect(ai.generateText).toHaveBeenCalledTimes(2)
     expect(chunkRanges()).toEqual(["1-2"])
-    expect(JSON.parse(text)).toMatchObject({ contractName: "Recovered via chunks" })
+    expect(JSON.parse(text).extracted).toMatchObject({ contractName: "Recovered via chunks" })
     expect(db.contractExtractionCache.upsert).toHaveBeenCalledTimes(1)
   })
 
   it("explains the schema mismatch when the single call and the chunk fallback both fail", async () => {
-    scriptStream({ chunks: [], objectError: noObjectError() })
+    scriptSingle({ object: undefined, text: "{}" })
     ai.generateObject.mockRejectedValue(noObjectError())
     const { text } = await uploadPdf(textPdf)
     expect(JSON.parse(text).streamError).toMatch(/did not match the contract schema/)
