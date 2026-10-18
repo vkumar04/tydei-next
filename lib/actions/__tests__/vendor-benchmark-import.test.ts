@@ -140,7 +140,7 @@ describe("importVendorBenchmarks — replace-on-reimport dedupe", () => {
     ])
 
     expect(mocks.benchmarkDeleteMany).toHaveBeenCalledWith({
-      where: { id: { in: ["old-1"] } },
+      where: { id: { in: ["old-1"] }, vendorId: "vend-1" },
     })
     expect(res).toMatchObject({ inserted: 1, replaced: 1 })
   })

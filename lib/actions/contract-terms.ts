@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
 import { requireCanMutate } from "@/lib/actions/auth-permissions"
-import { contractOwnershipWhere } from "@/lib/actions/contracts-auth"
+import { contractOwnershipWhere, contractsOwnedByFacility } from "@/lib/actions/contracts-auth"
 import {
   createTermSchemaWithTierCheck,
   updateTermSchema,
@@ -217,7 +217,7 @@ async function _updateContractTermImpl(
   const { facility } = await requireFacility()
   await requireCanMutate()
   const ownerLookup = await prisma.contractTerm.findUniqueOrThrow({
-    where: { id },
+    where: { id, contract: contractsOwnedByFacility(facility.id) },
     select: { contractId: true },
   })
   await prisma.contract.findUniqueOrThrow({
@@ -333,8 +333,8 @@ async function _deleteContractTermImpl(id: string) {
   await requireCanMutate()
 
   // Capture contractId before the delete cascades the term row away.
-  const term = await prisma.contractTerm.findUnique({
-    where: { id },
+  const term = await prisma.contractTerm.findUniqueOrThrow({
+    where: { id, contract: contractsOwnedByFacility(facility.id) },
     select: { contractId: true },
   })
   // Charles audit round-9 BLOCKER: verify ownership before deleting.
@@ -374,7 +374,7 @@ async function _upsertContractTiersImpl(
   const { facility } = await requireFacility()
   await requireCanMutate()
   const term = await prisma.contractTerm.findUniqueOrThrow({
-    where: { id: termId },
+    where: { id: termId, contract: contractsOwnedByFacility(facility.id) },
     select: { contractId: true },
   })
   await prisma.contract.findUniqueOrThrow({

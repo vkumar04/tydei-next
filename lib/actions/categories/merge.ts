@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireFacility } from "@/lib/actions/auth"
-import { requireCanMutate } from "@/lib/actions/auth-permissions"
+import { requireCan } from "@/lib/actions/auth-permissions"
 import { revalidatePath } from "next/cache"
 
 export interface MergeCategoriesInput {
@@ -36,7 +36,7 @@ export async function mergeCategories(
   input: MergeCategoriesInput,
 ): Promise<MergeCategoriesResult> {
   const { facility } = await requireFacility()
-  await requireCanMutate()
+  await requireCan("settings.manage")
   const canonical = input.canonicalName.trim()
   if (!canonical) {
     throw new Error("canonicalName cannot be empty")

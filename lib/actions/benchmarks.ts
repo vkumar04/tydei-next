@@ -252,7 +252,7 @@ export async function importVendorBenchmarks(
       async (tx) => {
         if (staleIds.length > 0) {
           await tx.productBenchmark.deleteMany({
-            where: { id: { in: staleIds } },
+            where: { id: { in: staleIds }, vendorId: vendor.id },
           })
         }
         // Chunked insert (prod-volume lesson: never unbounded single calls).

@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db"
 import { requireAuth } from "@/lib/actions/auth"
-import { requireCanMutate } from "@/lib/actions/auth-permissions"
+import { requireCan } from "@/lib/actions/auth-permissions"
 import type { ConnectionStatus, ConnectionMode } from "@/lib/generated/prisma/client"
 import { serialize } from "@/lib/serialize"
 
@@ -158,7 +158,7 @@ export async function sendConnectionInvite(input: {
   message?: string
 }): Promise<ConnectionData> {
   const session = await requireAuth()
-  await requireCanMutate()
+  await requireCan("settings.manage")
   const identity = await resolveCallerOrgIdentity(session.user.id)
   if (!identity) {
     throw new Error(
@@ -385,7 +385,7 @@ async function assertCallerIsInviteRecipient(
 
 export async function acceptConnection(connectionId: string): Promise<void> {
   const session = await requireAuth()
-  await requireCanMutate()
+  await requireCan("settings.manage")
   const { facilityId, vendorId } = await assertCallerIsInviteRecipient(
     session.user.id,
     connectionId,
@@ -414,7 +414,7 @@ export async function acceptConnection(connectionId: string): Promise<void> {
 
 export async function rejectConnection(connectionId: string): Promise<void> {
   const session = await requireAuth()
-  await requireCanMutate()
+  await requireCan("settings.manage")
   await assertCallerOnConnection(session.user.id, connectionId)
 
   await prisma.connection.update({
@@ -425,7 +425,7 @@ export async function rejectConnection(connectionId: string): Promise<void> {
 
 export async function removeConnection(connectionId: string): Promise<void> {
   const session = await requireAuth()
-  await requireCanMutate()
+  await requireCan("settings.manage")
   await assertCallerOnConnection(session.user.id, connectionId)
   await prisma.connection.delete({ where: { id: connectionId } })
 }

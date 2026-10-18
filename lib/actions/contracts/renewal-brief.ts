@@ -293,6 +293,7 @@ Produce the JSON response exactly matching the schema. Use the rebateHistory + p
 
   // ── 5. Persist cache row + return ──────────────────────────────────
   const now = new Date()
+  // read-only-guard-skip: response cache for a read; no tenant data changes
   await prisma.renewalBriefCache.create({
     data: {
       contractId,
