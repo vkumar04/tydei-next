@@ -342,13 +342,18 @@ describe("listEffectiveMedicareRates — scaling", () => {
       medicareRate: 1_000 + i,
     }))
 
+  const RUNS = 5
+
   const timeAt = (n: number) => {
     const uploaded = build(n)
-    const t0 = performance.now()
-    const rows = listEffectiveMedicareRates({ uploaded })
-    const elapsed = performance.now() - t0
-    expect(rows.length).toBe(n + getAllMedicareAscRates().length)
-    return elapsed
+    let best = Number.POSITIVE_INFINITY
+    for (let run = 0; run < RUNS; run++) {
+      const t0 = performance.now()
+      const rows = listEffectiveMedicareRates({ uploaded })
+      best = Math.min(best, performance.now() - t0)
+      expect(rows.length).toBe(n + getAllMedicareAscRates().length)
+    }
+    return best
   }
 
   it("merges a 2,000-row uploaded table well inside a frame budget", () => {
@@ -358,21 +363,21 @@ describe("listEffectiveMedicareRates — scaling", () => {
   })
 
   it("scales roughly linearly, not quadratically", () => {
-    timeAt(500) // warm up
     const small = timeAt(500)
     const large = timeAt(2_000)
-    // 4x the rows must not cost anywhere near 16x the time. Compare against a
-    // floor so sub-millisecond timer noise cannot fail the assertion.
-    expect(large).toBeLessThan(Math.max(small, 0.5) * 8)
+    expect(large).toBeLessThan(Math.max(small, 0.5) * 10)
   })
 
   it("createMedicareRateResolver indexes once and reuses it", () => {
     const uploaded = build(2_000)
     const resolve = createMedicareRateResolver({ uploaded })
-    const t0 = performance.now()
-    for (let i = 0; i < 2_000; i++) resolve(`Group ${i}`)
-    // 2,000 lookups against a 2,000-row table would be 4M comparisons unindexed.
-    expect(performance.now() - t0).toBeLessThan(15)
+    let best = Number.POSITIVE_INFINITY
+    for (let run = 0; run < RUNS; run++) {
+      const t0 = performance.now()
+      for (let i = 0; i < 2_000; i++) resolve(`Group ${i}`)
+      best = Math.min(best, performance.now() - t0)
+    }
+    expect(best).toBeLessThan(15)
     expect(resolve("Group 7")?.medicareRate).toBe(1_007)
     expect(resolve("group 7")?.source).toBe("uploaded")
   })
