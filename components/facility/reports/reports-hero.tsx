@@ -16,6 +16,7 @@
  * components/facility/rebate-optimizer/optimizer-hero.tsx.
  */
 
+import { useSyncExternalStore } from "react"
 import {
   AlertTriangle,
   ArrowRight,
@@ -56,6 +57,8 @@ function relativeTime(iso: string | null): string {
   return `${yr}y ago`
 }
 
+const subscribeNever = () => () => {}
+
 export function ReportsHero({
   contractCount,
   vendorCount,
@@ -65,6 +68,7 @@ export function ReportsHero({
   priceDiscrepancyHref,
   onOpenScheduledReports,
 }: ReportsHeroProps) {
+  const isClient = useSyncExternalStore(subscribeNever, () => true, () => false)
   const statusLabel =
     activeSchedules > 0
       ? `${activeSchedules} active schedule${activeSchedules === 1 ? "" : "s"}`
@@ -126,7 +130,7 @@ export function ReportsHero({
         />
         <HeroStat
           label="Last Sent"
-          value={relativeTime(lastSentAt)}
+          value={isClient ? relativeTime(lastSentAt) : null}
           sublabel={lastSentAt ? "most recent delivery" : "no scheduled runs yet"}
           tone={lastSentAt ? undefined : "muted"}
         />
