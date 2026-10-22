@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { format } from "date-fns"
+import { format, parseISO } from "date-fns"
 import { CalendarIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
@@ -24,15 +24,15 @@ export function DateRangePicker({ dateRange, onDateRangeChange, presets }: DateR
   const [open, setOpen] = useState(false)
 
   const selected: RDPDateRange = {
-    from: new Date(dateRange.from),
-    to: new Date(dateRange.to),
+    from: parseISO(dateRange.from),
+    to: parseISO(dateRange.to),
   }
 
   const handleSelect = (range: RDPDateRange | undefined) => {
     if (range?.from && range?.to) {
       onDateRangeChange({
-        from: range.from.toISOString().split("T")[0],
-        to: range.to.toISOString().split("T")[0],
+        from: format(range.from, "yyyy-MM-dd"),
+        to: format(range.to, "yyyy-MM-dd"),
       })
     }
   }
@@ -58,8 +58,8 @@ export function DateRangePicker({ dateRange, onDateRangeChange, presets }: DateR
         <PopoverTrigger asChild>
           <Button variant="outline" size="sm" className="min-w-[220px] justify-start text-left font-normal">
             <CalendarIcon className="mr-2 size-4" />
-            {format(new Date(dateRange.from), "MMM d, yyyy")} -{" "}
-            {format(new Date(dateRange.to), "MMM d, yyyy")}
+            {format(parseISO(dateRange.from), "MMM d, yyyy")} -{" "}
+            {format(parseISO(dateRange.to), "MMM d, yyyy")}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
