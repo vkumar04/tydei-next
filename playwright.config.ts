@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test"
 
-const baseURL = `http://localhost:${process.env.PORT ?? "3000"}`
+const remoteBaseURL = process.env.E2E_BASE_URL
+const baseURL = remoteBaseURL ?? `http://localhost:${process.env.PORT ?? "3000"}`
 
 /**
  * Playwright is split into two projects:
@@ -31,12 +32,14 @@ export default defineConfig({
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
-  webServer: {
-    command: "bun run dev",
-    url: baseURL,
-    reuseExistingServer: true,
-    timeout: 30_000,
-  },
+  webServer: remoteBaseURL
+    ? undefined
+    : {
+        command: "bun run dev",
+        url: baseURL,
+        reuseExistingServer: true,
+        timeout: 30_000,
+      },
   projects: [
     {
       name: "visual-setup",
