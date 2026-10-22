@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.railpack.com",
   "packages": {
-    "node": "24"
+    "node": "24.22.1"
   }
 }
