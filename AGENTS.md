@@ -33,6 +33,7 @@ bun run db:studio        # Prisma Studio
 bun run lint             # oxlint
 bun run test:unit        # vitest (excludes integration)
 bun run test:e2e         # playwright e2e
+E2E_REAL_AI=1 bun run test:e2e   # also run @real-ai specs — real Claude calls, costs credits
 bun run test:visual      # playwright visual
 bun scripts/eval-column-mapping.ts        # Sonnet vs Jev vs local header matching
 bun scripts/eval-contract-extraction.ts   # per-model extraction accuracy; CHECK=1 scores the Jev cross-check
@@ -56,6 +57,11 @@ Run all of these before saying "ship it":
    read the accessibility snapshot, check console errors. Do not use the Chrome
    extension tools or hand-written Playwright scripts for this.
 4. `bun run test:e2e && bun run test:visual` → both Playwright projects green.
+   The Playwright-started dev server points `ANTHROPIC_BASE_URL` at a dead
+   port and `@real-ai` specs are skipped, so the default run spends no API
+   credits. Use `E2E_REAL_AI=1` only when you changed an AI path, and never
+   repeat it for unrelated fixes. A dev server you started yourself is reused
+   with its real key — stop it first.
    Set `PORT` (plus `BETTER_AUTH_URL` / `NEXT_PUBLIC_SITE_URL` to match) when
    3000 is taken.
 
