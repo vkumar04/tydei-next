@@ -98,7 +98,7 @@ function queueRow(dialog: Locator, fileName: string): Locator {
   return dialog.locator("div.rounded-lg.border").filter({ has: dialog.page().getByText(fileName, { exact: true }) })
 }
 
-test.describe("Mass Upload classifies a mixed batch and commits every file", () => {
+test.describe("Mass Upload classifies a mixed batch and commits every file", { tag: "@real-ai" }, () => {
   const cogRows = cogFixtureRows(60, COG_SEED)
   const pricingRows = pricingFixtureRows(40, PRICING_SEED)
   const files = {

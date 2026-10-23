@@ -78,7 +78,7 @@ test.describe("Invoice import dialog persists invoices with their line items", (
   test.beforeAll(cleanup)
   test.afterAll(cleanup)
 
-  test("PDF invoice → AI extraction prefills the form → Import & Validate → invoice + line items", async ({ page }) => {
+  test("PDF invoice → AI extraction prefills the form → Import & Validate → invoice + line items", { tag: "@real-ai" }, async ({ page }) => {
     test.setTimeout(300_000)
     const fixture: InvoiceFixture = {
       invoiceNumber: `${PREFIX}-PDF`,

@@ -4,7 +4,7 @@ import { amendmentPdfLines, buildTextPdf, type AmendmentFixture } from "../../su
 
 test.use({ storageState: "tests/e2e/.auth/facility.json" })
 
-test("amendment PDF extending the term and raising the value → review diff → Apply Changes updates the contract", async ({ page }) => {
+test("amendment PDF extending the term and raising the value → review diff → Apply Changes updates the contract", { tag: "@real-ai" }, async ({ page }) => {
   test.setTimeout(300_000)
   const contractName = `Amendment Scratch ${Date.now().toString(36)}`
   const contractId = await createScratchContract(contractName)

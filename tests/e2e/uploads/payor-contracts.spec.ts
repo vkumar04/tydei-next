@@ -73,7 +73,7 @@ async function openAddContract(page: Page): Promise<Locator> {
   return dialog
 }
 
-test.describe("Payor contracts: AI extraction from a PDF, then rates appended from a CSV", () => {
+test.describe("Payor contracts: AI extraction from a PDF, then rates appended from a CSV", { tag: "@real-ai" }, () => {
   test.beforeAll(cleanup)
   test.afterAll(cleanup)
 
