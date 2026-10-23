@@ -50,7 +50,7 @@ async function extractAndReview(page: Page, variant: "text" | "scanned") {
 }
 
 for (const variant of ["text", "scanned"] as const) {
-  test(`${variant} contract PDF: extraction review → created contract with terms and tiers`, async ({ page }) => {
+  test(`${variant} contract PDF: extraction review → created contract with terms and tiers`, { tag: "@real-ai" }, async ({ page }) => {
     test.setTimeout(360_000)
     await deleteFixtureContracts()
     const dialog = await extractAndReview(page, variant)

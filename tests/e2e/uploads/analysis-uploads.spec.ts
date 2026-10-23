@@ -94,7 +94,7 @@ test.describe("Prospective analysis uploads compute the right numbers", () => {
   })
   test.afterAll(cleanup)
 
-  test("Upload Proposal PDF (AI) → scored verdict shown and evaluation persisted", async ({ page }) => {
+  test("Upload Proposal PDF (AI) → scored verdict shown and evaluation persisted", { tag: "@real-ai" }, async ({ page }) => {
     test.setTimeout(360_000)
     await openProposals(page)
     const proposal = {

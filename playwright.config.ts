@@ -2,6 +2,7 @@ import { defineConfig } from "@playwright/test"
 
 const remoteBaseURL = process.env.E2E_BASE_URL
 const baseURL = remoteBaseURL ?? `http://localhost:${process.env.PORT ?? "3000"}`
+const realAi = process.env.E2E_REAL_AI === "1"
 
 /**
  * Playwright is split into two projects:
@@ -39,6 +40,7 @@ export default defineConfig({
         url: baseURL,
         reuseExistingServer: true,
         timeout: 30_000,
+        env: realAi ? {} : { ANTHROPIC_BASE_URL: "http://127.0.0.1:9/v1" },
       },
   projects: [
     {
@@ -61,6 +63,7 @@ export default defineConfig({
       name: "e2e",
       testDir: "./tests/e2e",
       testIgnore: /auth\.setup\.ts/,
+      grepInvert: realAi ? undefined : /@real-ai/,
       dependencies: ["e2e-setup"],
     },
   ],

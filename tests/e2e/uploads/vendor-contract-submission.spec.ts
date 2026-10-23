@@ -163,7 +163,7 @@ function expectContractPdfDoc(row: PendingRow, fileName: string, userId: string)
 
 test.afterAll(purgeExtractionCache)
 
-test("text contract PDF → AI extraction → sidebar pricing .xlsx + supporting document → submitted pending contract", async ({ page }) => {
+test("text contract PDF → AI extraction → sidebar pricing .xlsx + supporting document → submitted pending contract", { tag: "@real-ai" }, async ({ page }) => {
   test.setTimeout(360_000)
   await purgeExtractionCache()
   const since = await dbNow()
@@ -234,7 +234,7 @@ test("text contract PDF → AI extraction → sidebar pricing .xlsx + supporting
   }
 })
 
-test("scanned (image-only) contract PDF → OCR/vision extraction → submitted pending contract", async ({ page }) => {
+test("scanned (image-only) contract PDF → OCR/vision extraction → submitted pending contract", { tag: "@real-ai" }, async ({ page }) => {
   test.setTimeout(360_000)
   await purgeExtractionCache()
   const since = await dbNow()
@@ -254,13 +254,13 @@ test("scanned (image-only) contract PDF → OCR/vision extraction → submitted 
   }
 })
 
-test("extracted contract number fills the Contract Number field", async ({ page }) => {
+test("extracted contract number fills the Contract Number field", { tag: "@real-ai" }, async ({ page }) => {
   test.setTimeout(300_000)
   await extractAndAccept(page, "text")
   await expect(page.locator("#vc-contract-number")).toHaveValue(FIXTURE.contractNumber, { timeout: 5_000 })
 })
 
-test("Upload PDF tab 'Additional Documents' are attached to the submission", async ({ page }) => {
+test("Upload PDF tab 'Additional Documents' are attached to the submission", { tag: "@real-ai" }, async ({ page }) => {
   test.setTimeout(300_000)
   const since = await dbNow()
   try {
@@ -285,7 +285,7 @@ test("Upload PDF tab 'Additional Documents' are attached to the submission", asy
   }
 })
 
-test("sidebar 'Upload document' button only opens the file picker", async ({ page }) => {
+test("sidebar 'Upload document' button only opens the file picker", { tag: "@real-ai" }, async ({ page }) => {
   test.setTimeout(300_000)
   const since = await dbNow()
   try {
